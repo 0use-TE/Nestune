@@ -189,6 +189,7 @@ function SaveDialog({ song }: { song: Song }) {
   const app = useApp();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [pick, setPick] = useState<string | null>(null);
+  const [includeLyrics, setIncludeLyrics] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const status = app.deviceMusic.status;
@@ -209,9 +210,10 @@ function SaveDialog({ song }: { song: Song }) {
     setBusy(true);
     setError('');
     try {
-      await app.deviceMusic.download(song, pick);
+      const result = await app.deviceMusic.download(song, pick, includeLyrics);
       app.closeSave();
-      app.toast('已下载到设备的音乐文件夹');
+      const missing = [song.cover && !result.coverSaved && '封面', includeLyrics && !result.lyricsSaved && '歌词'].filter(Boolean);
+      app.toast(missing.length ? `音频已下载，未能保存${missing.join('和')}` : '已下载到设备的音乐文件夹');
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {
         setError(error instanceof Error ? error.message : '下载失败，请稍后重试');
@@ -226,7 +228,7 @@ function SaveDialog({ song }: { song: Song }) {
         <p className="sub t1" style={{ margin: '6px 0 16px' }}>{song.name} · {song.artists.map(a => a.name).join(' / ')}</p>
         {status === 'insecure' && <div className="note">请通过 HTTPS 或 localhost 打开 Nestune，以授权设备的音乐文件夹。</div>}
         {status === 'unsupported' && <div className="note">当前浏览器无法访问系统音乐文件夹，请用支持文件夹访问的桌面浏览器打开。</div>}
-        {!blocked && <p className="sub sm" style={{ marginBottom: 12 }}>{status === 'ready' ? '将写入此设备已授权的音乐文件夹。' : '首次下载时，请在浏览器弹窗里确认系统的「音乐」文件夹。'}</p>}
+        {status === 'authorize' && <p className="sub sm" style={{ marginBottom: 12 }}>请在浏览器弹窗里授权系统的「音乐」文件夹。</p>}
         {!plan && <div className="center sub" style={{ padding: '30px 0' }}>正在查询可用音质…</div>}
         {plan?.canDownload === false && <div className="note">此账号没有下载权限。</div>}
         {plan && !plan.playable && <div className="note">{unplayableText(plan.reason)}：{plan.reason}</div>}
@@ -247,6 +249,10 @@ function SaveDialog({ song }: { song: Song }) {
             })}
           </div>
         )}
+        {plan?.playable && plan.canDownload !== false && !blocked && <label className="download-option sub">
+          <input type="checkbox" checked={includeLyrics} disabled={busy} onChange={event => setIncludeLyrics(event.target.checked)} />
+          同时下载歌词
+        </label>}
         {error && <p className="err" role="alert">{error}</p>}
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 20 }}>
           <button className="btn ghost sm" disabled={busy} onClick={app.closeSave}>取消</button>

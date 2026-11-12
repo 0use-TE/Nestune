@@ -1,0 +1,14 @@
+[
+  {
+    "target": {
+      "package_name": "net.ouse.nestune",
+      "namespace": "android_app",
+      "sha256_cert_fingerprints": [
+        "6F:DE:5D:6D:40:83:08:70:C1:F7:E9:AA:8E:8A:3D:99:16:4C:22:A0:60:67:8F:A3:77:38:B8:30:FA:F2:A9:7D"
+      ]
+    },
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ]
+  }
+]

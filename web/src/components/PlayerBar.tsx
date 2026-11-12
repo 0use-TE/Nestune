@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import { useApp, useClock } from '@/lib/app';
 import { isDeviceSong } from '@/lib/device-music';
 import { mmss } from '@/lib/util';
@@ -10,12 +11,16 @@ export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQue
 }) {
   const app = useApp();
   const { time, duration } = useClock();
+  const [infoPressed, setInfoPressed] = useState(false);
   const s = app.current;
   if (!s) return null;
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
   return (
     <div id="bar">
-      <button className="info" onClick={onDetails} aria-label={`歌曲详情，${s.name}`} aria-expanded={app.nowOpen} aria-controls="np" title="歌曲详情">
+      <button className="info" data-pressed={infoPressed || undefined} onClick={onDetails}
+        onPointerDown={event => { if (event.isPrimary && event.button === 0) setInfoPressed(true); }}
+        onPointerUp={() => setInfoPressed(false)} onPointerCancel={() => setInfoPressed(false)} onPointerLeave={() => setInfoPressed(false)}
+        aria-label={`歌曲详情，${s.name}`} aria-expanded={app.nowOpen} aria-controls="np" title="歌曲详情">
         <Cover src={s.cover} seed={s.id} />
         <span><b className="t1">{s.name}</b><span className="sub sm t1">{app.error || (app.loading ? '加载中…' : s.artists.map(a => a.name).join(' / '))}</span></span>
       </button>

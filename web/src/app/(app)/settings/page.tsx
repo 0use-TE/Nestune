@@ -8,8 +8,9 @@ import { Avatar } from '@/components/Cover';
 import { Icon } from '@/components/Icon';
 import { AvatarCrop } from '@/components/AvatarCrop';
 import { ManageUploads } from '@/components/ManageUploads';
+import { PwaInstall } from '@/components/Pwa';
 
-const SECTIONS = ['资料', '偏好', '账号与安全', '我的上传'] as const;
+const SECTIONS = ['资料', '我的上传', '偏好', '账号与安全'] as const;
 
 export default function SettingsPage() {
   const app = useApp();
@@ -101,6 +102,7 @@ export default function SettingsPage() {
 
       {section === '偏好' && (
         <section className="panel" aria-label="偏好">
+          <PwaInstall />
           <div className="set">
             <b>外观</b>
             <div className="row" role="group" aria-label="外观">{([['auto', '自动'], ['light', '浅色'], ['dark', '深色']] as const).map(([k, l]) => <button key={k} className={`chip ${app.theme === k ? 'on' : ''}`} aria-pressed={app.theme === k} onClick={() => app.setTheme(k)}>{l}</button>)}</div>

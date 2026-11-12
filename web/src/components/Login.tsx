@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { post } from '@/lib/api';
 import { useApp } from '@/lib/app';
+import { Icon } from './Icon';
 
 export function Login() {
   const app = useApp();
@@ -52,9 +53,13 @@ export function Login() {
             {err && <div className="err">{err}</div>}
             <button className="btn" type="submit" disabled={busy}>{busy ? '请稍候…' : act ? '设置密码并进入' : '登录'}</button>
           </form>
-          <button className="link" style={{ marginTop: 20 }} onClick={() => { setErr(''); setMode(act ? 'login' : 'activate'); }}>
-            {act ? '已有密码？返回登录' : '收到激活码？首次登录'}
-          </button>
+          <div className="login-alternative">
+            <p className="sub sm">{act ? '已经激活过账号？' : '首次登录？使用管理员发给你的激活码。'}</p>
+            <button type="button" className="btn ghost login-switch" disabled={busy}
+              onClick={() => { setErr(''); setMode(act ? 'login' : 'activate'); }}>
+              <Icon n={act ? 'back' : 'user'} s={17} />{act ? '返回登录' : '激活账号'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

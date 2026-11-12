@@ -35,7 +35,7 @@ export function ManageUploads() {
 
   return <section aria-label="我的上传" className="uploads-settings">
     <div className="uploads-heading">
-      <div><h2>我的上传</h2><p className="sub sm">歌曲保存在服务器，换设备登录也能听。</p></div>
+      <div><h2>我的上传</h2></div>
       {editing === null && <button className="btn sm" disabled={!items} onClick={() => setEditing('new')}><Icon n="plus" s={16} />上传歌曲</button>}
     </div>
     {error && <p className="err" role="alert">{error}</p>}

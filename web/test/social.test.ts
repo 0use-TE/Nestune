@@ -40,6 +40,76 @@ function makeFriends(a: number, b: number) {
   social.answerFriend(b, a, true);
 }
 
+describe('invitation history', () => {
+  it('creates one private invitation card and unread message, without duplicating a repeated invitation', () => {
+    makeFriends(1, 2);
+    social.inviteListener(listener(1), 2);
+    const [message] = social.readMessages(2, 1);
+    expect(message.invite).toMatchObject({ hostId: 1, guestId: 2, status: 'pending' });
+    expect(social.socialState(listener(2)).inbox[0]).toMatchObject({ unread: 1, latest: { id: message.id, invite: { status: 'pending' } } });
+    expect(() => social.inviteListener(listener(1), 2)).toThrow();
+    expect(social.readMessages(1, 2)).toHaveLength(1);
+    expect(() => social.readMessages(3, 1)).toThrow();
+    expect(() => social.acceptListening(listener(3), message.invite!.roomId)).toThrow();
+    expect(social.readMessages(1, 2)[0].invite?.status).toBe('pending');
+  });
+
+  it('preserves cancelled and declined cards and allows a fresh invitation', () => {
+    makeFriends(1, 2);
+    social.inviteListener(listener(1), 2);
+    const first = social.readMessages(1, 2)[0];
+    expect(() => social.leaveListening(listener(1, 2), first.invite!.roomId)).toThrow();
+    expect(social.readMessages(2, 1)[0].invite?.status).toBe('pending');
+    social.leaveListening(listener(1), first.invite!.roomId);
+    expect(social.readMessages(2, 1)[0].invite?.status).toBe('cancelled');
+    social.inviteListener(listener(1), 2);
+    const next = social.readMessages(2, 1)[1];
+    expect(next.invite?.roomId).not.toBe(first.invite?.roomId);
+    social.leaveListening(listener(2), next.invite!.roomId);
+    expect(social.readMessages(1, 2).map(message => message.invite?.status)).toEqual(['cancelled', 'declined']);
+  });
+
+  it('expires unanswered invitations and rejects accepting them after the deadline', () => {
+    makeFriends(1, 2);
+    social.inviteListener(listener(1), 2);
+    const card = social.readMessages(2, 1)[0];
+    database.run('UPDATE listening_rooms SET updated_at=? WHERE id=?', Date.now() - 600_001, card.invite!.roomId);
+    expect(social.readMessages(2, 1)[0]).toMatchObject({ id: card.id, invite: { status: 'expired' } });
+    expect(() => social.acceptListening(listener(2), card.invite!.roomId)).toThrow(/失效/);
+    expect(social.socialState(listener(1)).rooms).toHaveLength(0);
+  });
+
+  it('records accepting and ending a session, and invalidates competing invitations', () => {
+    makeFriends(1, 2); makeFriends(1, 3);
+    social.inviteListener(listener(1), 2); social.inviteListener(listener(1), 3);
+    const card = social.readMessages(1, 2)[0];
+    social.acceptListening(listener(2), card.invite!.roomId);
+    expect(social.readMessages(1, 2)[0]).toMatchObject({ id: card.id, invite: { status: 'accepted' } });
+    expect(social.readMessages(1, 3)[0].invite?.status).toBe('expired');
+    social.leaveListening(listener(2), card.invite!.roomId);
+    expect(social.readMessages(1, 2)[0].invite?.status).toBe('ended');
+  });
+
+  it('keeps an invitation record after a participant signs out', () => {
+    makeFriends(1, 2); social.inviteListener(listener(1), 2);
+    const card = social.readMessages(2, 1)[0];
+    social.acceptListening(listener(2), card.invite!.roomId);
+    database.run('DELETE FROM sessions WHERE id=?', listener(2).sessionId);
+    expect(social.readMessages(1, 2)[0].invite?.status).toBe('ended');
+  });
+
+  it('backfills an old live invitation once across database reopenings', () => {
+    makeFriends(1, 2);
+    database.run('INSERT INTO listening_rooms(host_id,guest_id,host_session_id,updated_at) VALUES(?,?,?,?)', 1, 2, listener(1).sessionId, Date.now());
+    for (let i = 0; i < 2; i++) {
+      database.db().close();
+      delete (globalThis as { __nt_db?: unknown }).__nt_db;
+      expect(social.readMessages(2, 1)).toHaveLength(1);
+      expect(social.readMessages(2, 1)[0].invite?.status).toBe('pending');
+    }
+  });
+});
+
 describe('social visibility and permissions', () => {
   it('lists all enabled users and never leaks hidden activity through later heartbeats', () => {
     social.syncSocial(listener(1), track, undefined, null);

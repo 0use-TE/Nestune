@@ -1,8 +1,13 @@
 'use client';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Song } from './types';
+import { ART_EXTENSION, embedDeviceTags, MAX_ART_BYTES, readDeviceTags } from './device-tags';
+import { formatLrc, parseLrc } from './lyrics';
+import type { LyricLine, Song } from './types';
+import { isUploadSong } from './upload-types';
 
 const AUDIO_EXT = /\.(mp3|flac|m4a|aac|wav|ogg|oga|opus|webm)$/i;
+const COMPANION_EXT = /\.(jpg|jpeg|png|webp|lrc|txt)$/i;
+const MAX_LYRIC_BYTES = 128 * 1024;
 const PERMISSION = { mode: 'readwrite' } as const;
 type MusicFolder = FileSystemDirectoryHandle & {
   values(): AsyncIterableIterator<FileSystemHandle>;
@@ -10,7 +15,7 @@ type MusicFolder = FileSystemDirectoryHandle & {
   requestPermission(options: typeof PERMISSION): Promise<PermissionState>;
 };
 type MusicWindow = Window & { showDirectoryPicker?: (options: typeof PERMISSION & { startIn: 'music' }) => Promise<MusicFolder> };
-type DeviceTrack = { song: Song; file: FileSystemFileHandle };
+type DeviceTrack = { song: Song; file: FileSystemFileHandle; lyric?: FileSystemFileHandle; stamp?: string };
 type Status = 'loading' | 'insecure' | 'unsupported' | 'authorize' | 'ready' | 'error';
 
 export const isDeviceSong = (id: string) => id.startsWith('device:');
@@ -38,21 +43,34 @@ async function folderRecord(candidate?: MusicFolder) {
   } finally { db.close(); }
 }
 
-async function listTracks(root: MusicFolder) {
+async function listTracks(root: MusicFolder, previous: Map<string, DeviceTrack>, isCurrent: () => boolean) {
   const tracks = new Map<string, DeviceTrack>();
   const folders = [{ folder: root, prefix: '' }];
-  while (folders.length) {
+  while (folders.length && isCurrent()) {
     const { folder, prefix } = folders.pop()!;
+    const files = new Map<string, FileSystemFileHandle>();
     for await (const entry of folder.values()) {
       if (entry.kind === 'directory') {
         folders.push({ folder: entry as MusicFolder, prefix: `${prefix}${entry.name}/` });
-      } else if (AUDIO_EXT.test(entry.name)) {
-        const id = `device:${prefix}${entry.name}`;
-        tracks.set(id, {
-          file: entry as FileSystemFileHandle,
-          song: { id, name: entry.name.replace(AUDIO_EXT, ''), artists: [], album: { id: null, name: '' }, duration: 0, cover: null },
-        });
-      }
+      } else if (AUDIO_EXT.test(entry.name) || COMPANION_EXT.test(entry.name)) files.set(entry.name, entry as FileSystemFileHandle);
+    }
+    const caseFolded = new Map([...files].map(([name, file]) => [name.toLowerCase(), file]));
+    const match = (name: string) => files.get(name) ?? caseFolded.get(name.toLowerCase());
+    const audioFiles = [...files.values()].filter(file => AUDIO_EXT.test(file.name));
+    for (let i = 0; i < audioFiles.length && isCurrent(); i += 6) {
+      await Promise.all(audioFiles.slice(i, i + 6).map(async handle => {
+        const name = handle.name.replace(AUDIO_EXT, '');
+        const id = `device:${prefix}${handle.name}`;
+        const fallback: Song = { id, name, artists: [], album: { id: null, name: '' }, duration: 0, cover: null };
+        const lyric = match(`${name}.lrc`) ?? match(`${name}.txt`);
+        const image = ['jpg', 'jpeg', 'png', 'webp'].map(ext => match(`${name}.${ext}`)).find(Boolean);
+        const [file, sidecar] = await Promise.all([handle.getFile().catch(() => undefined), image?.getFile().catch(() => undefined)]);
+        if (!file) { tracks.set(id, { song: fallback, file: handle, lyric }); return; }
+        const stamp = JSON.stringify([file.lastModified, file.size, sidecar?.name, sidecar?.lastModified, sidecar?.size]);
+        const cached = previous.get(id);
+        const song = cached?.stamp === stamp ? cached.song : await readDeviceTags(file, sidecar, fallback);
+        tracks.set(id, { song, file: handle, lyric, stamp });
+      }));
     }
   }
   return tracks;
@@ -64,15 +82,45 @@ function fileBase(song: Song) {
   return /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(safe) ? `_${safe}` : safe;
 }
 
-async function unusedFile(folder: MusicFolder, base: string, ext: string) {
-  for (let index = 1; ; index++) {
-    const name = `${base}${index === 1 ? '' : ` (${index})`}.${ext}`;
-    try { await folder.getFileHandle(name); }
-    catch (error) {
-      if (error instanceof DOMException && error.name === 'NotFoundError') return folder.getFileHandle(name, { create: true });
-      if (!(error instanceof DOMException && error.name === 'TypeMismatchError')) throw error;
-    }
+async function unusedStem(folder: MusicFolder, base: string) {
+  const stems = new Set<string>();
+  for await (const entry of folder.values()) {
+    if (AUDIO_EXT.test(entry.name) || COMPANION_EXT.test(entry.name)) stems.add(entry.name.replace(/\.[^.]+$/, '').toLowerCase());
   }
+  let stem = base;
+  for (let index = 2; stems.has(stem.toLowerCase()); index++) stem = `${base} (${index})`;
+  return stem;
+}
+
+async function writeFile(handle: FileSystemFileHandle, data: Blob) {
+  const writer = await handle.createWritable();
+  try { await writer.write(data); await writer.close(); }
+  catch (error) { await writer.abort().catch(() => {}); throw error; }
+}
+
+async function fetchCover(song: Song) {
+  if (!song.cover) return null;
+  const path = isUploadSong(song.id) ? song.cover : `/api/songs/${song.id}/cover`;
+  try {
+    const response = await fetch(path, { signal: AbortSignal.timeout(10_000) });
+    const type = response.headers.get('Content-Type') || '';
+    if (!response.ok || !ART_EXTENSION[type]) { await response.body?.cancel(); return null; }
+    const blob = await response.blob();
+    return blob.size > 0 && blob.size <= MAX_ART_BYTES ? blob : null;
+  } catch { return null; }
+}
+
+async function fetchLyrics(id: string) {
+  try {
+    const response = await fetch(`/api/songs/${id}/lyrics`, { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return null;
+    const payload = await response.json() as { lines: LyricLine[]; plainText?: string };
+    const synced = formatLrc(payload.lines);
+    const text = synced || payload.plainText?.trim();
+    if (!text) return null;
+    const data = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    return data.size <= MAX_LYRIC_BYTES ? { data, ext: synced ? 'lrc' : 'txt' } : null;
+  } catch { return null; }
 }
 
 export function useDeviceMusic() {
@@ -95,10 +143,11 @@ export function useDeviceMusic() {
         }
         return;
       }
-      const found = await listTracks(current);
+      const found = await listTracks(current, tracks.current, () => revision === scan.current);
       if (revision !== scan.current) return;
       tracks.current = found;
-      setSongs([...found.values()].map(item => item.song).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true })));
+      const order = new Intl.Collator(undefined, { numeric: true });
+      setSongs([...found.values()].map(item => item.song).sort((a, b) => order.compare(a.name, b.name) || order.compare(a.id, b.id)));
       setStatus('ready');
     } catch {
       if (revision === scan.current) {
@@ -146,8 +195,19 @@ export function useDeviceMusic() {
     return track.file.getFile();
   }, []);
 
-  const download = useCallback(async (song: Song, level: string) => {
+  const getLyrics = useCallback(async (id: string) => {
+    const handle = tracks.current.get(id)?.lyric;
+    if (!handle) return { lines: [] };
+    const file = await handle.getFile();
+    if (file.size > MAX_LYRIC_BYTES) return { lines: [] };
+    const text = await file.text();
+    const lines = parseLrc(text);
+    return { lines, plainText: lines.length ? '' : text.trim() };
+  }, []);
+
+  const download = useCallback(async (song: Song, level: string, includeLyrics: boolean) => {
     const target = await authorize();
+    const [cover, lyric] = await Promise.all([fetchCover(song), includeLyrics ? fetchLyrics(song.id) : null]);
     const response = await fetch(`/api/songs/${song.id}/download?level=${encodeURIComponent(level)}`, { method: 'POST' });
     if (!response.ok || !response.body) {
       const details = await response.json().catch(() => null);
@@ -159,16 +219,28 @@ export function useDeviceMusic() {
       if (!extension || !AUDIO_EXT.test(`.${extension}`) || !response.headers.get('Content-Type')?.startsWith('audio/')) {
         throw Error('服务器返回了无效的音频文件');
       }
-      await navigator.locks.request('nestune-music-download', async () => {
-        const file = await unusedFile(target, fileBase(song), extension);
+      const result = await navigator.locks.request('nestune-music-download', async () => {
+        const stem = await unusedStem(target, fileBase(song));
+        const file = await target.getFileHandle(`${stem}.${extension}`, { create: true });
         await stream.pipeTo(await file.createWritable());
+        const tagged = await file.getFile().then(original => embedDeviceTags(original, song, cover)).catch(() => null);
+        let coverSaved = false;
+        if (tagged) coverSaved = await writeFile(file, tagged).then(() => !!cover).catch(() => false);
+        if (cover && !coverSaved) {
+          coverSaved = await target.getFileHandle(`${stem}.${ART_EXTENSION[cover.type]}`, { create: true })
+            .then(handle => writeFile(handle, cover)).then(() => true).catch(() => false);
+        }
+        const lyricsSaved = lyric && await target.getFileHandle(`${stem}.${lyric.ext}`, { create: true })
+          .then(handle => writeFile(handle, lyric.data)).then(() => true).catch(() => false);
+        return { coverSaved, lyricsSaved: !!lyricsSaved };
       });
+      await refresh();
+      return result;
     } catch (error) {
       if (!stream.locked) await stream.cancel().catch(() => {});
       throw error;
     }
-    await refresh();
   }, [authorize, refresh]);
 
-  return useMemo(() => ({ status, songs, connect, refresh, getFile, download }), [status, songs, connect, refresh, getFile, download]);
+  return useMemo(() => ({ status, songs, connect, refresh, getFile, getLyrics, download }), [status, songs, connect, refresh, getFile, getLyrics, download]);
 }

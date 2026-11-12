@@ -5,6 +5,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY next.config.mjs tsconfig.json ./
 COPY src ./src
+COPY public ./public
 RUN npm run build
 
 FROM node:24-bookworm-slim
@@ -16,6 +17,7 @@ ENV NODE_ENV=production \
     DATA_DIR=/app/data
 COPY --from=build --chown=node:node /app/.next/standalone ./
 COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
 USER node
 EXPOSE 3000
 CMD ["node", "server.js"]

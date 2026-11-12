@@ -48,9 +48,21 @@ Admin (admin cookie): `/api/admin/login|logout|session|overview|users|netease|ca
 
 Cross-site writes are rejected (Origin check). Audio is only fetched from the music CDN domains, redirects re-checked. Private playlists and the bound account's own playlists are refused. Song/album/playlist payloads are field-whitelisted. Per-user rate limit and concurrent-download cap are adjustable in 系统设置.
 
+## PWA
+
+Together-listening invitations can be sent from a friend's chat. The invitation stays in chat history with its accepted, cancelled, declined, expired, or ended status; unanswered invitations expire after 10 minutes. The player fits the viewport, with scrolling confined to lyrics and messages. On phones, the **播放 / 聊天** tabs and horizontal swipes switch between playback and a full chat page; switching preserves the message draft.
+
+Use **https://music.0use.net** (the existing tunnel points to NAS port 3000). In Settings → Preferences, choose **安装 Nestune**; on iPhone/iPad use Safari → Share → Add to Home Screen. Sign in again after installation if the browser requests it. Plain LAN HTTP addresses do not support service workers.
+
+The manifest supplies desktop, Android maskable, and Apple home-screen icons. The service worker caches only public app assets and an offline connection screen. Account APIs, audio, uploaded files, personalized pages, and the admin panel are never stored in its cache. This version does not provide offline song playback.
+
+On a first visit, a small installation card offers the browser's installation prompt or platform instructions. It appears once per browser profile (tracked in local storage) and does not appear in installed windows or the admin panel. It does not take keyboard focus. Settings keeps the installation entry available afterward.
+
+Each production build generates a new worker. A prepared update offers **立即更新 / 稍后** instead of reloading during playback. If another window activates an update, existing windows continue until the user reloads. Development mode does not automatically register the worker. Docker must copy `public/` into both build and runtime images.
+
 ## Not in this version
 
-PWA/offline, HTTPS setup, audio-worker auto-import of saved songs.
+Offline song playback, HTTPS setup, audio-worker auto-import of saved songs.
 
 ## NAS deployment
 

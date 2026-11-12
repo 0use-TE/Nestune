@@ -24,8 +24,7 @@ function Chats() {
 function ChatView({ userId, initialPeer, restore }: { userId: number; initialPeer: number | null; restore: boolean }) {
   const app = useApp();
   const router = useRouter();
-  const { state, error, action } = useSocial();
-  const [inviting, setInviting] = useState(false);
+  const { state, error } = useSocial();
   const [rememberedPeer, setRememberedPeer] = useState<number | null>(null);
   const storageKey = `nt-chat-peer:${userId}`;
   const summaries = new Map(state?.inbox?.map(item => [item.peerId, item]));
@@ -33,7 +32,6 @@ function ChatView({ userId, initialPeer, restore }: { userId: number; initialPee
     (summaries.get(b.id)?.latest.id ?? 0) - (summaries.get(a.id)?.latest.id ?? 0));
   const peer = friends.find(person => person.id === (initialPeer ?? rememberedPeer));
   const peerId = peer?.id;
-  const canInvite = peer && !inviting && !state?.rooms.some(room => room.active || [room.hostId, room.guestId].includes(peer.id));
 
   useEffect(() => {
     if (!restore) return;
@@ -44,13 +42,6 @@ function ChatView({ userId, initialPeer, restore }: { userId: number; initialPee
     if (!peerId) return;
     try { localStorage.setItem(storageKey, String(peerId)); } catch { /* Storage may be unavailable. */ }
   }, [peerId, storageKey]);
-
-  async function invite(peerId: number) {
-    setInviting(true);
-    try { await action({ action: 'invite', peerId }); }
-    catch (e) { app.toast(e instanceof Error ? e.message : '邀请失败'); }
-    finally { setInviting(false); }
-  }
 
   return (
     <div className="chat-page">
@@ -76,7 +67,7 @@ function ChatView({ userId, initialPeer, restore }: { userId: number; initialPee
             );
           })}
         </section>
-        {peer ? <Conversation key={peer.id} person={peer} userId={userId} visible={!app.nowOpen} onClose={() => router.replace('/chat?list=1')} canInvite={!!canInvite} onInvite={() => invite(peer.id)} /> : (
+        {peer ? <Conversation key={peer.id} person={peer} userId={userId} visible={!app.nowOpen} onClose={() => router.replace('/chat?list=1')} /> : (
           <div className="chat-placeholder"><Icon n="lyrics" s={30} /><span>选择一个聊天</span></div>
         )}
       </div>

@@ -40,7 +40,6 @@ export function PlayerTogether({ inviting, onClose, active }: {
           <Avatar src={me.avatar} name={me.displayName} /><Avatar src={activePeer.avatar} name={activePeer.name} />
         </div>
         <div className="together-status"><b>{playing ? '正在一起听' : '一起听 · 已暂停'}</b><small className="t1">你和 {activePeer.name}</small></div>
-        <button className="ib" aria-label={playing ? '暂停一起听' : '继续一起听'} title={playing ? '暂停一起听' : '继续一起听'} onClick={app.toggle}><Icon n={playing ? 'pause' : 'play'} s={15} /></button>
         <button className="link" disabled={busy} onClick={() => change({ action: 'leave', roomId: room.id })}>退出</button>
       </header>
       {playbackError && <p className="err" role="alert">{playbackError}</p>}

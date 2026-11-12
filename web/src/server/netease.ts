@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { parseLrc } from '@/lib/lyrics';
 import { dir } from './config';
 import { fail } from './http';
 import { accessFromPrivilege, type Access } from './quality';
@@ -120,16 +121,7 @@ export function songSummary(s: any, fallbackCover?: string | null, priv?: any) {
 export type Song = ReturnType<typeof songSummary>;
 
 /* ---------- lyrics ---------- */
-export function parseLrc(text: string) {
-  const out: { t: number; text: string }[] = [];
-  for (const line of String(text || '').split(/\r?\n/)) {
-    const content = line.replace(/\[[^\]]*\]/g, '').trim();
-    const tags = [...line.matchAll(/\[(\d{1,3}):(\d{2})(?:[.:](\d{1,3}))?\]/g)];
-    if (!content || !tags.length) continue;
-    for (const m of tags) out.push({ t: Number(m[1]) * 60 + Number(m[2]) + (m[3] ? Number('0.' + m[3]) : 0), text: content });
-  }
-  return out.sort((a, b) => a.t - b.t);
-}
+export { parseLrc };
 export function mergeLyrics(lyric: string, translation: string, romanization: string) {
   const base = parseLrc(lyric), tr = parseLrc(translation), ro = parseLrc(romanization);
   const near = (list: { t: number; text: string }[], t: number) => {

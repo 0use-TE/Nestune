@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { get } from '@/lib/api';
 import { useApp, useClock } from '@/lib/app';
 import { isDeviceSong } from '@/lib/device-music';
 import { useSocial } from '@/lib/social';
 import type { LyricLine } from '@/lib/types';
+import type { Person } from '@/lib/social-types';
 import { QUALITY_LABEL, mmss } from '@/lib/util';
 import { Cover } from './Cover';
 import { Conversation } from './Conversation';
@@ -34,14 +35,48 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const [inviting, setInviting] = useState(false);
   const [mobileCover, setMobileCover] = useState(true);
   const [keepPlayerContents, setKeepPlayerContents] = useState(false);
+  const [chatPeer, setChatPeer] = useState<Person | null>(null);
+  const [mobilePage, setMobilePage] = useState<'playback' | 'chat'>('playback');
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const lastSwipe = useRef(0);
+  const swipeFrame = useRef<number | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => () => { if (swipeFrame.current !== null) cancelAnimationFrame(swipeFrame.current); }, []);
+  useEffect(() => {
+    const node = panel.current;
+    if (!node) return;
+    const move = (event: TouchEvent) => {
+      const start = swipe.current;
+      if (!start || event.touches.length !== 1) { swipe.current = null; return; }
+      const dx = event.touches[0].clientX - start.x;
+      const dy = event.touches[0].clientY - start.y;
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5 && event.cancelable) event.preventDefault();
+    };
+    node.addEventListener('touchmove', move, { passive: false });
+    return () => node.removeEventListener('touchmove', move);
+  }, [songId]);
   const showPlayerContents = app.nowOpen || keepPlayerContents;
   const hasRoom = !!social.state?.rooms.length;
   const room = social.state?.rooms.find(item => item.active && item.onThisDevice);
   const partner = room && social.state?.people.find(person => person.id === (room.hostId === app.me?.id ? room.guestId : room.hostId));
   const activeRoom = room && partner ? { room, peer: partner } : null;
+  const pendingRoom = social.state?.rooms.find(item => !item.active && item.guestId === app.me?.id) ?? social.state?.rooms.find(item => !item.active);
+  const pendingPeer = pendingRoom && social.state?.people.find(person => person.id === (pendingRoom.hostId === app.me?.id ? pendingRoom.guestId : pendingRoom.hostId));
+  const conversationPeer = partner || pendingPeer || chatPeer;
+  useEffect(() => {
+    if (partner || pendingPeer) setChatPeer(partner || pendingPeer || null);
+  }, [partner, pendingPeer]);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 860px)');
+    const reset = () => { if (!query.matches) setMobilePage('playback'); };
+    query.addEventListener('change', reset);
+    return () => query.removeEventListener('change', reset);
+  }, []);
   const needsLyrics = app.nowOpen || lyricsPinned;
+  const getDeviceLyrics = app.deviceMusic.getLyrics;
 
   useEffect(() => {
+    if (!app.nowOpen) { setChatPeer(null); setMobilePage('playback'); }
     if (app.nowOpen) {
       setKeepPlayerContents(true);
       return;
@@ -55,9 +90,11 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   }, [app.nowOpen]);
 
   useEffect(() => {
-    if (!songId || deviceSong || !needsLyrics) return;
+    if (!songId || !needsLyrics) return;
     let live = true;
-    get<{ lines: LyricLine[]; credits?: string[]; plainText?: string }>(`/api/songs/${songId}/lyrics`).then(({ lines, credits = [], plainText }) => {
+    const request: Promise<{ lines: LyricLine[]; credits?: string[]; plainText?: string }> =
+      deviceSong ? getDeviceLyrics(songId) : get(`/api/songs/${songId}/lyrics`);
+    request.then(({ lines, credits = [], plainText }) => {
       if (!live) return;
       let first = 0;
       let end = lines.length;
@@ -66,14 +103,14 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
       setLyrics({ id: songId, lines: lines.slice(first, end), plainText, credits: [...credits, ...[...lines.slice(0, first), ...lines.slice(end)].map(line => line.text)] });
     }).catch(() => { if (live) setLyrics({ id: songId, lines: [], credits: [] }); });
     return () => { live = false; };
-  }, [songId, deviceSong, needsLyrics]);
+  }, [songId, deviceSong, getDeviceLyrics, needsLyrics]);
 
   const currentLyrics = lyrics?.id === songId ? lyrics : null;
   const lines = currentLyrics?.lines ?? [];
   let active = -1;
   for (let i = 0; i < lines.length && lines[i].t <= time; i++) active = i;
   const currentLine = lines[active];
-  const lyricStatus = deviceSong ? '暂无歌词' : !currentLyrics ? '加载歌词…' : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
+  const lyricStatus = !currentLyrics ? '加载歌词…' : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) app.setNowOpen(false); };
@@ -99,9 +136,41 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
 
   return (
     <>
-      <div id="np" className={app.nowOpen ? 'open' : ''} inert={!app.nowOpen} data-mobile-cover={mobileCover || undefined} data-playing={app.playing || undefined}>
+      <div id="np" ref={panel} className={app.nowOpen ? 'open' : ''} inert={!app.nowOpen} data-mobile-page={mobilePage} data-has-chat={!!conversationPeer || undefined} data-mobile-cover={mobileCover || undefined} data-playing={app.playing || undefined}
+        onTouchStart={event => {
+          const target = event.target as HTMLElement;
+          if (!conversationPeer || !window.matchMedia('(max-width: 860px)').matches || event.touches.length !== 1 || target.closest('input,textarea,button:not(.mobile-art-toggle):not(.ln),.track,.chat-song-picker')) { swipe.current = null; return; }
+          swipe.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+        }} onTouchCancel={() => { swipe.current = null; }} onTouchEnd={event => {
+          const start = swipe.current; swipe.current = null;
+          if (!start || !event.changedTouches.length || event.touches.length) return;
+          const dx = event.changedTouches[0].clientX - start.x;
+          const dy = event.changedTouches[0].clientY - start.y;
+          if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+            lastSwipe.current = Date.now();
+            // Let the native touch finish before hiding its original target.
+            if (swipeFrame.current !== null) cancelAnimationFrame(swipeFrame.current);
+            swipeFrame.current = requestAnimationFrame(() => {
+              swipeFrame.current = null;
+              setMobilePage(dx < 0 ? 'chat' : 'playback');
+            });
+          }
+        }} onClickCapture={event => {
+          if (event.detail && Date.now() - lastSwipe.current < 400) { event.preventDefault(); event.stopPropagation(); }
+        }}>
         {showPlayerContents && s.cover && <div className="np-mobile-backdrop" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(s.cover)})` }} />}
         <button className="ib close" aria-label="收起" onClick={() => app.setNowOpen(false)}><Icon n="down" s={24} /></button>
+        {conversationPeer && <div className="np-page-tabs" role="tablist" aria-label="播放与聊天" onKeyDown={event => {
+          if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+          event.preventDefault();
+          const page = event.key === 'ArrowRight' ? 'chat' : 'playback';
+          setMobilePage(page);
+          document.getElementById(`np-tab-${page}`)?.focus();
+        }}>
+          <button id="np-tab-playback" role="tab" aria-selected={mobilePage === 'playback'} aria-controls="np-playback-page" tabIndex={mobilePage === 'playback' ? 0 : -1} onClick={() => setMobilePage('playback')}>播放</button>
+          <button id="np-tab-chat" role="tab" aria-selected={mobilePage === 'chat'} aria-controls="np-chat-page" tabIndex={mobilePage === 'chat' ? 0 : -1} onClick={() => setMobilePage('chat')}>聊天</button>
+        </div>}
+        <div id="np-playback-page" className="np-playback-page">
         <div className="left">
           <div className="np-art">
             <div className="np-record" key={songId}><Cover src={s.cover} seed={s.id} /></div>
@@ -159,6 +228,10 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
             </div>
           )}
         </div>
+        </div>
+        {showPlayerContents && conversationPeer && <div id="np-chat-page" className="np-chat-page" role="tabpanel" aria-labelledby="np-tab-chat">
+          <Conversation key={conversationPeer.id} person={conversationPeer} userId={app.me!.id} visible={app.nowOpen && mobilePage === 'chat'} />
+        </div>}
       </div>
       <FloatingLyrics visible={lyricsPinned && !app.nowOpen} text={currentLine?.text || lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
     </>

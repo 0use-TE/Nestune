@@ -163,6 +163,19 @@ function open() {
       updated_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS listening_room_pair ON listening_rooms(min(host_id, guest_id), max(host_id, guest_id));
+    CREATE TABLE IF NOT EXISTS listening_invites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL UNIQUE,
+      host_id INTEGER NOT NULL,
+      guest_id INTEGER NOT NULL,
+      low_id INTEGER NOT NULL,
+      high_id INTEGER NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('pending','accepted','cancelled','declined','expired','ended')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      FOREIGN KEY (low_id,high_id) REFERENCES friendships(low_id,high_id) ON DELETE CASCADE
+    );
   `);
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -179,6 +192,19 @@ function open() {
     if (!db.prepare('PRAGMA table_info(friend_messages)').all().some(column => column.name === 'song')) {
       db.exec('ALTER TABLE friend_messages ADD COLUMN song TEXT');
     }
+    if (!db.prepare('PRAGMA table_info(friend_messages)').all().some(column => column.name === 'invite_id')) {
+      db.exec('ALTER TABLE friend_messages ADD COLUMN invite_id INTEGER REFERENCES listening_invites(id) ON DELETE SET NULL');
+    }
+    // Preserve existing live invitations when upgrading, without creating duplicate chat cards.
+    db.exec(`INSERT OR IGNORE INTO listening_invites(room_id,host_id,guest_id,low_id,high_id,status,created_at,updated_at,expires_at)
+      SELECT r.id,r.host_id,r.guest_id,min(r.host_id,r.guest_id),max(r.host_id,r.guest_id),
+        CASE WHEN r.active=1 THEN 'accepted' ELSE 'pending' END,r.updated_at,r.updated_at,r.updated_at+600000
+      FROM listening_rooms r WHERE EXISTS(SELECT 1 FROM friendships f
+        WHERE f.low_id=min(r.host_id,r.guest_id) AND f.high_id=max(r.host_id,r.guest_id) AND f.accepted=1);
+      INSERT INTO friend_messages(low_id,high_id,sender_id,text,sent_at,invite_id)
+      SELECT i.low_id,i.high_id,i.host_id,'一起听邀请',i.created_at,i.id FROM listening_invites i
+      WHERE NOT EXISTS(SELECT 1 FROM friend_messages m WHERE m.invite_id=i.id);
+      CREATE INDEX IF NOT EXISTS friend_messages_invite ON friend_messages(invite_id);`);
     db.exec('COMMIT');
   } catch (error) {
     db.exec('ROLLBACK');

@@ -9,3 +9,11 @@ work/
 state/
 storage/
 __pycache__/
+releases/
+clients/**/bin/
+clients/**/obj/
+clients/android/.gradle/
+clients/android/**/build/
+clients/android/local.properties
+*.keystore
+*.jks

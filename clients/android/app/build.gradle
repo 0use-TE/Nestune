@@ -1,0 +1,29 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'net.ouse.nestune'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'net.ouse.nestune'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0.0'
+    }
+    signingConfigs {
+        release {
+            storeFile file(System.getenv('NESTUNE_KEYSTORE') ?: 'missing-release.keystore')
+            storePassword System.getenv('NESTUNE_KEYSTORE_PASSWORD')
+            keyAlias 'nestune'
+            keyPassword System.getenv('NESTUNE_KEYSTORE_PASSWORD')
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4' }

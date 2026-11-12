@@ -1,11 +1,16 @@
-import type { ConversationSummary, ListeningRoom, ListeningTrack, Message, Person, Playback, SharedSong, SocialState } from '@/lib/social-types';
+import { INVITE_STATUS, type ListeningInvite, type ConversationSummary, type ListeningRoom, type ListeningTrack, type Message, type Person, type Playback, type SharedSong, type SocialState } from '@/lib/social-types';
 import { isUploadSong } from '@/lib/upload-types';
-import { all, now, one, run } from './db';
+import { all, db, now, one, run } from './db';
 import { fail } from './http';
 import { visibleUpload } from './uploads';
 
-type MessageRow = Omit<Message, 'song'> & { song: string | null };
-function decodeMessage(viewer: number, { song, ...message }: MessageRow): Message {
+type MessageRow = Omit<Message, 'song' | 'invite'> & { song: string | null; inviteId: number | null };
+function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRow): Message {
+  if (inviteId) {
+    const invite = one<ListeningInvite>(`SELECT id,room_id roomId,host_id hostId,guest_id guestId,status,
+      created_at createdAt,updated_at updatedAt,expires_at expiresAt FROM listening_invites WHERE id=? AND (host_id=? OR guest_id=?)`, inviteId, viewer, viewer);
+    if (invite) return { ...message, text: `一起听邀请 · ${INVITE_STATUS[invite.status]}`, invite };
+  }
   if (!song) return message;
   const shared = JSON.parse(song) as SharedSong;
   if (isUploadSong(shared.id) && !visibleUpload(viewer, shared.id)) return { ...message, text: '歌曲已不可用' };
@@ -37,8 +42,18 @@ function requireFriend(user: number, peer: number) {
   if (!friendship(user, peer)?.accepted) throw fail(403, '添加好友后才能聊天或一起听');
 }
 function expireRooms() {
-  const time = now();
-  run('DELETE FROM listening_rooms WHERE (active=1 AND updated_at<?) OR (active=0 AND updated_at<?)', time - 90_000, time - 600_000);
+  transaction(() => {
+    const time = now();
+    run('DELETE FROM listening_rooms WHERE (active=1 AND updated_at<?) OR (active=0 AND updated_at<?)', time - 90_000, time - 600_000);
+    run(`UPDATE listening_invites SET status=CASE WHEN status='accepted' THEN 'ended' ELSE 'expired' END,updated_at=?
+      WHERE status IN ('pending','accepted') AND NOT EXISTS(SELECT 1 FROM listening_rooms r WHERE r.id=room_id)`, time);
+  });
+}
+
+function transaction<T>(work: () => T): T {
+  db().exec('BEGIN IMMEDIATE');
+  try { const result = work(); db().exec('COMMIT'); return result; }
+  catch (error) { db().exec('ROLLBACK'); throw error; }
 }
 
 export function socialState({ userId: user, sessionId }: Listener): SocialState {
@@ -105,7 +120,8 @@ export function answerFriend(user: number, peer: number, accept: boolean) {
 }
 export function readMessages(user: number, peer: number, before?: number) {
   requireFriend(user, peer);
-  const rows = all<MessageRow>(`SELECT id,sender_id senderId,text,sent_at sentAt,song FROM friend_messages
+  expireRooms();
+  const rows = all<MessageRow>(`SELECT id,sender_id senderId,text,sent_at sentAt,song,invite_id inviteId FROM friend_messages
     WHERE low_id=? AND high_id=? AND id<? ORDER BY id DESC LIMIT 50`, ...pair(user, peer), before ?? Number.MAX_SAFE_INTEGER);
   return rows.reverse().map(row => decodeMessage(user, row));
 }
@@ -123,7 +139,7 @@ function listConversations(user: number): ConversationSummary[] {
   return all<MessageRow & Omit<ConversationSummary, 'latest'>>(`WITH pairs AS (
     SELECT f.low_id,f.high_id,CASE WHEN f.low_id=? THEN f.high_id ELSE f.low_id END peerId
     FROM friendships f WHERE f.accepted=1 AND (f.low_id=? OR f.high_id=?)
-  ) SELECT p.peerId,m.id,m.sender_id senderId,m.text,m.sent_at sentAt,m.song,COALESCE(other.message_id,0) peerReadThrough,
+  ) SELECT p.peerId,m.id,m.sender_id senderId,m.text,m.sent_at sentAt,m.song,m.invite_id inviteId,COALESCE(other.message_id,0) peerReadThrough,
     (SELECT count(*) FROM friend_messages x WHERE x.low_id=p.low_id AND x.high_id=p.high_id AND x.sender_id=p.peerId AND x.id>COALESCE(own.message_id,0)) unread,
     COALESCE((SELECT max(x.id) FROM friend_messages x WHERE x.low_id=p.low_id AND x.high_id=p.high_id AND x.sender_id=p.peerId),0) latestIncomingId
     FROM pairs p JOIN users u ON u.id=p.peerId AND u.status='active'
@@ -147,23 +163,38 @@ export async function shareSong(user: number, peer: number, resolve: () => Promi
 export function inviteListener({ userId: user, sessionId }: Listener, peer: number) {
   requireFriend(user, peer);
   expireRooms();
-  if (hasActiveRoom(user) || hasActiveRoom(peer)) throw fail(409, '有人已加入一起听');
-  const result = run('INSERT OR IGNORE INTO listening_rooms(host_id,guest_id,host_session_id,updated_at) VALUES(?,?,?,?)', user, peer, sessionId, now());
-  if (!result.changes) throw fail(409, '你们已有一条一起听邀请');
+  transaction(() => {
+    if (hasActiveRoom(user) || hasActiveRoom(peer)) throw fail(409, '有人已加入一起听');
+    const time = now();
+    const result = run('INSERT OR IGNORE INTO listening_rooms(host_id,guest_id,host_session_id,updated_at) VALUES(?,?,?,?)', user, peer, sessionId, time);
+    if (!result.changes) throw fail(409, '你们已有一条一起听邀请');
+    const invite = run(`INSERT INTO listening_invites(room_id,host_id,guest_id,low_id,high_id,status,created_at,updated_at,expires_at)
+      VALUES(?,?,?,?,?,'pending',?,?,?)`, Number(result.lastInsertRowid), user, peer, ...pair(user, peer), time, time, time + 600_000);
+    run('INSERT INTO friend_messages(low_id,high_id,sender_id,text,sent_at,invite_id) VALUES(?,?,?,?,?,?)',
+      ...pair(user, peer), user, '一起听邀请', time, Number(invite.lastInsertRowid));
+  });
 }
 export function acceptListening({ userId: user, sessionId }: Listener, room: number) {
   expireRooms();
   const time = now();
-  const result = run(`UPDATE listening_rooms AS invite SET active=1,guest_session_id=?,updated_at=? WHERE id=? AND guest_id=? AND active=0
-    AND EXISTS (SELECT 1 FROM users WHERE id=invite.host_id AND status='active')
-    AND NOT EXISTS (SELECT 1 FROM listening_rooms AS other WHERE other.active=1 AND
-      (other.host_id IN (invite.host_id,invite.guest_id) OR other.guest_id IN (invite.host_id,invite.guest_id)))`, sessionId, time, room, user);
-  if (!result.changes) {
-    const joined = one<{ guest_session_id: string }>('SELECT guest_session_id FROM listening_rooms WHERE id=? AND guest_id=? AND active=1', room, user);
-    if (joined?.guest_session_id === sessionId) return;
-    if (joined) throw fail(409, '已在另一台设备加入一起听', 'room_other_device');
-  }
-  if (!result.changes) throw fail(409, '邀请已失效，或有人已加入一起听');
+  transaction(() => {
+    const result = run(`UPDATE listening_rooms AS invite SET active=1,guest_session_id=?,updated_at=? WHERE id=? AND guest_id=? AND active=0
+      AND EXISTS (SELECT 1 FROM users WHERE id=invite.host_id AND status='active')
+      AND NOT EXISTS (SELECT 1 FROM listening_rooms AS other WHERE other.active=1 AND
+        (other.host_id IN (invite.host_id,invite.guest_id) OR other.guest_id IN (invite.host_id,invite.guest_id)))`, sessionId, time, room, user);
+    if (!result.changes) {
+      const joined = one<{ guest_session_id: string }>('SELECT guest_session_id FROM listening_rooms WHERE id=? AND guest_id=? AND active=1', room, user);
+      if (joined?.guest_session_id === sessionId) return;
+      if (joined) throw fail(409, '已在另一台设备加入一起听', 'room_other_device');
+    }
+    if (!result.changes) throw fail(409, '邀请已失效，或有人已加入一起听');
+    run("UPDATE listening_invites SET status='accepted',updated_at=? WHERE room_id=? AND status='pending'", time, room);
+    const joinedRoom = one<RoomRow>('SELECT * FROM listening_rooms WHERE id=?', room)!;
+    run(`DELETE FROM listening_rooms WHERE active=0 AND (host_id IN (?,?) OR guest_id IN (?,?))`,
+      joinedRoom.host_id, joinedRoom.guest_id, joinedRoom.host_id, joinedRoom.guest_id);
+    run(`UPDATE listening_invites SET status='expired',updated_at=? WHERE status='pending'
+      AND NOT EXISTS(SELECT 1 FROM listening_rooms r WHERE r.id=room_id)`, time);
+  });
 }
 export function controlListening({ userId: user, sessionId }: Listener, room: number, song: string, playing?: boolean) {
   const time = now();
@@ -179,10 +210,15 @@ export function controlListening({ userId: user, sessionId }: Listener, room: nu
   }
 }
 export function leaveListening({ userId: user, sessionId }: Listener, room: number) {
-  const result = run(`DELETE FROM listening_rooms WHERE id=? AND
-    ((host_id=? AND host_session_id=?) OR (guest_id=? AND (active=0 OR guest_session_id=?)))`,
-  room, user, sessionId, user, sessionId);
-  if (!result.changes && one('SELECT 1 FROM listening_rooms WHERE id=? AND (host_id=? OR guest_id=?)', room, user, user)) {
-    throw fail(409, '请在参与一起听的设备上操作', 'room_other_device');
-  }
+  transaction(() => {
+    const target = one<RoomRow>('SELECT * FROM listening_rooms WHERE id=?', room);
+    const result = run(`DELETE FROM listening_rooms WHERE id=? AND
+      ((host_id=? AND host_session_id=?) OR (guest_id=? AND (active=0 OR guest_session_id=?)))`,
+    room, user, sessionId, user, sessionId);
+    if (!result.changes && one('SELECT 1 FROM listening_rooms WHERE id=? AND (host_id=? OR guest_id=?)', room, user, user)) {
+      throw fail(409, '请在参与一起听的设备上操作', 'room_other_device');
+    }
+    if (result.changes && target) run('UPDATE listening_invites SET status=?,updated_at=? WHERE room_id=?',
+      target.active ? 'ended' : target.host_id === user ? 'cancelled' : 'declined', now(), room);
+  });
 }
