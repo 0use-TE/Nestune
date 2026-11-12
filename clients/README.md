@@ -20,7 +20,37 @@ The installer downloads WebView2 only when it is missing. The browser engine and
 
 The webview stays on the music HTTPS origin; external HTTPS links open in the system browser. Browser file access still requires the user's permission. No Tauri command capabilities are granted to remote web content. `--smoke-test` starts a hidden window with an isolated temporary browser profile for runtime checks; it runs until explicitly closed. The release is not signed with a public Windows code-signing certificate.
 
-For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; the `frontendDist` URL in `src-tauri/tauri.conf.json` and the trusted origin in `src/main.rs` must agree when changing domains. Linux and macOS release packages have not been built or validated.
+For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; the `frontendDist` URL in `src-tauri/tauri.conf.json` and the trusted origin in `src/main.rs` must agree when changing domains.
+
+## Linux x64 and macOS universal — Tauri V1.0.0
+
+The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**. Download the packages from a successful run's **Artifacts** section. Artifacts are retained for 30 days; these are build artifacts rather than a public GitHub Release.
+
+| Platform | Packages | Checks |
+| --- | --- | --- |
+| Linux x86-64 | AppImage and deb | Debian package metadata, linked libraries and a bounded GTK/WebKit startup under Xvfb |
+| macOS 11+ | Universal DMG and zipped app | Intel `x86_64` and Apple Silicon `arm64` slices, bundle metadata and DMG integrity |
+
+Each artifact includes `SHA256SUMS.txt`. These checks do not replace real-device music playback testing. The macOS build is not Developer ID signed or Apple notarized, so Gatekeeper may require allowing the app in System Settings before it can run.
+
+On Arch Linux, use the AppImage. Enable its executable permission first, for example `chmod +x Nestune-1.0.0-Linux-x64.AppImage`. AppImage FUSE mounting requires the distribution's FUSE 2 compatibility library (`fuse2` on Arch); `--appimage-extract-and-run` is an alternative. The AppImage includes GStreamer media libraries for audio playback, which makes it larger than the Windows installer. The deb package declares additional GStreamer dependencies. The desktop uses the platform webview; features such as browser access to a local music folder depend on that webview's support.
+
+To build on Linux, install Tauri's [Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux), GStreamer's base/good plugins and libav plugin. From `clients/desktop/`, run:
+
+```sh
+npm ci
+npm run build:linux
+```
+
+To build on a Mac with Xcode command line tools, Rust and Node.js installed:
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm ci
+npm run build:macos
+```
+
+The platform-specific `tauri.linux.conf.json` and `tauri.macos.conf.json` configure packaging without changing the Windows NSIS build.
 
 ## Windows x64 — previous .NET client
 

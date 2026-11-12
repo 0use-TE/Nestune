@@ -11,7 +11,7 @@
 | `web/` | **Current app.** Next.js: player UI + backend API + admin panel. See `web/README.md`. |
 | `audio-worker/` | NCM decrypt / MP3 transcode container. Deployed on the NAS (see below). |
 | `prototype/` | Static HTML mock-ups used to agree on the visual style. |
-| `clients/` | Windows client and packaging scripts. Android packaging is paused. |
+| `clients/` | Tauri desktop clients for Windows, Linux and macOS, plus packaging scripts. See `clients/README.md`. Android packaging is paused. |
 | `docs/` | Static project website. GitHub Actions deploys it to GitHub Pages when this folder changes on `main`. |
 
 ## Run locally
