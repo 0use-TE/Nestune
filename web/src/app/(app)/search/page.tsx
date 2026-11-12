@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from '@/components/Loading';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -16,7 +17,7 @@ type SearchType = (typeof TYPES)[number][0];
 type Item = any;
 
 export default function SearchPage() {
-  return <Suspense fallback={<div className="center sub">加载中…</div>}><SearchRoute /></Suspense>;
+  return <Suspense fallback={<Loading />}><SearchRoute /></Suspense>;
 }
 
 function SearchRoute() {
@@ -109,7 +110,7 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
       )}
 
       {err && <div className="note">{err}</div>}
-      {busy && !items.length && <div className="center sub">搜索中…</div>}
+      {busy && !items.length && <Loading />}
       {!busy && !err && q.trim() && searched && !items.length && <Empty text="没有找到相关内容，试试换个关键词。" />}
 
       {type === 'song' && <SongList songs={items as Song[]} />}
@@ -129,7 +130,7 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
         </div>
       )}
       {items.length > 0 && items.length < total && (
-        <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={busy} onClick={() => run(lastRun.current, type, items.length)}>{busy ? '加载中…' : '加载更多'}</button></div>
+        <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={busy} onClick={() => run(lastRun.current, type, items.length)}>{busy ? <Loading inline label="加载中" /> : '加载更多'}</button></div>
       )}
     </>
   );

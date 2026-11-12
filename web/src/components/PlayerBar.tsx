@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useState } from 'react';
 import { useApp, useClock } from '@/lib/app';
 import { isDeviceSong } from '@/lib/device-music';
@@ -22,11 +23,11 @@ export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQue
         onPointerUp={() => setInfoPressed(false)} onPointerCancel={() => setInfoPressed(false)} onPointerLeave={() => setInfoPressed(false)}
         aria-label={`歌曲详情，${s.name}`} aria-expanded={app.nowOpen} aria-controls="np" title="歌曲详情">
         <Cover src={s.cover} seed={s.id} />
-        <span><b className="t1">{s.name}</b><span className="sub sm t1">{app.error || (app.loading ? '加载中…' : s.artists.map(a => a.name).join(' / '))}</span></span>
+        <span><b className="t1">{s.name}</b><span className="sub sm t1">{app.error || s.artists.map(a => a.name).join(' / ')}</span></span>
       </button>
       <div className="ctl">
         <button className="ib prev" aria-label="上一首" onClick={app.prev}><Icon n="prev" /></button>
-        <button className="ib play" aria-label={app.playing ? '暂停' : '播放'} onClick={app.toggle}><Icon n={app.playing ? 'pause' : 'play'} s={20} /></button>
+        <button className="ib play" aria-busy={app.loading} aria-label={app.playing ? '暂停' : '播放'} onClick={app.toggle}>{app.loading ? <Loading inline label="正在缓冲歌曲" /> : <Icon n={app.playing ? 'pause' : 'play'} s={20} />}</button>
         <button className="ib next" aria-label="下一首" onClick={app.next}><Icon n="next" /></button>
       </div>
       <div className="right">

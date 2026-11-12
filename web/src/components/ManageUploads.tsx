@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useEffect, useRef, useState } from 'react';
 import { api, del, get } from '@/lib/api';
 import { useApp } from '@/lib/app';
@@ -46,7 +47,7 @@ export function ManageUploads() {
         void app.reloadPlaylists();
         app.toast(editing === 'new' ? '歌曲已上传' : '歌曲已更新');
       }} />}
-    {!items && !error && <p className="center sub">加载歌曲…</p>}
+    {!items && !error && <Loading />}
     {items && !items.length && editing === null && <p className="center sub">还没有上传过歌曲</p>}
     {!!items?.length && <div className="panel uploads-list">
       {items.map(item => (
@@ -161,7 +162,7 @@ function UploadForm({ item, onClose, onSaved }: { item: ManagedUpload | null; on
       {visibility === 'shared' && <div className="upload-friends" role="group" aria-label="选择共享好友">
         {friends.length ? friends.map(friend => <label className="upload-check" key={friend.id}>
           <input type="checkbox" checked={recipients.includes(friend.id)} onChange={e => setRecipients(current => e.target.checked ? [...current, friend.id] : current.filter(id => id !== friend.id))} />{friend.name}
-        </label>) : <p className="sub sm">{social.state ? '添加好友后即可选择共享对象。' : '正在加载好友…'}</p>}
+        </label>) : <p className="sub sm">{social.state ? '添加好友后即可选择共享对象。' : <Loading inline label="正在加载好友" />}</p>}
       </div>}
       {visibility === 'public' && <p className="sub sm">所有登录用户都能找到这首歌，并看到你的昵称。</p>}
     </fieldset>
@@ -169,7 +170,7 @@ function UploadForm({ item, onClose, onSaved }: { item: ManagedUpload | null; on
     <div className="settings-save row">
       <button type="button" className="btn ghost sm" disabled={busy} onClick={onClose}>取消</button>
       <button className="btn sm" disabled={busy || (!item && !audio) || !fields.name.trim() || (visibility === 'shared' && !recipients.length)}>
-        {busy ? '保存中…' : item ? '保存修改' : '上传歌曲'}
+        {busy ? <Loading inline label="正在保存歌曲" /> : item ? '保存修改' : '上传歌曲'}
       </button>
     </div>
   </form>;

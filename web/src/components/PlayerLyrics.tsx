@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { LyricLine } from '@/lib/types';
 
 export function PlayerLyrics({ lines, active, status, plainText, showTranslation, onSeek, onBackgroundClick }: {
-  lines: LyricLine[]; active: number; status: string; plainText?: string; showTranslation: boolean; onSeek: (seconds: number) => void;
+  lines: LyricLine[]; active: number; status: ReactNode; plainText?: string; showTranslation: boolean; onSeek: (seconds: number) => void;
   onBackgroundClick: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);

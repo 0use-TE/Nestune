@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useEffect, useRef, useState } from 'react';
 import { get } from '@/lib/api';
 import { useApp, useClock } from '@/lib/app';
@@ -110,7 +111,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   let active = -1;
   for (let i = 0; i < lines.length && lines[i].t <= time; i++) active = i;
   const currentLine = lines[active];
-  const lyricStatus = !currentLyrics ? '加载歌词…' : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
+  const lyricStatus = !currentLyrics ? <Loading inline label="正在加载歌词" /> : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) app.setNowOpen(false); };
@@ -128,7 +129,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
     : deviceSong ? '设备本地播放' : s.uploader ? '原始音质' : '在线播放';
   const songDetails = [s.artists.map(a => a.name).join(' / '), s.album.name, s.uploader && `由 ${s.uploader.name} 上传`].filter(Boolean).join(' · ');
   const toggleMobileArt = () => setMobileCover(cover => !cover);
-  const qualityText = <>{audioLabel}{app.loading && ' · 加载中…'}</>;
+  const qualityText = audioLabel;
   const queueButton = (
     <button className={`ib queue-toggle ${queueOpen ? 'act' : ''}`} aria-label="播放列表" aria-expanded={queueOpen}
       aria-controls={queueOpen ? 'player-queue' : undefined} title="播放列表" onClick={onToggleQueue}><Icon n="list" s={22} /></button>
@@ -197,7 +198,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
               </div>
               <div className="ctl">
                 <button className="ib" aria-label="上一首" onClick={app.prev}><Icon n="prev" s={22} /></button>
-                <button className="ib play" aria-label="播放/暂停" onClick={app.toggle}><Icon n={app.playing ? 'pause' : 'play'} /></button>
+                <button className="ib play" aria-busy={app.loading} aria-label="播放/暂停" onClick={app.toggle}>{app.loading ? <Loading inline label="正在缓冲歌曲" /> : <Icon n={app.playing ? 'pause' : 'play'} />}</button>
                 <button className="ib" aria-label="下一首" onClick={app.next}><Icon n="next" s={22} /></button>
                 <button className={`ib mode-control ${app.playbackMode !== 'off' ? 'act' : ''}`} aria-label={`切换播放模式，当前${modeLabel}`} onClick={app.cyclePlaybackMode} title={modeLabel}>
                   <Icon n={modeIcon} />{app.playbackMode === 'one' && <span className="mode-count" aria-hidden="true">1</span>}

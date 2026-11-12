@@ -41,7 +41,7 @@ export default function PlaylistPage() {
       </Hero>
       {meta.description && <p className="sub" style={{ margin: '22px 0 0', maxWidth: 680, whiteSpace: 'pre-line' }}>{meta.description.slice(0, 300)}</p>}
       <div style={{ marginTop: 26 }}><SongList songs={songs} /></div>
-      {songs.length < meta.trackCount && <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={more} onClick={loadMore}>{more ? '加载中…' : '加载更多'}</button></div>}
+      {songs.length < meta.trackCount && <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={more} onClick={loadMore}>{more ? <Loading inline label="加载中" /> : '加载更多'}</button></div>}
     </>
   );
 }

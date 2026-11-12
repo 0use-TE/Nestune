@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { isDeviceSong } from '@/lib/device-music';
@@ -43,7 +44,7 @@ export function ChatSongPicker({ current, busy, onShare, onClose }: {
       </label>
       <div className="chat-song-results">
         {!keyword && shareable && <p className="sub sm">当前歌曲</p>}
-        {keyword && !songs.length && <p role="status" className="sub">{matches?.error || (matches ? '没有找到歌曲' : '搜索中…')}</p>}
+        {keyword && !songs.length && <p role="status" className="sub">{matches?.error || (matches ? '没有找到歌曲' : <Loading inline label="正在搜索歌曲" />)}</p>}
         {songs.map(song => (
           <button type="button" className="chat-song-row" key={song.id} aria-label={`分享 ${song.name}`} disabled={busy} onClick={() => onShare(song.id)}>
             <Cover src={song.cover} seed={song.id} />

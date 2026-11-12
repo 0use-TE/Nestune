@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -229,7 +230,7 @@ function SaveDialog({ song }: { song: Song }) {
         {status === 'insecure' && <div className="note">请通过 HTTPS 或 localhost 打开 Nestune，以授权设备的音乐文件夹。</div>}
         {status === 'unsupported' && <div className="note">当前浏览器无法访问系统音乐文件夹，请用支持文件夹访问的桌面浏览器打开。</div>}
         {status === 'authorize' && <p className="sub sm" style={{ marginBottom: 12 }}>请在浏览器弹窗里授权系统的「音乐」文件夹。</p>}
-        {!plan && <div className="center sub" style={{ padding: '30px 0' }}>正在查询可用音质…</div>}
+        {!plan && <Loading label="正在查询可用音质" />}
         {plan?.canDownload === false && <div className="note">此账号没有下载权限。</div>}
         {plan && !plan.playable && <div className="note">{unplayableText(plan.reason)}：{plan.reason}</div>}
         {plan?.playable && plan.canDownload !== false && (
@@ -256,7 +257,7 @@ function SaveDialog({ song }: { song: Song }) {
         {error && <p className="err" role="alert">{error}</p>}
         <div className="row" style={{ justifyContent: 'flex-end', marginTop: 20 }}>
           <button className="btn ghost sm" disabled={busy} onClick={app.closeSave}>取消</button>
-          <button className="btn sm" disabled={busy || blocked || !pick || !plan?.playable || plan.canDownload === false} onClick={save}>{busy ? '下载中…' : '下载'}</button>
+          <button className="btn sm" disabled={busy || blocked || !pick || !plan?.playable || plan.canDownload === false} onClick={save}>{busy ? <Loading inline label="正在下载" /> : '下载'}</button>
         </div>
       </div>
     </div>

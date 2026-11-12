@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from '@/components/Loading';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Avatar } from '@/components/Cover';
@@ -66,7 +67,7 @@ export default function SocialPage() {
           <h2>所有用户</h2>
           <label className="search"><Icon n="search" s={16} /><input aria-label="搜索用户" placeholder="昵称或用户名" value={query} onChange={e => setQuery(e.target.value)} /></label>
         </div>
-        {!state && !error && <div className="center sub">加载中…</div>}
+        {!state && !error && <Loading />}
         {state && !shown.length && <div className="center sub">没有找到用户</div>}
         {shown.map(person => (
           <div className="social-person" key={person.id}>

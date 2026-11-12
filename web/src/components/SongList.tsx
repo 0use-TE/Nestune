@@ -6,6 +6,8 @@ import type { Song } from '@/lib/types';
 import { mmss, unplayableText } from '@/lib/util';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
+import { Loading } from './Loading';
+export { Loading } from './Loading';
 
 export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?: boolean; onRemove?: (s: Song) => void }) {
   const app = useApp();
@@ -18,11 +20,10 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
         const device = isDeviceSong(s.id);
         return (
           <div key={`${s.id}-${i}`} className={`tr ${cur ? 'cur' : ''} ${bad ? 'dim' : ''}`} onClick={() => (bad ? app.toast(s.access?.reason || '这首歌暂时无法播放') : app.play(songs, i))}>
-            <div className="no">{cur && !app.loading ? <span className={`eq ${app.playing ? '' : 'off'}`}><i /><i /><i /></span> : i + 1}</div>
+            <div className="no">{cur ? app.loading ? <Loading inline label="正在缓冲歌曲" /> : <span className={`eq ${app.playing ? '' : 'off'}`}><i /><i /><i /></span> : i + 1}</div>
             <Cover src={s.cover} seed={s.id} />
             <div className="t1">
               <div className="nm t1">{device ? <button aria-label={`播放 ${s.name}`}>{s.name}</button> : s.name}
-                {cur && app.loading && <span className="sub sm"> · 加载中…</span>}
                 {bad && <span className="qtag bad">{unplayableText(s.access?.reason)}</span>}
               </div>
               <div className="sub sm t1">
@@ -47,7 +48,4 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
 
 export function Empty({ text }: { text: string }) {
   return <div className="center sub">{text}</div>;
-}
-export function Loading() {
-  return <div className="center sub">加载中…</div>;
 }

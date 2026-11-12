@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from '@/components/Loading';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { del, get, patch, post } from '@/lib/api';
 import { Icon } from '@/components/Icon';
@@ -22,7 +23,7 @@ export default function AdminPage() {
 
   return (
     <>
-      {state === 'loading' && <div className="center sub" style={{ paddingTop: '30vh' }}>加载中…</div>}
+      {state === 'loading' && <div style={{ paddingTop: '25vh' }}><Loading /></div>}
       {state === 'unconfigured' && (
         <div className="adm-login"><div className="lbox">
           <h2>管理后台尚未启用</h2>
@@ -52,7 +53,7 @@ function KeyLogin({ onDone }: { onDone: () => void }) {
         <div className="sub sm" style={{ margin: '6px 0 24px', letterSpacing: '.06em', fontWeight: 600 }}>管理后台</div>
         <div className="field"><label className="sm sub">管理密钥</label><input type="password" value={key} onChange={e => setKey(e.target.value)} autoFocus autoComplete="off" required placeholder="服务端环境变量 ADMIN_KEY" /></div>
         {err && <div className="err">{err}</div>}
-        <button className="btn" style={{ width: '100%', justifyContent: 'center', padding: 12 }} disabled={busy || !key}>{busy ? '验证中…' : '进入后台'}</button>
+        <button className="btn" style={{ width: '100%', justifyContent: 'center', padding: 12 }} disabled={busy || !key}>{busy ? <Loading inline label="正在验证" /> : '进入后台'}</button>
         <p className="muted sm" style={{ marginTop: 16 }}>后台没有账号体系，只能使用服务器上配置的管理密钥进入。</p>
       </form>
     </div>
@@ -92,7 +93,7 @@ const uptime = (s: number) => (s >= 86400 ? `${Math.floor(s / 86400)} 天` : s >
 function Overview({ guard, go }: { guard: P['guard']; go: (t: Tab) => void }) {
   const [d, setD] = useState<any>(null);
   useEffect(() => { get('/api/admin/overview').then(setD).catch(guard); }, [guard]);
-  if (!d) return <div className="center sub">加载中…</div>;
+  if (!d) return <Loading />;
   const todo: [string, Tab][] = [];
   if (d.users.pending) todo.push([`${d.users.pending} 个用户尚未完成首次登录`, 'users']);
   if (!d.source.loggedIn) todo.push([d.source.expired ? '音源登录已失效，需要重新扫码' : '音源账号尚未登录', 'source']);
@@ -152,7 +153,7 @@ function Users({ guard, toast }: P) {
     <>
       <div className="head"><div><h1>用户</h1><div className="sub">账号只能由管理员创建。新用户用一次性激活码首次登录，并自己设置密码，你不会知道对方的密码。</div></div>
         <button className="btn" onClick={() => { setErr(''); setForm({ username: '', displayName: '', maxQuality: 'exhigh' }); }}><Icon n="plus" s={16} />创建用户</button></div>
-      {users === null ? <div className="center sub">加载中…</div> : (
+      {users === null ? <Loading /> : (
         <div className="box" style={{ overflowX: 'auto' }}>
           <table>
             <thead><tr><th>用户</th><th>状态</th><th>最高音质</th><th className="hm">收藏 / 播放</th><th className="hm">上次登录</th><th /></tr></thead>
@@ -241,7 +242,7 @@ function Source({ guard, toast }: P) {
         {qr ? <div className="qr"><img src={qr.img} alt="登录二维码" /></div> : null}
         <div style={{ flex: 1, minWidth: 240 }}>
           <h2>当前状态</h2>
-          <p style={{ margin: '8px 0 16px' }}>{!st ? '读取中…' : st.loggedIn ? <Pill kind="ok">已登录</Pill> : <Pill kind="bad">{st.expired ? '登录已失效' : '未登录'}</Pill>}
+          <p style={{ margin: '8px 0 16px' }}>{!st ? <Loading inline label="正在读取音源账号" /> : st.loggedIn ? <Pill kind="ok">已登录</Pill> : <Pill kind="bad">{st.expired ? '登录已失效' : '未登录'}</Pill>}
             {st?.savedAt && <span className="muted sm" style={{ marginLeft: 10 }}>登录于 {fmtDateTime(Date.parse(st.savedAt))}</span>}</p>
           {qr && <p className="sub" style={{ marginBottom: 14 }}>{qr.msg}</p>}
           <div className="row"><button className="btn" onClick={start}>{qr ? '重新生成二维码' : st?.loggedIn ? '重新扫码登录' : '扫码登录'}</button>{st?.loggedIn && <button className="btn ghost danger" style={{ color: 'var(--danger)' }} onClick={logout}>退出登录</button>}</div>
@@ -287,7 +288,7 @@ function Storage({ guard, toast }: P) {
                 <td style={{ textAlign: 'right' }}><button className="btn ghost sm" style={{ color: 'var(--danger)' }} onClick={() => remove(s.id, s.name)}>删除</button></td></tr>
             ))}
             {lib && !lib.length && <tr><td colSpan={6} className="center sub">本地库还是空的。</td></tr>}
-            {!lib && <tr><td colSpan={6} className="center sub">加载中…</td></tr>}
+            {!lib && <tr><td colSpan={6} className="center"><Loading inline /></td></tr>}
           </tbody>
         </table>
       </div>
@@ -327,7 +328,7 @@ function Jobs({ guard, toast }: P) {
               <tr key={j.id}><td>{j.input}</td><td className="sub">{j.format === 'mp3' ? `MP3 ${j.bitrate || ''}` : '原格式'}</td><td><Pill kind={kind(j.status)}>{label[j.status] || j.status}</Pill>{j.error && <div className="muted sm">{String(j.error).slice(0, 80)}</div>}</td><td className="hm sub">{j.stage || '—'}</td></tr>
             ))}
             {d && !(d.jobs || []).length && <tr><td colSpan={4} className="center sub">{d.ok ? '还没有任务。' : '无法获取任务列表。'}</td></tr>}
-            {!d && <tr><td colSpan={4} className="center sub">加载中…</td></tr>}
+            {!d && <tr><td colSpan={4} className="center"><Loading inline /></td></tr>}
           </tbody>
         </table>
       </div>
@@ -344,7 +345,7 @@ function System({ guard, toast }: P) {
     e.preventDefault();
     try { setS(await patch('/api/admin/settings', s)); toast('设置已保存'); } catch (e) { guard(e); }
   }
-  if (!s) return <div className="center sub">加载中…</div>;
+  if (!s) return <Loading />;
   const f = (k: string, label: string, hint: string, unit: string) => (
     <div className="set"><div><b>{label}</b><div className="sub sm">{hint}</div></div>
       <div className="row" style={{ flexWrap: 'nowrap' }}><input className="sel" type="number" min={1} value={s[k]} onChange={e => setS({ ...s, [k]: Number(e.target.value) })} style={{ width: 90, textAlign: 'right' }} /><span className="sub sm">{unit}</span></div></div>

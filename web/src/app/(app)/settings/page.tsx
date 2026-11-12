@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from '@/components/Loading';
 import { useEffect, useRef, useState } from 'react';
 import { api, del, get, patch, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
@@ -95,7 +96,7 @@ export default function SettingsPage() {
             </div>
             <label className="field sm sub">个人简介<textarea value={bio} onChange={e => setBio(e.target.value)} maxLength={140} rows={3} placeholder="介绍一下自己，最多 140 字" /></label>
             {err && <div className="err" role="alert">{err}</div>}
-            <div className="settings-save"><button className="btn sm" disabled={busy || !dirty}>{busy ? '保存中…' : '保存资料'}</button></div>
+            <div className="settings-save"><button className="btn sm" disabled={busy || !dirty}>{busy ? <Loading inline label="保存中" /> : '保存资料'}</button></div>
           </form>
         </section>
       )}

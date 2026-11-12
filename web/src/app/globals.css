@@ -33,6 +33,26 @@ h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
 .t1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .center{text-align:center;padding:60px 0}
+.loading-state{display:grid;place-items:center;color:var(--sub)}
+.loading-wave{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;vertical-align:middle;flex:none}
+.loading-wave>span{display:flex;align-items:center;gap:2px;height:100%}
+.loading-wave i{display:block;width:3px;height:100%;border-radius:99px;background:currentColor;transform:scaleY(.35)}
+.loading-wave i:nth-child(2){transform:scaleY(.7)}
+.loading-wave i:nth-child(3){transform:scaleY(1)}
+.loading-wave i:nth-child(4){transform:scaleY(.5)}
+.loading-state>.loading-wave{width:32px;height:26px}
+.loading-state .loading-wave>span{gap:4px}
+.loading-state .loading-wave i{width:4px}
+.ln-status>.loading-wave{width:32px;height:26px}
+.ib.play>.loading-wave{width:22px;height:22px}
+.btn:has(>.loading-wave){justify-content:center;min-width:76px}
+@media(prefers-reduced-motion:no-preference){
+  .loading-wave i{animation:loading-wave .8s ease-in-out infinite alternate}
+  .loading-wave i:nth-child(2){animation-delay:-.2s}
+  .loading-wave i:nth-child(3){animation-delay:-.4s}
+  .loading-wave i:nth-child(4){animation-delay:-.6s}
+  @keyframes loading-wave{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
+}
 
 #app{display:grid;grid-template-columns:var(--side) 1fr;height:100%}
 aside{padding:30px 16px 24px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}

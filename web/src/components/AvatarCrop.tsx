@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent } from 'react';
 
@@ -89,7 +90,7 @@ export function AvatarCrop({ file, onCancel, onSave }: { file: File; onCancel: (
           setOffset(clamp(offset, width * next / zoom, height * next / zoom)); setZoom(next);
         }} /></label>
         {error && <p className="err" role="alert">{error}</p>}
-        <div className="row avatar-crop-actions"><button className="btn ghost sm" disabled={busy} onClick={onCancel}>取消</button><button className="btn sm" disabled={busy || !dimensions} onClick={save}>{busy ? '保存中…' : '使用此头像'}</button></div>
+        <div className="row avatar-crop-actions"><button className="btn ghost sm" disabled={busy} onClick={onCancel}>取消</button><button className="btn sm" disabled={busy || !dimensions} onClick={save}>{busy ? <Loading inline label="保存中" /> : '使用此头像'}</button></div>
       </section>
     </div>
   );

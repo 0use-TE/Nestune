@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { get, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
@@ -174,7 +175,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
         followBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 70;
         markVisible();
       }}>
-        {!ready && !error && <div className="center sub">加载中…</div>}
+        {!ready && !error && <Loading />}
         {ready && !messages.length && <div className="center sub">暂无消息</div>}
         {hasEarlier && messages.length >= 50 && <button className="link social-earlier" disabled={busy} onClick={earlier}>更早的消息</button>}
         {messages.map(message => (
@@ -201,7 +202,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
                 disabled={loadingSong !== null} onClick={() => playSong(message.song!.id)}>
                 <Cover src={message.song.cover} seed={message.song.id} />
                 <span className="chat-song-text"><b className="t1">{message.song.name}</b><small className="t1">{message.song.artist}</small></span>
-                <Icon n="play" s={16} />
+                {loadingSong === message.song.id ? <Loading inline label="正在加载歌曲" /> : <Icon n="play" s={16} />}
               </button>
             ) : <p className={`social-message ${message.senderId === userId ? 'mine' : ''}`}>{message.text}</p>}
             <small className="message-meta" title={new Date(message.sentAt).toLocaleString()}>{messageAge(message.sentAt)}{message.senderId === userId && ` · ${message.id <= peerReadThrough ? '已读' : '未读'}`}</small>

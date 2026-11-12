@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 
@@ -139,7 +140,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     </section>}
     {waiting && <div className="pwa-update" role="status">
       <span>新版本已准备好，更新会重新打开页面。</span>
-      <button type="button" className="btn sm" disabled={updating} onClick={update}>{updating ? '更新中…' : '立即更新'}</button>
+      <button type="button" className="btn sm" disabled={updating} onClick={update}>{updating ? <Loading inline label="更新中" /> : '立即更新'}</button>
       {!updating && <button type="button" className="link" onClick={() => setWaiting(null)}>稍后</button>}
     </div>}
     {error && <div className="pwa-update" role="alert"><span>{error}</span><button type="button" className="link" onClick={() => setError('')}>关闭</button></div>}

@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from '@/components/Loading';
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -9,7 +10,7 @@ import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
 
 export default function ChatPage() {
-  return <Suspense fallback={<div className="center sub">加载聊天…</div>}><Chats /></Suspense>;
+  return <Suspense fallback={<Loading />}><Chats /></Suspense>;
 }
 
 function Chats() {
@@ -49,7 +50,7 @@ function ChatView({ userId, initialPeer, restore }: { userId: number; initialPee
       {error && <p className="note" role="status">{error}</p>}
       <div className={`chat-layout ${peer ? 'has-thread' : ''}`}>
         <section className="chat-list" aria-label="聊天列表">
-          {!state && !error && <div className="center sub">加载聊天…</div>}
+          {!state && !error && <Loading />}
           {state && !friends.length && <div className="center sub">在「一起听」添加好友后即可聊天</div>}
           {friends.map(person => {
             const summary = summaries.get(person.id);

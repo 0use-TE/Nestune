@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import type { PointerEvent } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
 import { Icon } from './Icon';
 
 type Position = { x: number; y: number };
@@ -14,7 +14,7 @@ function keepInViewport(position: Position, card: HTMLElement): Position {
 }
 
 export function FloatingLyrics({ visible, text, translation, onClose }: {
-  visible: boolean; text: string; translation?: string; onClose: () => void;
+  visible: boolean; text: ReactNode; translation?: string; onClose: () => void;
 }) {
   const card = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number; offset: Position } | null>(null);

@@ -1,4 +1,5 @@
 'use client';
+import { Loading } from './Loading';
 import { useState } from 'react';
 import { post } from '@/lib/api';
 import { useApp } from '@/lib/app';
@@ -51,7 +52,7 @@ export function Login() {
               <div className="field"><label className="sm sub">密码</label><input name="p" type="password" required autoComplete="current-password" /></div>
             )}
             {err && <div className="err">{err}</div>}
-            <button className="btn" type="submit" disabled={busy}>{busy ? '请稍候…' : act ? '设置密码并进入' : '登录'}</button>
+            <button className="btn" type="submit" disabled={busy}>{busy ? <Loading inline label="请稍候" /> : act ? '设置密码并进入' : '登录'}</button>
           </form>
           <div className="login-alternative">
             <p className="sub sm">{act ? '已经激活过账号？' : '首次登录？使用管理员发给你的激活码。'}</p>

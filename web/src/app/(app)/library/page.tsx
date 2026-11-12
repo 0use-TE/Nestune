@@ -92,7 +92,7 @@ function UploadLibrary() {
     {!songs && !error && <Loading />}
     {songs?.length === 0 && <Empty text="暂无可播放的上传歌曲。在个人设置的「我的上传」添加歌曲。" />}
     {songs && <SongList songs={songs} />}
-    {songs && songs.length < total && <div className="center"><button className="btn ghost sm" onClick={loadMore} disabled={busy}>{busy ? '加载中…' : '加载更多'}</button></div>}
+    {songs && songs.length < total && <div className="center"><button className="btn ghost sm" onClick={loadMore} disabled={busy}>{busy ? <Loading inline label="加载中" /> : '加载更多'}</button></div>}
   </>;
 }
 
@@ -126,7 +126,7 @@ function DeviceLibrary() {
         ? '无法读取音乐文件夹，请检查文件夹和浏览器权限。'
         : '首次使用时，请在浏览器弹窗中确认系统的「音乐」文件夹。'}</span>
       <button className="btn ghost sm" disabled={busy} onClick={update}>
-        {busy ? '读取中…' : status === 'error' ? '重试' : '授权音乐文件夹'}
+        {busy ? <Loading inline label="正在读取音乐" /> : status === 'error' ? '重试' : '授权音乐文件夹'}
       </button>
     </div>
     {error && <p className="err" role="alert">{error}</p>}
