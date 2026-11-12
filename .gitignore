@@ -12,6 +12,8 @@ __pycache__/
 releases/
 clients/**/bin/
 clients/**/obj/
+clients/desktop/src-tauri/target/
+clients/desktop/src-tauri/gen/
 clients/android/.gradle/
 clients/android/**/build/
 clients/android/local.properties
