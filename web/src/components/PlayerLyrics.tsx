@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LyricLine } from '@/lib/types';
 
-export function PlayerLyrics({ lines, active, status, showTranslation, onSeek, onBackgroundClick }: {
-  lines: LyricLine[]; active: number; status: string; showTranslation: boolean; onSeek: (seconds: number) => void;
+export function PlayerLyrics({ lines, active, status, plainText, showTranslation, onSeek, onBackgroundClick }: {
+  lines: LyricLine[]; active: number; status: string; plainText?: string; showTranslation: boolean; onSeek: (seconds: number) => void;
   onBackgroundClick: () => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
@@ -51,7 +51,7 @@ export function PlayerLyrics({ lines, active, status, showTranslation, onSeek, o
         }}
         onPointerDown={event => {
           suppressClick.current = false;
-          if (!lines.length || event.pointerType === 'touch' || event.button !== 0 || !event.isPrimary) return;
+          if ((!lines.length && !plainText) || event.pointerType === 'touch' || event.button !== 0 || !event.isPrimary) return;
           drag.current = { id: event.pointerId, y: event.clientY, top: event.currentTarget.scrollTop, moved: false };
         }}
         onPointerMove={event => {
@@ -78,9 +78,10 @@ export function PlayerLyrics({ lines, active, status, showTranslation, onSeek, o
           event.stopPropagation();
         }}
         onClick={event => {
-          if (event.target instanceof Element && !event.target.closest('.ln')) onBackgroundClick();
+          if (event.target instanceof Element && !event.target.closest('.ln,.lyric-plain')) onBackgroundClick();
         }}>
         {status && <div className="ln-status">{status}</div>}
+        {plainText && <div className="lyric-plain" tabIndex={0}>{plainText}</div>}
         {hasIntro && <div className="lyric-intro" aria-hidden={active >= 0} data-lyric-focus={active < 0 ? '' : undefined}>前奏</div>}
         {lines.map((line, index) => (
           <button type="button" key={index} className={`ln ${Math.abs(index - active) === 1 ? 'near' : ''}`}

@@ -144,7 +144,7 @@ function SongMenu({ onNewPlaylist }: { onNewPlaylist: (s: Song) => void }) {
         <button onClick={run(() => onNewPlaylist(s))}><Icon n="plus" s={18} />新建歌单…</button>
         <hr />
         {s.album.id && <button onClick={run(() => router.push(`/album/${s.album.id}`))}><Icon n="disk" s={18} />查看专辑</button>}
-        {s.artists[0] && <button onClick={run(() => router.push(`/artist/${s.artists[0].id}`))}><Icon n="user" s={18} />查看歌手</button>}
+        {s.artists[0]?.id && <button onClick={run(() => router.push(`/artist/${s.artists[0].id}`))}><Icon n="user" s={18} />查看歌手</button>}
       </>}
     </div>
   );

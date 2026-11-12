@@ -1,9 +1,8 @@
-import { numericId } from '@/server/http';
+import { catalogId, catalogSong } from '@/server/catalog';
 import { userRoute } from '@/server/guard';
-import { songMeta } from '@/server/netease';
 import { inLibrary } from '@/server/library';
 
-export const GET = userRoute(async (_req, ctx) => {
-  const id = numericId((await ctx.params).id);
-  return { song: await songMeta(id), local: inLibrary(id) };
+export const GET = userRoute(async (_req, ctx, user) => {
+  const id = catalogId((await ctx.params).id);
+  return { song: await catalogSong(user.id, id), local: inLibrary(id) };
 });

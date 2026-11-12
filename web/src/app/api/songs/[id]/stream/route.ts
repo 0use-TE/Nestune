@@ -1,12 +1,15 @@
+import { isUploadSong } from '@/lib/upload-types';
+import { catalogId } from '@/server/catalog';
 import { QUALITIES } from '@/server/config';
 import { settings } from '@/server/db';
-import { fail, numericId } from '@/server/http';
+import { fail } from '@/server/http';
 import { userRoute } from '@/server/guard';
 import { inLibrary } from '@/server/library';
 import { ensureAudio, serveFile } from '@/server/media';
 import { songMeta } from '@/server/netease';
 import { clampLevel } from '@/server/quality';
 import { withSlot } from '@/server/ratelimit';
+import { requireUpload, uploadAudio } from '@/server/uploads';
 import type { Quality } from '@/server/config';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +20,11 @@ export const dynamic = 'force-dynamic';
  * (never above the user's limit).
  */
 export const GET = userRoute(async (req, ctx, u) => {
-  const id = numericId((await ctx.params).id);
+  const id = catalogId((await ctx.params).id);
+  if (isUploadSong(id)) {
+    const audio = uploadAudio(requireUpload(u.id, id));
+    return serveFile(req, audio.path, audio.mime, { 'Cache-Control': 'no-store', 'X-Audio-Source': 'upload' });
+  }
   const asked = req.nextUrl.searchParams.get('level');
   if (asked && !QUALITIES.includes(asked as never)) throw fail(400, '不支持的音质参数');
   if (!inLibrary(id)) {

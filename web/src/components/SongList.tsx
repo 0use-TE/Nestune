@@ -27,8 +27,9 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
               </div>
               <div className="sub sm t1">
                 {s.artists.map((a, k) => (
-                  <span key={a.id}>{k > 0 && ' / '}<Link href={`/artist/${a.id}`} onClick={e => e.stopPropagation()} className="link" style={{ fontSize: 12 }}>{a.name}</Link></span>
+                  <span key={a.id || a.name}>{k > 0 && ' / '}{a.id ? <Link href={`/artist/${a.id}`} onClick={e => e.stopPropagation()} className="link" style={{ fontSize: 12 }}>{a.name}</Link> : a.name}</span>
                 ))}
+                {s.uploader && <span className="song-uploader">{s.artists.length > 0 && ' · '}由 {s.uploader.name} 上传</span>}
               </div>
             </div>
             <div className="sub al t1">{s.album.id ? <Link href={`/album/${s.album.id}`} onClick={e => e.stopPropagation()}>{s.album.name}</Link> : s.album.name}</div>

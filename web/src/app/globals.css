@@ -151,6 +151,24 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .library-heading{position:sticky;top:0;z-index:4;padding-block:8px;margin-bottom:14px;background:var(--bg)}
 .library-heading .tabs{margin:16px 0 0;overflow:visible}
 .device-library-note{justify-content:space-between}
+.uploads-settings{display:grid;gap:16px}
+.uploads-heading,.uploads-row,.uploads-song,.uploads-actions{display:flex;align-items:center;gap:10px}
+.uploads-heading{justify-content:space-between;flex-wrap:wrap}
+.uploads-list{padding-inline:12px}
+.uploads-row{padding:8px 0}
+.uploads-row+.uploads-row{border-top:1px solid var(--line)}
+.uploads-song{flex:1;min-width:0;text-align:left;border-radius:8px}
+.uploads-song .cv{width:38px;border-radius:7px;flex:none}
+.uploads-song-text{display:grid;min-width:0}
+.uploads-visibility{color:var(--sub);font-size:12px;flex:none}
+.uploads-actions{gap:4px;flex:none}
+.uploads-actions .ib{width:30px;height:30px;color:var(--sub)}
+.upload-form h2{margin-bottom:14px}
+.upload-form fieldset{border:0;min-width:0}
+.upload-form input[type=file]{max-width:100%;padding:8px}
+.upload-visibility-options,.upload-friends{display:flex;flex-wrap:wrap;gap:10px;margin-block:12px}
+.upload-check{display:inline-flex;align-items:center;gap:6px}
+.upload-lyrics-file{font-size:12px}
 .chips{display:flex;gap:8px;margin:20px 0;flex-wrap:wrap}
 .chip{padding:8px 18px;border-radius:999px;background:var(--soft);color:var(--sub);font-weight:500}
 .chip:hover{color:var(--text)}.chip.on{background:var(--accent);color:var(--on-accent)}
@@ -234,6 +252,8 @@ main{overflow-y:auto;padding:38px 48px 150px}
 #lyr:has(.ln),#lyr .ln{cursor:grab}
 #lyr[data-dragging],#lyr[data-dragging] .ln{cursor:grabbing}
 #lyr:has(.ln-status){display:grid;align-items:center;padding-block:0}
+#lyr:has(.lyric-plain){padding-block:42px}
+.lyric-plain{width:calc(100% - 48px);margin-inline:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:clamp(17px,2vw,23px);line-height:1.9}
 #lyr::-webkit-scrollbar{display:none}
 @media(prefers-reduced-motion:no-preference){#lyr{scroll-behavior:smooth}.ln{transition:opacity .22s,transform .22s}.ln[aria-current=true]{transition-property:transform}}
 .ln{display:block;width:100%;padding:10px 6% 10px 8px;text-align:left;font-size:clamp(21px,2vw,30px);font-weight:500;letter-spacing:-.018em;line-height:1.42;overflow-wrap:anywhere;opacity:.44;transform-origin:left center}
@@ -485,6 +505,7 @@ main{overflow-y:auto;padding:38px 48px 150px}
   #np[data-mobile-cover] .lyric-view{display:none}
   #np .lyric-view{z-index:1}
   #np .ln,#np .lyric-intro{text-align:center}
+  #np .lyric-plain{text-align:center}
   #np .ln{width:fit-content;max-width:calc(100% - 48px);margin-inline:auto;font-size:clamp(17px,5vw,23px);padding:10px 4px}
   #np .ln[aria-current=true]{transform:none}
   #np .np-info{grid-area:info;position:relative;z-index:2;width:min(100%,420px)}

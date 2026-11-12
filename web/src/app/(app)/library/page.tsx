@@ -7,7 +7,7 @@ import { useApp } from '@/lib/app';
 import type { Song } from '@/lib/types';
 import { Empty, Loading, SongList } from '@/components/SongList';
 
-const TABS = [['favorites', '收藏'], ['history', '历史'], ['local', '本地']] as const;
+const TABS = [['favorites', '收藏'], ['history', '历史'], ['local', '本地'], ['uploads', '上传歌曲']] as const;
 
 export default function LibraryPage() {
   return <Suspense fallback={<Loading />}><Library /></Suspense>;
@@ -24,7 +24,7 @@ function Library() {
     let live = true;
     setResult(null);
     document.getElementById('main')?.scrollTo({ top: 0 });
-    if (tab === 'local') return;
+    if (tab === 'local' || tab === 'uploads') return;
     const url = tab === 'favorites' ? '/api/me/favorites' : '/api/me/history?limit=100';
     get<{ songs: Song[] }>(url).then(r => {
       if (live) setResult({ tab, songs: r.songs });
@@ -53,11 +53,43 @@ function Library() {
         ))}</nav>
       </div>
       {tab === 'history' && shown && shown.length > 0 && <div style={{ textAlign: 'right', marginBottom: 6 }}><button className="link" onClick={clearHistory}>清空历史</button></div>}
-      {tab === 'local' ? <DeviceLibrary /> : shown === null ? <Loading /> : shown.length === 0
+      {tab === 'local' ? <DeviceLibrary /> : tab === 'uploads' ? <UploadLibrary /> : shown === null ? <Loading /> : shown.length === 0
         ? <Empty text={tab === 'favorites' ? '还没有收藏的歌曲，点歌曲旁边的爱心即可收藏。' : '还没有播放记录。'} />
         : <SongList songs={shown} />}
     </>
   );
+}
+
+function UploadLibrary() {
+  const [songs, setSongs] = useState<Song[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let live = true;
+    get<{ items: Song[]; total: number }>('/api/uploads').then(data => {
+      if (live) { setSongs(data.items); setTotal(data.total); }
+    }).catch(error => { if (live) setError(error.message); });
+    return () => { live = false; };
+  }, []);
+  async function loadMore() {
+    if (!songs || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      const data = await get<{ items: Song[]; total: number }>(`/api/uploads?offset=${songs.length}`);
+      setSongs([...songs, ...data.items]);
+      setTotal(data.total);
+    } catch (error) { setError(error instanceof Error ? error.message : '无法加载歌曲'); }
+    finally { setBusy(false); }
+  }
+  return <>
+    {error && <p className="err" role="alert">{error}</p>}
+    {!songs && !error && <Loading />}
+    {songs?.length === 0 && <Empty text="暂无可播放的上传歌曲。在个人设置的「我的上传」添加歌曲。" />}
+    {songs && <SongList songs={songs} />}
+    {songs && songs.length < total && <div className="center"><button className="btn ghost sm" onClick={loadMore} disabled={busy}>{busy ? '加载中…' : '加载更多'}</button></div>}
+  </>;
 }
 
 function DeviceLibrary() {

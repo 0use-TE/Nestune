@@ -30,7 +30,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const s = app.current;
   const songId = s?.id;
   const deviceSong = !!songId && isDeviceSong(songId);
-  const [lyrics, setLyrics] = useState<{ id: string; lines: LyricLine[]; credits: string[] } | null>(null);
+  const [lyrics, setLyrics] = useState<{ id: string; lines: LyricLine[]; credits: string[]; plainText?: string } | null>(null);
   const [inviting, setInviting] = useState(false);
   const [mobileCover, setMobileCover] = useState(true);
   const [keepPlayerContents, setKeepPlayerContents] = useState(false);
@@ -57,13 +57,13 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   useEffect(() => {
     if (!songId || deviceSong || !needsLyrics) return;
     let live = true;
-    get<{ lines: LyricLine[] }>(`/api/songs/${songId}/lyrics`).then(({ lines }) => {
+    get<{ lines: LyricLine[]; credits?: string[]; plainText?: string }>(`/api/songs/${songId}/lyrics`).then(({ lines, credits = [], plainText }) => {
       if (!live) return;
       let first = 0;
       let end = lines.length;
       while (first < end && CREDIT.test(lines[first].text)) first++;
       while (end > first && CREDIT.test(lines[end - 1].text)) end--;
-      setLyrics({ id: songId, lines: lines.slice(first, end), credits: [...lines.slice(0, first), ...lines.slice(end)].map(line => line.text) });
+      setLyrics({ id: songId, lines: lines.slice(first, end), plainText, credits: [...credits, ...[...lines.slice(0, first), ...lines.slice(end)].map(line => line.text)] });
     }).catch(() => { if (live) setLyrics({ id: songId, lines: [], credits: [] }); });
     return () => { live = false; };
   }, [songId, deviceSong, needsLyrics]);
@@ -73,7 +73,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   let active = -1;
   for (let i = 0; i < lines.length && lines[i].t <= time; i++) active = i;
   const currentLine = lines[active];
-  const lyricStatus = deviceSong ? '暂无歌词' : !currentLyrics ? '加载歌词…' : !lines.length ? '暂无歌词' : '';
+  const lyricStatus = deviceSong ? '暂无歌词' : !currentLyrics ? '加载歌词…' : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) app.setNowOpen(false); };
@@ -88,7 +88,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const sourceLabel = source === 'cache' ? '' : source === 'library' ? '服务器音乐库' : '在线';
   const audioLabel = quality
     ? [`${QUALITY_LABEL[quality] || quality}音质`, sourceLabel].filter(Boolean).join(' · ')
-    : deviceSong ? '设备本地播放' : '在线播放';
+    : deviceSong ? '设备本地播放' : s.uploader ? '原始音质' : '在线播放';
+  const songDetails = [s.artists.map(a => a.name).join(' / '), s.album.name, s.uploader && `由 ${s.uploader.name} 上传`].filter(Boolean).join(' · ');
   const toggleMobileArt = () => setMobileCover(cover => !cover);
   const qualityText = <>{audioLabel}{app.loading && ' · 加载中…'}</>;
   const queueButton = (
@@ -111,7 +112,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
             <div className="np-info">
               <h1>{s.name}</h1>
               <div className="np-meta sub">
-                <span>{s.artists.map(a => a.name).join(' / ')}{s.album.name ? ` · ${s.album.name}` : ''}</span>
+                <span>{songDetails}</span>
                 {!!currentLyrics?.credits.length && (
                   <details className="song-credits" key={songId}>
                     <summary className="ib" aria-label="制作信息" title="制作信息"><Icon n="info" s={15} /></summary>
@@ -150,7 +151,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           </div>
         </div>
         <div className="np-stage">
-          {showPlayerContents && <PlayerLyrics key={songId} lines={lines} active={active} status={lyricStatus} showTranslation={app.showTr} onSeek={app.seek}
+          {showPlayerContents && <PlayerLyrics key={songId} lines={lines} active={active} status={lyricStatus} plainText={currentLyrics?.plainText} showTranslation={app.showTr} onSeek={app.seek}
             onBackgroundClick={() => { if (window.matchMedia('(max-width: 860px)').matches) toggleMobileArt(); }} />}
           {showPlayerContents && activeRoom && (
             <div className="together-chat-dock">
@@ -159,7 +160,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           )}
         </div>
       </div>
-      <FloatingLyrics visible={lyricsPinned && !app.nowOpen} text={currentLine?.text || lyricStatus || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
+      <FloatingLyrics visible={lyricsPinned && !app.nowOpen} text={currentLine?.text || lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
     </>
   );
 }

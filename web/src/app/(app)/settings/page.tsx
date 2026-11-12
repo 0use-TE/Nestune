@@ -7,8 +7,9 @@ import { QUALITY_LABEL, fmtDate, fmtDateTime } from '@/lib/util';
 import { Avatar } from '@/components/Cover';
 import { Icon } from '@/components/Icon';
 import { AvatarCrop } from '@/components/AvatarCrop';
+import { ManageUploads } from '@/components/ManageUploads';
 
-const SECTIONS = ['资料', '偏好', '账号与安全'] as const;
+const SECTIONS = ['资料', '偏好', '账号与安全', '我的上传'] as const;
 
 export default function SettingsPage() {
   const app = useApp();
@@ -66,6 +67,8 @@ export default function SettingsPage() {
           <button key={label} className={`tab ${section === label ? 'on' : ''}`} aria-pressed={section === label} onClick={() => setSection(label)}>{label}</button>
         ))}
       </div>
+
+      {section === '我的上传' && <ManageUploads />}
 
       {section === '资料' && (
         <section className="panel pad" aria-label="资料">

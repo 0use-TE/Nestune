@@ -1,10 +1,15 @@
 import type { ConversationSummary, ListeningRoom, ListeningTrack, Message, Person, Playback, SharedSong, SocialState } from '@/lib/social-types';
+import { isUploadSong } from '@/lib/upload-types';
 import { all, now, one, run } from './db';
 import { fail } from './http';
+import { visibleUpload } from './uploads';
 
 type MessageRow = Omit<Message, 'song'> & { song: string | null };
-function decodeMessage({ song, ...message }: MessageRow): Message {
-  return song ? { ...message, song: JSON.parse(song) as SharedSong } : message;
+function decodeMessage(viewer: number, { song, ...message }: MessageRow): Message {
+  if (!song) return message;
+  const shared = JSON.parse(song) as SharedSong;
+  if (isUploadSong(shared.id) && !visibleUpload(viewer, shared.id)) return { ...message, text: '歌曲已不可用' };
+  return { ...message, song: shared };
 }
 type Friendship = { requested_by: number; accepted: number };
 type RoomRow = { id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null; active: number; song_id: string | null; position: number; playing: number; updated_at: number; transport_version: number };
@@ -13,6 +18,16 @@ type DirectoryRow = { id: number; username: string; name: string; avatar: string
 const pair = (a: number, b: number) => a < b ? [a, b] : [b, a];
 const friendship = (a: number, b: number) => one<Friendship>('SELECT requested_by,accepted FROM friendships WHERE low_id=? AND high_id=?', ...pair(a, b));
 const hasActiveRoom = (user: number) => !!one('SELECT 1 FROM listening_rooms WHERE active=1 AND (host_id=? OR guest_id=?)', user, user);
+
+function publicTrack(owner: number, track: ListeningTrack | null): ListeningTrack | null {
+  if (!track || !isUploadSong(track.id)) return track;
+  const upload = visibleUpload(owner, track.id);
+  return upload?.visibility === 'public' ? { id: upload.id, name: upload.name, artist: upload.artist } : null;
+}
+
+function canListenTogether(host: number, guest: number, song: string) {
+  return !isUploadSong(song) || (!!visibleUpload(host, song) && !!visibleUpload(guest, song));
+}
 
 function requirePeer(user: number, peer: number) {
   if (user === peer || !one("SELECT 1 FROM users WHERE id=? AND status='active'", peer)) throw fail(404, '找不到该用户');
@@ -37,7 +52,7 @@ export function socialState({ userId: user, sessionId }: Listener): SocialState 
     const online = row.visible ? row.last_seen > time - 35_000 : null;
     return {
       id: row.id, username: row.username, name: row.name, avatar: row.avatar ? `/api/avatars/${row.avatar}` : null, online,
-      track: online && row.track ? JSON.parse(row.track) : null,
+      track: online && row.track ? publicTrack(row.id, JSON.parse(row.track)) : null,
       friendship: row.accepted ? 'friend' : row.requested_by === user ? 'outgoing' : row.requested_by ? 'incoming' : null,
     };
   });
@@ -48,7 +63,8 @@ export function socialState({ userId: user, sessionId }: Listener): SocialState 
       const onThisDevice = row.host_id === user ? row.host_session_id === sessionId : !row.active || row.guest_session_id === sessionId;
       return {
         id: row.id, hostId: row.host_id, guestId: row.guest_id, active: !!row.active, onThisDevice, updatedAt: row.updated_at, transportVersion: row.transport_version,
-        playback: onThisDevice && row.song_id ? { songId: row.song_id, position: row.position, playing: !!row.playing } : null,
+        playback: onThisDevice && row.song_id && canListenTogether(row.host_id, row.guest_id, row.song_id)
+          ? { songId: row.song_id, position: row.position, playing: !!row.playing } : null,
       };
     });
   return { people, rooms, inbox: listConversations(user), showOnline: people.find(person => person.id === user)?.online !== null, serverTime: time };
@@ -62,8 +78,13 @@ export function setOnlineVisibility(user: number, visible: boolean) {
 export function syncSocial(listener: Listener, track: ListeningTrack | null, room: number | undefined, playback: Playback | null, version = 0) {
   const { userId: user, sessionId } = listener;
   const time = now();
+  const visibleTrack = publicTrack(user, track);
+  if (room && playback && isUploadSong(playback.songId)) {
+    const target = one<{ guest_id: number }>('SELECT guest_id FROM listening_rooms WHERE id=? AND host_id=? AND host_session_id=?', room, user, sessionId);
+    if (!target || !canListenTogether(user, target.guest_id, playback.songId)) playback = null;
+  }
   run(`INSERT INTO social_presence(user_id,last_seen,track) VALUES(?,?,?) ON CONFLICT(user_id)
-    DO UPDATE SET last_seen=excluded.last_seen,track=excluded.track WHERE visible=1`, user, time, track ? JSON.stringify(track) : null);
+    DO UPDATE SET last_seen=excluded.last_seen,track=excluded.track WHERE visible=1`, user, time, visibleTrack ? JSON.stringify(visibleTrack) : null);
   if (room) run(`UPDATE listening_rooms SET song_id=?,position=?,playing=?,updated_at=?
     WHERE id=? AND host_id=? AND host_session_id=? AND active=1 AND updated_at>=? AND transport_version=?`, playback?.songId ?? null, playback?.position ?? 0,
     Number(playback?.playing ?? false), time, room, user, sessionId, time - 90_000, version);
@@ -86,7 +107,7 @@ export function readMessages(user: number, peer: number, before?: number) {
   requireFriend(user, peer);
   const rows = all<MessageRow>(`SELECT id,sender_id senderId,text,sent_at sentAt,song FROM friend_messages
     WHERE low_id=? AND high_id=? AND id<? ORDER BY id DESC LIMIT 50`, ...pair(user, peer), before ?? Number.MAX_SAFE_INTEGER);
-  return rows.reverse().map(decodeMessage);
+  return rows.reverse().map(row => decodeMessage(user, row));
 }
 export function peerReadThrough(user: number, peer: number) {
   return one<{ id: number }>('SELECT message_id id FROM friend_message_reads WHERE user_id=? AND peer_id=?', peer, user)?.id ?? 0;
@@ -109,7 +130,7 @@ function listConversations(user: number): ConversationSummary[] {
     JOIN friend_messages m ON m.id=(SELECT max(x.id) FROM friend_messages x WHERE x.low_id=p.low_id AND x.high_id=p.high_id)
     LEFT JOIN friend_message_reads own ON own.user_id=? AND own.peer_id=p.peerId
     LEFT JOIN friend_message_reads other ON other.user_id=p.peerId AND other.peer_id=? ORDER BY m.id DESC`, user, user, user, user, user)
-    .map(({ peerId, unread, latestIncomingId, peerReadThrough, ...latest }) => ({ peerId, unread, latestIncomingId, peerReadThrough, latest: decodeMessage(latest) }));
+    .map(({ peerId, unread, latestIncomingId, peerReadThrough, ...latest }) => ({ peerId, unread, latestIncomingId, peerReadThrough, latest: decodeMessage(user, latest) }));
 }
 export function sendMessage(user: number, peer: number, text: string, song?: SharedSong): Message {
   requireFriend(user, peer);

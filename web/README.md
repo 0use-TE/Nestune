@@ -28,7 +28,10 @@ npm run build; npm start        # production
 | `session.json` | the bound music-source login (server only, never sent to browsers) |
 | `cache/` | played songs, LRU-evicted above the limit (default 20 GB) |
 | `library/` | songs users saved; never auto-evicted |
+| `uploads/` | audio and cover files uploaded through Settings. Back up with `app.db`, which holds lyrics, credits and visibility |
 | `avatars/` | profile pictures |
+
+Open **个人设置 → 我的上传** to upload or manage tracks. Uploads start private, can be shared with selected friends, and can be published to all signed-in users. The NAS Compose data volume persists uploads across container rebuilds.
 
 ## API (all JSON, same-origin, cookie auth)
 

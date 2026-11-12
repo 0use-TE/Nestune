@@ -4,6 +4,7 @@ export type Song = {
   album: { id: string | null; name: string }; cover: string | null; fee?: number;
   qualities?: { level: string; bitrate?: number; size?: number }[];
   access?: { playable: boolean; max: string | null; reason?: string };
+  uploader?: { id: number; name: string };
 };
 export type Tier = { level: string; label: string; format: string; bitrate: number | null; size: number | null; state: 'ok' | 'over_cap' | 'no_access' | 'missing' };
 export type Me = {

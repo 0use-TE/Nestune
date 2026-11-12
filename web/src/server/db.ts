@@ -6,7 +6,7 @@ const g = globalThis as unknown as { __nt_db?: DatabaseSync };
 
 function open() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  for (const d of ['cache', 'library', 'avatars', 'runtime']) fs.mkdirSync(dir(d), { recursive: true });
+  for (const d of ['cache', 'library', 'avatars', 'runtime', 'uploads']) fs.mkdirSync(dir(d), { recursive: true });
   const db = new DatabaseSync(dir('app.db'));
   db.exec(`
     PRAGMA journal_mode = WAL;
@@ -78,6 +78,28 @@ function open() {
     CREATE TABLE IF NOT EXISTS queue (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       data TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS uploaded_songs (
+      id TEXT PRIMARY KEY,
+      owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      artist TEXT NOT NULL,
+      album TEXT NOT NULL,
+      lyricist TEXT NOT NULL,
+      composer TEXT NOT NULL,
+      lyrics TEXT NOT NULL,
+      visibility TEXT NOT NULL CHECK(visibility IN ('private','shared','public')),
+      duration REAL NOT NULL,
+      audio_ext TEXT NOT NULL,
+      audio_size INTEGER NOT NULL,
+      cover_file TEXT,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS uploaded_songs_owner ON uploaded_songs(owner_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS upload_recipients (
+      song_id TEXT NOT NULL REFERENCES uploaded_songs(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (song_id,user_id)
     );
     CREATE TABLE IF NOT EXISTS playlists (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

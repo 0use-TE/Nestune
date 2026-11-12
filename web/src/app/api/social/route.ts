@@ -1,8 +1,10 @@
 import type { ListeningTrack, Playback } from '@/lib/social-types';
 import type { Song } from '@/lib/types';
+import { isUploadSong } from '@/lib/upload-types';
+import { catalogId, catalogSong } from '@/server/catalog';
 import { userRoute } from '@/server/guard';
 import { body, fail, numericId, str } from '@/server/http';
-import { songMeta } from '@/server/netease';
+import { requireUpload } from '@/server/uploads';
 import { acceptListening, answerFriend, controlListening, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, socialState, syncSocial } from '@/server/social';
 
 const options = { bucket: 'social' };
@@ -17,7 +19,7 @@ function track(value: unknown): ListeningTrack | null {
   if (value == null) return null;
   if (typeof value !== 'object') throw fail(400, '歌曲数据无效');
   const data = value as Record<string, unknown>;
-  return { id: numericId(data.id), name: str(data.name, 1, 160, '歌曲名'), artist: str(data.artist, 0, 160, '歌手名') };
+  return { id: catalogId(data.id), name: str(data.name, 1, 160, '歌曲名'), artist: str(data.artist, 0, 160, '歌手名') };
 }
 
 function playback(value: unknown): Playback | null {
@@ -27,7 +29,7 @@ function playback(value: unknown): Playback | null {
   if (typeof data.position !== 'number' || !Number.isFinite(data.position) || data.position < 0 || data.position > 86400 || typeof data.playing !== 'boolean') {
     throw fail(400, '播放状态无效');
   }
-  return { songId: numericId(data.songId), position: data.position, playing: data.playing };
+  return { songId: catalogId(data.songId), position: data.position, playing: data.playing };
 }
 
 export const GET = userRoute((req, _ctx, user, sessionId) => {
@@ -57,9 +59,11 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
     case 'declineFriend': answerFriend(user.id, id(data.peerId), false); break;
     case 'message': return { message: sendMessage(user.id, id(data.peerId), str(data.text, 1, 1000, '消息')) };
     case 'shareSong': {
-      const songId = numericId(data.songId);
-      const message = await shareSong(user.id, id(data.peerId), async () => {
-        const song: Song = await songMeta(songId);
+      const songId = catalogId(data.songId);
+      const peerId = id(data.peerId);
+      const message = await shareSong(user.id, peerId, async () => {
+        const song: Song = await catalogSong(user.id, songId);
+        if (isUploadSong(songId)) requireUpload(peerId, songId);
         return { id: song.id, name: song.name, artist: song.artists.map(artist => artist.name).join(' / '), cover: song.cover || null };
       });
       return { message };
@@ -69,7 +73,7 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
     case 'acceptInvite': acceptListening(listener, id(data.roomId)); break;
     case 'roomPlayback':
       if (data.playing !== undefined && typeof data.playing !== 'boolean') throw fail(400, '播放状态无效');
-      controlListening(listener, id(data.roomId), numericId(data.songId), data.playing);
+      controlListening(listener, id(data.roomId), catalogId(data.songId), data.playing);
       break;
     case 'leave': leaveListening(listener, id(data.roomId)); break;
     default: throw fail(400, '未知操作');

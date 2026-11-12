@@ -1,6 +1,7 @@
 import { all, now, one, run } from './db';
 import { fail } from './http';
-import { songMeta } from './netease';
+import { catalogSong } from './catalog';
+import { visibleSong } from './uploads';
 
 type PRow = { id: number; user_id: number; name: string; description: string; created_at: number; updated_at: number };
 const MAX_PLAYLISTS = 100, MAX_SONGS = 1000;
@@ -11,11 +12,12 @@ function owned(userId: number, id: number) {
   return p;
 }
 const shape = (p: PRow) => {
-  const first = one<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at DESC LIMIT 1', p.id);
+  const songs = all<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at DESC', p.id)
+    .map(row => visibleSong(p.user_id, JSON.parse(row.meta))).filter(Boolean);
   return {
     id: p.id, name: p.name, description: p.description, createdAt: p.created_at, updatedAt: p.updated_at,
-    trackCount: one<{ n: number }>('SELECT COUNT(*) n FROM playlist_songs WHERE playlist_id=?', p.id)!.n,
-    cover: first ? JSON.parse(first.meta).cover : null,
+    trackCount: songs.length,
+    cover: songs[0]?.cover ?? null,
   };
 };
 const cleanName = (v: unknown) => {
@@ -37,7 +39,10 @@ export function createPlaylist(userId: number, name: unknown, description?: unkn
 export function getPlaylist(userId: number, id: number) {
   const p = owned(userId, id);
   const songs = all<{ meta: string; added_at: number }>('SELECT meta,added_at FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC', id)
-    .map(r => ({ ...JSON.parse(r.meta), addedAt: r.added_at }));
+    .flatMap(r => {
+      const song = visibleSong(userId, JSON.parse(r.meta));
+      return song ? [{ ...song, addedAt: r.added_at }] : [];
+    });
   return { playlist: shape(p), songs };
 }
 
@@ -58,7 +63,7 @@ export async function addSong(userId: number, id: number, songId: string) {
   owned(userId, id);
   if (one<{ n: number }>('SELECT COUNT(*) n FROM playlist_songs WHERE playlist_id=?', id)!.n >= MAX_SONGS) throw fail(400, `每个歌单最多 ${MAX_SONGS} 首`);
   if (one('SELECT 1 x FROM playlist_songs WHERE playlist_id=? AND song_id=?', id, songId)) return { added: false };
-  const meta = await songMeta(songId);
+  const meta = await catalogSong(userId, songId);
   run('INSERT OR IGNORE INTO playlist_songs(playlist_id,song_id,meta,added_at) VALUES(?,?,?,?)', id, songId, JSON.stringify(meta), now());
   run('UPDATE playlists SET updated_at=? WHERE id=?', now(), id);
   return { added: true };

@@ -199,8 +199,15 @@ export function messageAge(sentAt: number) {
 }
 
 function mergeMessages(current: Message[], incoming: Message[]) {
-  const known = new Set(current.map(message => message.id));
-  const extra = incoming.filter(message => !known.has(message.id));
-  return extra.length ? [...current, ...extra].sort((a, b) => a.id - b.id) : current;
+  const known = new Map(current.map(message => [message.id, message]));
+  let changed = false;
+  for (const message of incoming) {
+    const previous = known.get(message.id);
+    if (!previous || previous.text !== message.text || previous.song?.id !== message.song?.id) {
+      known.set(message.id, message);
+      changed = true;
+    }
+  }
+  return changed ? [...known.values()].sort((a, b) => a.id - b.id) : current;
 }
 

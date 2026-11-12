@@ -1,16 +1,24 @@
+import { isUploadSong } from '@/lib/upload-types';
+import { catalogId } from '@/server/catalog';
 import { QUALITIES, type Quality } from '@/server/config';
 import { settings } from '@/server/db';
 import { userRoute } from '@/server/guard';
-import { fail, numericId } from '@/server/http';
-import { fetchSourceAudio } from '@/server/media';
+import { fail } from '@/server/http';
+import { fetchSourceAudio, serveFile } from '@/server/media';
 import { songMeta } from '@/server/netease';
 import { tiersFor } from '@/server/quality';
 import { takeSlot } from '@/server/ratelimit';
+import { requireUpload, uploadAudio } from '@/server/uploads';
 
 export const POST = userRoute(async (req, ctx, user) => {
   if (!user.can_save) throw fail(403, '此账号没有下载权限');
-  const id = numericId((await ctx.params).id);
+  const id = catalogId((await ctx.params).id);
   const wanted = req.nextUrl.searchParams.get('level');
+  if (isUploadSong(id)) {
+    const audio = uploadAudio(requireUpload(user.id, id));
+    if (wanted !== 'original') throw fail(400, '请选择原始文件');
+    return serveFile(req, audio.path, audio.mime, { 'Cache-Control': 'no-store', 'X-Audio-Format': audio.ext });
+  }
   if (!QUALITIES.some(level => level === wanted)) throw fail(400, '不支持的音质');
   const song = await songMeta(id);
   const plan = tiersFor(song.qualities, song.access, user.max_quality as Quality);
