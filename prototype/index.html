@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Nestune</title>
+<style>
+:root{
+  --bg:#fbfaf8;--surface:#fff;--soft:#f2f0ec;--text:#141413;--sub:#6d6c66;--muted:#a3a29b;--line:#ebe9e4;
+  --accent:#141413;--on-accent:#fff;--heart:#e5483a;--bar:rgba(255,255,255,.78);
+  --shadow:0 18px 50px -12px rgba(30,25,10,.22);--shadow-s:0 4px 16px -4px rgba(30,25,10,.14);--side:232px;
+}
+:root[data-theme=dark]{
+  --bg:#0f0f0e;--surface:#181817;--soft:#212120;--text:#f4f3ef;--sub:#a09f98;--muted:#6b6a64;--line:#262624;
+  --accent:#f4f3ef;--on-accent:#0f0f0e;--bar:rgba(30,30,28,.78);--shadow:0 18px 50px -12px rgba(0,0,0,.7);--shadow-s:0 4px 16px -4px rgba(0,0,0,.5);
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0f0f0e;--surface:#181817;--soft:#212120;--text:#f4f3ef;--sub:#a09f98;--muted:#6b6a64;--line:#262624;
+  --accent:#f4f3ef;--on-accent:#0f0f0e;--bar:rgba(30,30,28,.78);--shadow:0 18px 50px -12px rgba(0,0,0,.7);--shadow-s:0 4px 16px -4px rgba(0,0,0,.5);}}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:14px/1.55 "Inter",-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input{font:inherit;color:inherit}
+svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+h1{font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.15}
+h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.sub{color:var(--sub)}.muted{color:var(--muted)}.sm{font-size:12px}
+.t1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+#app{display:grid;grid-template-columns:var(--side) 1fr;height:100%}
+aside{padding:30px 16px 24px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
+.brand{font-size:19px;font-weight:800;letter-spacing:-.03em;padding:0 12px 26px;display:flex;align-items:center;gap:9px}
+.logo{width:26px;height:26px;border-radius:8px;background:var(--text);position:relative;overflow:hidden}
+.logo::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;background:var(--bg);right:-4px;bottom:-4px}
+.nav{display:flex;align-items:center;gap:13px;padding:10px 12px;border-radius:12px;color:var(--sub);text-align:left;width:100%;font-weight:500}
+.nav:hover{color:var(--text);background:var(--soft)}
+.nav.on{color:var(--text);background:var(--soft);font-weight:600}
+.lab{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--muted);padding:22px 12px 8px}
+.pl{display:flex;align-items:center;gap:11px;padding:7px 12px;border-radius:10px;width:100%;text-align:left;color:var(--sub)}
+.pl:hover{background:var(--soft);color:var(--text)}
+.pl .cv{width:30px;border-radius:7px}
+.sp{flex:1}
+.me{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:12px;width:100%;text-align:left}
+.me:hover{background:var(--soft)}
+.avatar{width:32px;height:32px;border-radius:50%;background:var(--text);color:var(--bg);display:grid;place-items:center;font-weight:700;font-size:13px}
+main{overflow-y:auto;padding:38px 48px 150px}
+.wrap{max-width:1000px;margin:0 auto}
+.sec{margin:42px 0 16px;display:flex;justify-content:space-between;align-items:baseline}
+.link{color:var(--sub);font-size:13px;cursor:pointer}.link:hover{color:var(--text)}
+
+/* generated covers */
+.cv{aspect-ratio:1;border-radius:14px;position:relative;overflow:hidden;background:linear-gradient(150deg,var(--c1),var(--c2));box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+.cv svg{position:absolute;inset:0;width:100%;height:100%;stroke:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:26px 20px}
+.card{text-align:left;display:block;min-width:0}
+.card .cv{transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s;box-shadow:var(--shadow-s)}
+.card:hover .cv{transform:translateY(-4px);box-shadow:var(--shadow)}
+.card b{display:block;margin-top:12px;font-weight:600}
+
+.hero{position:relative;border-radius:28px;padding:34px;display:flex;gap:34px;align-items:center;color:#fff;overflow:hidden;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.hero::after{content:"";position:absolute;right:-90px;top:-90px;width:320px;height:320px;border-radius:50%;background:rgba(255,255,255,.08)}
+.hero .cv{width:190px;flex:none;border-radius:18px;box-shadow:0 20px 40px -10px rgba(0,0,0,.4);z-index:1}
+.hero .in{z-index:1;min-width:0}
+.hero h1{font-size:40px;margin:6px 0 4px}
+.tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,.18);backdrop-filter:blur(6px)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:600}
+.btn:hover{opacity:.88}
+.btn.light{background:#fff;color:#141413}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--text)}
+.hero .btn.ghost{border-color:rgba(255,255,255,.4);color:#fff}
+.btn.sm{padding:7px 15px;font-size:13px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+.tr{display:grid;grid-template-columns:30px 48px 1.2fr 1fr 52px 34px;gap:14px;align-items:center;padding:8px 12px;border-radius:14px;cursor:pointer}
+.tr:hover{background:var(--soft)}
+.tr .cv{width:48px;border-radius:9px;box-shadow:none}
+.tr .no{color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.tr.cur .nm{color:var(--heart)}
+.tr .nm{font-weight:600}
+.heart{color:var(--muted);opacity:0}.tr:hover .heart,.heart.on{opacity:1}.heart.on{color:var(--heart)}.heart.on svg{fill:currentColor}
+.eq{display:inline-flex;gap:2px;align-items:flex-end;height:14px}
+.eq i{width:3px;background:var(--heart);border-radius:2px;animation:eq 1s infinite ease-in-out}
+.eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}
+@keyframes eq{0%,100%{height:4px}50%{height:14px}}
+.eq.off i{animation:none;height:6px}
+
+.search{display:flex;align-items:center;gap:12px;background:var(--soft);padding:16px 20px;border-radius:18px}
+.search input{flex:1;background:none;border:0;outline:0;font-size:17px}
+.chips{display:flex;gap:8px;margin:20px 0;flex-wrap:wrap}
+.chip{padding:8px 18px;border-radius:999px;background:var(--soft);color:var(--sub);font-weight:500}
+.chip:hover{color:var(--text)}
+.chip.on{background:var(--accent);color:var(--on-accent)}
+
+#bar{position:fixed;left:calc(var(--side) + 28px);right:28px;bottom:22px;height:72px;background:var(--bar);backdrop-filter:blur(22px) saturate(1.6);-webkit-backdrop-filter:blur(22px) saturate(1.6);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 18px;gap:16px;z-index:5;overflow:hidden}
+#bar .info{display:flex;gap:13px;align-items:center;min-width:0;cursor:pointer}
+#bar .info .cv{width:46px;flex:none;border-radius:10px;box-shadow:none}
+#bar .info div{min-width:0}#bar .info b,#bar .info span{display:block}
+.ctl{display:flex;align-items:center;gap:8px}
+.ib{width:38px;height:38px;border-radius:50%;display:grid;place-items:center}
+.ib:hover{background:var(--soft)}.ib.on{color:var(--heart)}
+.ib.heartb.on svg{fill:currentColor}
+.play{width:46px;height:46px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;transition:transform .15s}
+.play:hover{background:var(--accent);transform:scale(1.06)}
+.play svg{fill:currentColor;stroke:none}
+.right{display:flex;justify-content:flex-end;align-items:center;gap:6px}
+.prog{position:absolute;left:0;right:0;bottom:0;height:3px;background:transparent}
+.track{height:4px;background:var(--line);border-radius:4px;position:relative;cursor:pointer}
+.track i{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:4px;display:block}
+#bar .track{height:3px;border-radius:0}#bar .track i{border-radius:0}
+
+#np{position:fixed;inset:0;z-index:20;display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:70px;padding:50px 8vw;align-items:center;background:var(--bg)}
+#np::before{content:"";position:absolute;inset:0;background:radial-gradient(900px 600px at 20% 30%,var(--c1),transparent 70%),radial-gradient(700px 500px at 90% 90%,var(--c2),transparent 70%);opacity:.22;pointer-events:none}
+#np.open{display:grid}
+#np>*{position:relative}
+#np .close{position:absolute;top:24px;left:28px}
+#np .left{max-width:430px;margin:0 auto;width:100%}
+#np .left .cv{border-radius:26px;box-shadow:0 30px 60px -18px var(--c1)}
+#np h1{margin-top:30px;font-size:28px}
+#np .times{display:flex;justify-content:space-between;margin-top:9px;font-variant-numeric:tabular-nums}
+#np .ctl{justify-content:center;margin-top:14px;gap:16px}
+#np .play{width:64px;height:64px}
+#lyr{height:min(66vh,540px);overflow-y:auto;scrollbar-width:none;padding:27vh 0;mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent);-webkit-mask-image:linear-gradient(transparent,#000 22%,#000 78%,transparent)}
+#lyr::-webkit-scrollbar{display:none}
+.ln{font-size:30px;font-weight:700;letter-spacing:-.02em;color:var(--text);opacity:.28;padding:11px 0;cursor:pointer;transition:opacity .4s,transform .4s;transform-origin:left;line-height:1.35}
+.ln small{display:block;font-size:16px;font-weight:500;margin-top:3px;letter-spacing:0}
+.ln.on{opacity:1;transform:scale(1.03)}
+.lt{display:flex;gap:6px;margin-bottom:6px;justify-content:flex-end}
+
+.tabs{display:flex;gap:28px;border-bottom:1px solid var(--line);margin:22px 0}
+.tab{padding:10px 0;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500}
+.tab.on{color:var(--text);border-color:var(--text);font-weight:600}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:8px 24px}
+.set{display:flex;justify-content:space-between;align-items:center;padding:18px 0;border-bottom:1px solid var(--line);gap:20px}
+.set:last-child{border:0}
+.switch{width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;flex:none;transition:.2s}
+.switch::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.switch.on{background:var(--accent)}.switch.on::after{left:21px}
+.note{background:var(--soft);border-radius:14px;padding:14px 18px;color:var(--sub);margin-bottom:18px}
+.field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
+.field input{background:var(--soft);border:1.5px solid transparent;border-radius:14px;padding:14px 16px;outline:0}
+.field input:focus{border-color:var(--text);background:var(--surface)}
+
+#login{position:fixed;inset:0;background:var(--bg);z-index:40;display:grid;grid-template-columns:1.1fr 1fr}
+.lart{background:linear-gradient(150deg,#1f3a4d,#c8553d);position:relative;overflow:hidden}
+.lart i{position:absolute;border-radius:50%;display:block}
+.lform{display:grid;place-items:center;padding:30px}
+.lbox{width:min(360px,100%)}
+.lbox form{margin-top:30px}
+.lbox .btn{width:100%;justify-content:center;margin-top:8px;padding:14px}
+.toast{position:fixed;top:24px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--on-accent);padding:11px 22px;border-radius:999px;z-index:60;font-size:13px;font-weight:600;box-shadow:var(--shadow)}
+#tabbar{display:none}
+
+@media(max-width:860px){
+  #app{grid-template-columns:1fr}aside{display:none}
+  main{padding:24px 18px 180px}h1{font-size:27px}
+  .hero{flex-direction:column;align-items:flex-start;padding:24px;gap:20px}.hero .cv{width:140px}.hero h1{font-size:30px}
+  .grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:20px 14px}
+  .tr{grid-template-columns:48px 1fr 34px}.tr .no,.tr .al,.tr .du{display:none}.tr .heart{opacity:1}
+  #bar{left:10px;right:10px;bottom:70px;grid-template-columns:1fr auto;height:62px;padding:0 12px;border-radius:18px}
+  #bar .right,#bar .prev,#bar .next{display:none}
+  #tabbar{display:flex;position:fixed;left:0;right:0;bottom:0;height:64px;background:var(--bar);backdrop-filter:blur(20px);border-top:1px solid var(--line);z-index:6;padding-bottom:env(safe-area-inset-bottom)}
+  #tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--muted);font-size:10px;font-weight:500}
+  #tabbar button.on{color:var(--text)}
+  #np{grid-template-columns:1fr;gap:10px;padding:64px 24px 24px;overflow-y:auto;align-content:start}
+  #np .left{max-width:290px}#np h1{margin-top:18px;font-size:23px}
+  #lyr{height:250px;padding:100px 0}.ln{font-size:21px}
+  #login{grid-template-columns:1fr}.lart{display:none}
+}
+</style>
+</head>
+<body>
+<div id="app"><aside id="side"></aside><main id="main"><div class="wrap" id="view"></div></main></div>
+<nav id="tabbar"></nav><div id="bar"></div><div id="np"></div><div id="login"></div>
+
+<script>
+const P={
+home:'<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+search:'<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+lib:'<path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/>',
+set:'<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
+heart:'<path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>',
+play:'<path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/>',
+pause:'<rect x="5" y="3" width="5" height="18" rx="1.5"/><rect x="14" y="3" width="5" height="18" rx="1.5"/>',
+prev:'<path d="M19 20 9 12l10-8z"/><path d="M5 19V5"/>',next:'<path d="m5 4 10 8-10 8z"/><path d="M19 5v14"/>',
+shuffle:'<path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22M18 2l4 4-4 4M2 6h1.9c1.5 0 2.9.9 3.6 2.2M22 18h-5.9c-1.3 0-2.6-.7-3.3-1.8l-.5-.8M18 14l4 4-4 4"/>',
+down:'<path d="m6 9 6 6 6-6"/>',list:'<path d="M3 6h18M3 12h18M3 18h12"/>',
+vol:'<path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+nas:'<rect x="2" y="3" width="20" height="8" rx="2"/><rect x="2" y="13" width="20" height="8" rx="2"/><path d="M6 7h.01M6 17h.01"/>',
+out:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>'};
+const I=(n,s)=>`<svg viewBox="0 0 24 24"${s?` style="width:${s}px;height:${s}px"`:''}>${P[n]}</svg>`;
+
+const PAL=[['#1f3a4d','#3d6b7d','#f2b84b'],['#c8553d','#e8895f','#fbe3c4'],['#3b3f6b','#6b6fb0','#f4c9d6'],['#2d5d4b','#5f9a7f','#f0e6b8'],['#5a2e4e','#9a4f7d','#f7c59f'],['#d9a441','#f0cd7a','#fff6dc'],['#22252b','#454b57','#e9e4d8'],['#c97b7b','#e8b4a8','#7a2f33']];
+const SH=[
+ c=>`<circle cx="62" cy="40" r="22" fill="${c}"/><path d="M0 70h100v30H0z" fill="#000" opacity=".16"/><path d="M0 82h100v18H0z" fill="#000" opacity=".16"/>`,
+ c=>`<circle cx="50" cy="108" r="74" fill="${c}" opacity=".35"/><circle cx="50" cy="108" r="52" fill="${c}" opacity=".55"/><circle cx="50" cy="108" r="30" fill="${c}"/>`,
+ c=>`<path d="M-10 40 60-30l30 0L-10 70z" fill="${c}" opacity=".9"/><path d="M20 110 110 20v40L60 110z" fill="#000" opacity=".14"/>`,
+ c=>`<circle cx="38" cy="50" r="30" fill="${c}" opacity=".85"/><circle cx="64" cy="50" r="30" fill="#000" opacity=".18"/><circle cx="82" cy="20" r="7" fill="${c}"/>`,
+ c=>`<rect x="18" y="18" width="64" height="64" rx="32" fill="${c}"/><rect x="38" y="38" width="64" height="64" rx="32" fill="#000" opacity=".16"/>`,
+ c=>`<path d="M0 60Q25 30 50 60T100 60V100H0z" fill="${c}" opacity=".9"/><path d="M0 78Q25 52 50 78T100 78V100H0z" fill="#000" opacity=".14"/><circle cx="72" cy="28" r="12" fill="${c}"/>`
+];
+const art=(p,k,x='')=>`<div class="cv ${x}" style="--c1:${p[0]};--c2:${p[1]}"><svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">${SH[k%SH.length](p[2])}</svg></div>`;
+
+const S=[['夜航星','不才','夜航星',258],['晴天','示例歌手 A','叶惠美',269],['稻香','示例歌手 A','魔杰座',223],['平凡之路','示例歌手 B','猎户星座',301],['孤勇者','示例歌手 C','孤勇者',256],['理想三旬','示例歌手 D','浓烟下的诗歌电台',262],['起风了','示例歌手 E','起风了',325],['成都','示例歌手 F','无法长大',328],['南山南','示例歌手 G','年轻的神',312],['光年之外','示例歌手 H','光年之外',235]]
+ .map((s,i)=>({id:i,t:s[0],a:s[1],al:s[2],d:s[3],p:PAL[i%8],k:i,fav:i%3==0,q:['standard','exhigh','lossless'][i%3]}));
+const PL=['晨间咖啡','深夜独处','通勤路上','雨天民谣','工作专注','周末散步'].map((n,i)=>({n,p:PAL[(i+2)%8],k:i+2,c:20+i*7}));
+const LRC=['这里是示例歌词第一行','第二行歌词用来演示滚动','当前行高亮，其余行淡出','翻译会显示在原文下方','拖动进度条可以跳转','点击任意一行跳到对应时间','极简风格，只保留必要的元素','播放页背景随封面变色','让歌词成为主角','示例歌词结束'];
+const TR=['This is sample lyric line one','Second line scrolls smoothly','Current line highlighted','Translation sits beneath','Drag the bar to seek','Click a line to jump','Minimal, only what matters','Background follows the cover','Lyrics take the lead','End of sample lyrics'];
+
+const st={route:'home',cur:0,play:false,t:0,shuffle:false,theme:localStorage.th||'auto',q:'',cat:'歌曲',libTab:'收藏',lyrTr:true,queue:S.map(s=>s.id),login:true,mode:'login'};
+const $=s=>document.querySelector(s),song=()=>S[st.cur];
+const mmss=n=>`${Math.floor(n/60)}:${String(Math.floor(n%60)).padStart(2,'0')}`;
+const cov=(s,x)=>art(s.p,s.k,x);
+const npOpen=()=>$('#np').classList.contains('open');
+function toast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.append(e);setTimeout(()=>e.remove(),1800)}
+function applyTheme(){const r=document.documentElement;st.theme==='auto'?r.removeAttribute('data-theme'):r.dataset.theme=st.theme}
+const lineIdx=()=>Math.min(LRC.length-1,Math.floor(st.t/(song().d/LRC.length)));
+function tint(){const p=song().p,r=document.documentElement.style;r.setProperty('--c1',p[0]);r.setProperty('--c2',p[1])}
+
+const NAV=[['home','首页','home'],['search','搜索','search'],['library','音乐库','lib']];
+function renderShell(){
+  $('#side').innerHTML=`<div class="brand"><span class="logo"></span>Nestune</div>`+NAV.map(n=>`<button class="nav ${st.route===n[0]?'on':''}" onclick="go('${n[0]}')">${I(n[2],19)}${n[1]}</button>`).join('')+
+  `<div class="lab">我的歌单</div>`+PL.map((p,i)=>`<button class="pl" onclick="go('playlist')">${art(p.p,p.k)}<span class="t1">${p.n}</span></button>`).join('')+
+  `<div class="sp"></div><button class="me ${st.route==='settings'?'on':''}" onclick="go('settings')"><span class="avatar">O</span><span><b>ouse</b><div class="muted sm">设置与账号</div></span></button>`;
+  $('#tabbar').innerHTML=NAV.concat([['settings','我的','set']]).map(n=>`<button class="${st.route===n[0]?'on':''}" onclick="go('${n[0]}')">${I(n[2],21)}${n[1]}</button>`).join('');
+}
+function go(r){st.route=r;renderShell();renderView();$('#main').scrollTop=0}
+
+function list(ids,num=true){return ids.map((id,i)=>{const s=S[id],cur=s.id===st.cur;return `<div class="tr ${cur?'cur':''}" onclick="playSong(${s.id})">
+ <div class="no">${cur?`<span class="eq ${st.play?'':'off'}"><i></i><i></i><i></i></span>`:i+1}</div>${cov(s)}
+ <div class="t1"><div class="nm t1">${s.t}</div><div class="sub sm">${s.a}</div></div>
+ <div class="sub al t1">${s.al}</div><div class="muted du sm">${mmss(s.d)}</div>
+ <button class="heart ${s.fav?'on':''}" onclick="event.stopPropagation();fav(${s.id})">${I('heart',18)}</button></div>`}).join('')}
+const greet=()=>{const h=new Date().getHours();return h<6?'夜深了':h<12?'早上好':h<18?'下午好':'晚上好'};
+const views={
+home(){const s=song();return `<div class="sub">${greet()}，ouse</div><h1 style="margin:4px 0 26px">今天想听点什么</h1>
+ <div class="hero" style="--c1:${s.p[0]};--c2:${s.p[1]}">${cov(s)}<div class="in"><span class="tag">${st.play?'正在播放':'继续播放'}</span><h1>${s.t}</h1><div style="opacity:.85">${s.a} · ${s.al}</div>
+ <div class="row" style="margin-top:22px"><button class="btn light" onclick="toggle()">${I(st.play?'pause':'play',16)}${st.play?'暂停':'播放'}</button><button class="btn ghost" onclick="openNP()">歌词与队列</button></div></div></div>
+ <div class="sec"><h2>每日推荐</h2><a class="link">查看全部</a></div><div class="grid">${S.slice(0,6).map(s=>`<button class="card" onclick="playSong(${s.id})">${cov(s)}<b class="t1">${s.t}</b><span class="sub sm">${s.a}</span></button>`).join('')}</div>
+ <div class="sec"><h2>热门歌单</h2><a class="link" onclick="go('playlist')">查看全部</a></div><div class="grid">${PL.map(p=>`<button class="card" onclick="go('playlist')">${art(p.p,p.k)}<b class="t1">${p.n}</b><span class="sub sm">${p.c} 首</span></button>`).join('')}</div>
+ <div class="sec"><h2>最近播放</h2></div>${list([4,2,7,1],false)}`},
+search(){return `<h1 style="margin-bottom:22px">搜索</h1><div class="search">${I('search')}<input id="q" placeholder="搜索歌曲、专辑、歌单、歌手" value="${st.q}" oninput="st.q=this.value;renderResults()"></div>
+ <div class="chips">${['歌曲','专辑','歌单','歌手'].map(c=>`<button class="chip ${st.cat===c?'on':''}" onclick="st.cat='${c}';renderView()">${c}</button>`).join('')}</div><div id="res"></div>`},
+playlist(){const p=PL[0];return `<div class="hero" style="--c1:${p.p[0]};--c2:${p.p[1]};margin-bottom:26px">${art(p.p,p.k)}<div class="in"><span class="tag">歌单</span><h1>${p.n}</h1><div style="opacity:.85">为清晨准备的轻松曲目 · ${S.length} 首 · 38 分钟</div>
+ <div class="row" style="margin-top:22px"><button class="btn light" onclick="playSong(0)">${I('play',16)}播放全部</button><button class="btn ghost">${I('shuffle',16)}随机</button><button class="btn ghost">${I('nas',16)}保存到 NAS</button></div></div></div>${list(S.map(s=>s.id))}`},
+library(){const t=st.libTab;let b=t==='收藏'?list(S.filter(s=>s.fav).map(s=>s.id)):t==='历史'?list([4,2,7,1,0,9]):`<div class="note">已保存到 NAS 的歌曲，可离线播放，不占用网易云额度。</div>`+list([0,3,5,8]);
+ return `<h1>音乐库</h1><div class="tabs">${['收藏','历史','NAS 本地库'].map(x=>`<button class="tab ${t===x?'on':''}" onclick="st.libTab='${x}';renderView()">${x}</button>`).join('')}</div>${b}`},
+settings(){return `<h1 style="margin-bottom:24px">设置</h1><div class="panel">
+ <div class="set"><div><b>外观</b><div class="sub sm">跟随系统，或固定浅色、深色</div></div><div class="row">${[['auto','自动'],['light','浅色'],['dark','深色']].map(x=>`<button class="chip ${st.theme===x[0]?'on':''}" onclick="setTheme('${x[0]}')">${x[1]}</button>`).join('')}</div></div>
+ <div class="set"><div><b>默认音质</b><div class="sub sm">账号无权限时自动降级</div></div><div class="row"><button class="chip">标准</button><button class="chip on">极高</button><button class="chip">无损</button></div></div>
+ <div class="set"><div><b>显示歌词翻译</b></div><button class="switch ${st.lyrTr?'on':''}" onclick="st.lyrTr=!st.lyrTr;renderView()"></button></div>
+ <div class="set"><div><b>修改密码</b><div class="sub sm">修改后其他设备会下线</div></div><button class="btn ghost sm">修改</button></div>
+ <div class="set"><div><b>退出登录</b></div><button class="btn ghost sm" onclick="st.login=true;renderLogin()">${I('out',15)}退出</button></div></div>`}};
+function renderView(){$('#view').innerHTML=views[st.route]();if(st.route==='search')renderResults()}
+function renderResults(){const e=$('#res');if(!e)return;const q=st.q.trim();
+ if(!q){e.innerHTML=`<div class="sec" style="margin-top:20px"><h2>热门搜索</h2></div><div class="row">${['夜航星','晴天','民谣','雨天','经典老歌','轻音乐'].map(x=>`<button class="chip" onclick="st.q='${x}';renderView()">${x}</button>`).join('')}</div>`;return}
+ const r=S.filter(s=>s.t.includes(q)||s.a.includes(q)||s.al.includes(q));e.innerHTML=r.length?list(r.map(s=>s.id)):`<div class="sub" style="padding:50px 0;text-align:center">没有找到相关内容，试试换个关键词。</div>`}
+
+function renderBar(){const s=song();tint();$('#bar').innerHTML=`
+ <div class="info" onclick="openNP()">${cov(s)}<div><b class="t1">${s.t}</b><span class="sub sm t1">${s.a}</span></div></div>
+ <div class="ctl"><button class="ib prev" onclick="step(-1)">${I('prev')}</button><button class="ib play" onclick="toggle()">${I(st.play?'pause':'play',20)}</button><button class="ib next" onclick="step(1)">${I('next')}</button></div>
+ <div class="right"><span class="sub sm" id="bt">${mmss(st.t)} / ${mmss(s.d)}</span><button class="ib heartb ${s.fav?'on':''}" onclick="fav(${s.id})">${I('heart')}</button><button class="ib" onclick="openNP()">${I('list')}</button></div>
+ <div class="prog"><div class="track" onclick="seek(event)"><i id="bp" style="width:${st.t/s.d*100}%"></i></div></div>`}
+function renderNP(){const s=song(),L=lineIdx();tint();$('#np').innerHTML=`<button class="ib close" onclick="closeNP()">${I('down',24)}</button>
+ <div class="left">${cov(s)}<h1>${s.t}</h1><div class="sub">${s.a} · ${s.al}</div>
+ <div class="track" style="margin-top:24px" onclick="seek(event)"><i id="np-p" style="width:${st.t/s.d*100}%"></i></div><div class="times sub sm"><span id="np-t">${mmss(st.t)}</span><span>${mmss(s.d)}</span></div>
+ <div class="ctl"><button class="ib ${st.shuffle?'on':''}" onclick="st.shuffle=!st.shuffle;renderNP()">${I('shuffle')}</button><button class="ib" onclick="step(-1)">${I('prev',22)}</button><button class="ib play" onclick="toggle()">${I(st.play?'pause':'play',26)}</button><button class="ib" onclick="step(1)">${I('next',22)}</button><button class="ib heartb ${s.fav?'on':''}" onclick="fav(${s.id})">${I('heart')}</button></div>
+ <div class="row sub sm" style="justify-content:center;margin-top:16px"><span>${{standard:'标准',exhigh:'极高',lossless:'无损'}[s.q]}音质</span><span>·</span><span>来自缓存</span></div></div>
+ <div><div class="lt"><button class="chip ${st.lyrTr?'on':''}" onclick="st.lyrTr=!st.lyrTr;renderNP()">翻译</button></div><div id="lyr">${LRC.map((l,i)=>`<div class="ln ${i===L?'on':''}" onclick="jump(${i})">${l}${st.lyrTr?`<small>${TR[i]}</small>`:''}</div>`).join('')}</div></div>`;scrollLyr(false)}
+function scrollLyr(sm=true){const e=$('#lyr'),o=e&&e.querySelector('.on');if(o)e.scrollTo({top:o.offsetTop-e.clientHeight/2+o.clientHeight/2,behavior:sm?'smooth':'auto'})}
+const openNP=()=>{$('#np').classList.add('open');renderNP()},closeNP=()=>$('#np').classList.remove('open');
+const refresh=()=>{renderBar();renderView();if(npOpen())renderNP()};
+function playSong(id){st.cur=id;st.t=0;st.play=true;refresh()}
+function toggle(){st.play=!st.play;refresh()}
+function step(d){const i=st.queue.indexOf(st.cur);playSong(st.shuffle?Math.floor(Math.random()*S.length):st.queue[(i+d+st.queue.length)%st.queue.length])}
+function seek(e){const r=e.currentTarget.getBoundingClientRect();st.t=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*song().d;tick(true)}
+const jump=i=>{st.t=i*song().d/LRC.length+.1;tick(true)};
+const fav=id=>{S[id].fav=!S[id].fav;refresh()};
+let lastL=-1;
+function tick(f){const s=song(),p=st.t/s.d*100;[['#bp',p+'%'],['#np-p',p+'%']].forEach(([q,v])=>{const e=$(q);if(e)e.style.width=v});
+ const b=$('#bt'),d=$('#np-t');if(b)b.textContent=`${mmss(st.t)} / ${mmss(s.d)}`;if(d)d.textContent=mmss(st.t);
+ const L=lineIdx();if((L!==lastL||f)&&npOpen()){document.querySelectorAll('.ln').forEach((e,i)=>e.classList.toggle('on',i===L));scrollLyr();lastL=L}}
+setInterval(()=>{if(!st.play)return;st.t+=.5;if(st.t>=song().d)return step(1);tick()},500);
+document.addEventListener('keydown',e=>{if(e.target.tagName==='INPUT')return;if(e.code==='Space'){e.preventDefault();toggle()}if(e.key==='Escape')closeNP()});
+function setTheme(t){st.theme=t;localStorage.th=t;applyTheme();renderView()}
+
+function renderLogin(){const e=$('#login');if(!st.login){e.style.display='none';return}e.style.display='grid';const a=st.mode==='activate';
+ e.innerHTML=`<div class="lart"><i style="width:520px;height:520px;background:#f2b84b;left:-120px;top:-100px;opacity:.9"></i><i style="width:380px;height:380px;background:#1f3a4d;right:-80px;bottom:-60px;opacity:.85"></i><i style="width:200px;height:200px;background:#fbe3c4;right:120px;top:140px;opacity:.95"></i></div>
+ <div class="lform"><div class="lbox"><div class="brand" style="padding:0"><span class="logo"></span>Nestune</div><h1 style="margin-top:34px">${a?'设置你的密码':'欢迎回来'}</h1><div class="sub" style="margin-top:6px">${a?'使用管理员发给你的激活码首次登录':'登录你的私人音乐库'}</div>
+ <form onsubmit="event.preventDefault();${a?"if(this.p.value!==this.p2.value){toast('两次密码不一致');return}":''}st.login=false;renderLogin();toast('${a?'密码已设置，欢迎':'欢迎回来'}')">
+ <div class="field"><label class="sm sub">用户名</label><input value="ouse" required></div>
+ ${a?`<div class="field"><label class="sm sub">激活码</label><input value="K7QM-92XD-RT4F" required></div><div class="field"><label class="sm sub">新密码</label><input name="p" type="password" required minlength="8" placeholder="至少 8 位"></div><div class="field"><label class="sm sub">确认密码</label><input name="p2" type="password" required></div>`:`<div class="field"><label class="sm sub">密码</label><input type="password" value="password" required></div>`}
+ <button class="btn" type="submit">${a?'设置密码并进入':'登录'}</button></form>
+ <button class="link" style="margin-top:20px" onclick="st.mode='${a?'login':'activate'}';renderLogin()">${a?'已有密码？返回登录':'收到激活码？首次登录'}</button></div></div>`}
+
+applyTheme();renderShell();renderView();renderBar();renderLogin();
+if(location.hash==='#nologin'){st.login=false;renderLogin()}
+</script>
+</body>
+</html>

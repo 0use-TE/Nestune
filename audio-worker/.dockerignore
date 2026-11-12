@@ -1,0 +1,6 @@
+work
+state
+storage
+__pycache__
+.env
+vendor/*.zip

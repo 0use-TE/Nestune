@@ -1,0 +1,11 @@
+node_modules/
+.next/
+data/
+work/
+.env
+.env.*
+!.env.example
+*.log
+state/
+storage/
+__pycache__/
