@@ -7,6 +7,8 @@
     "build": "tauri build --bundles nsis -- --locked",
     "build:linux": "tauri build --bundles appimage,deb -- --locked",
     "build:macos": "tauri build --target universal-apple-darwin --bundles app,dmg -- --locked",
+    "android:init": "tauri android init --ci --skip-targets-install && node scripts/prepare-android.mjs",
+    "build:android": "tauri android build --apk --target aarch64 armv7 x86_64 --ci -- --locked",
     "tauri": "tauri"
   },
   "devDependencies": {

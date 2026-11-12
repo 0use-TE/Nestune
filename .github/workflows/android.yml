@@ -1,0 +1,69 @@
+name: Build Android client
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Android APK
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: clients/desktop
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: clients/desktop/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - name: Select Android NDK
+        run: |
+          ndk=$(find "$ANDROID_HOME/ndk" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          test -f "$ndk/source.properties"
+          echo "NDK_HOME=$ndk" >> "$GITHUB_ENV"
+          cat "$ndk/source.properties"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/desktop/src-tauri -> target
+          key: android
+          cache-on-failure: true
+      - name: Install CLI
+        run: npm ci --no-audit --no-fund
+      - name: Initialize Android project
+        run: npm run android:init
+      - name: Build release APK
+        run: npm run build:android
+      - name: Collect unsigned APK
+        run: |
+          mkdir -p packages
+          mapfile -t apks < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*release-unsigned.apk')
+          printf '%s\n' "${apks[@]}"
+          test "${#apks[@]}" -eq 1
+          cp "${apks[0]}" packages/Nestune-1.0.0-Android-Tauri-unsigned.apk
+          (cd packages && sha256sum *.apk > SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nestune-1.0.0-Android-Tauri-unsigned
+          path: clients/desktop/packages/
+          if-no-files-found: error
+          retention-days: 30
