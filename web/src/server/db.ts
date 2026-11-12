@@ -180,6 +180,7 @@ function open() {
   db.exec('BEGIN IMMEDIATE');
   try {
     const columns = db.prepare('PRAGMA table_info(listening_rooms)').all();
+    if (!columns.some(column => column.name === 'queue_data')) db.exec('ALTER TABLE listening_rooms ADD COLUMN queue_data TEXT');
     if (!columns.some(column => column.name === 'transport_version')) {
       db.exec('ALTER TABLE listening_rooms ADD COLUMN transport_version INTEGER NOT NULL DEFAULT 0');
     }

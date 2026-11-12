@@ -5,6 +5,7 @@ import { catalogId, catalogSong } from '@/server/catalog';
 import { userRoute } from '@/server/guard';
 import { body, fail, numericId, str } from '@/server/http';
 import { requireUpload } from '@/server/uploads';
+import { editListeningQueue, initializeListeningQueue, saveListeningQueue } from '@/server/listening-queue';
 import { acceptListening, answerFriend, controlListening, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, socialState, syncSocial } from '@/server/social';
 
 const options = { bucket: 'social' };
@@ -41,13 +42,14 @@ export const GET = userRoute((req, _ctx, user, sessionId) => {
 }, options);
 
 export const POST = userRoute(async (req, _ctx, user, sessionId) => {
-  const data = await body(req);
+  const data = await body(req, 65536);
   if (!data || typeof data !== 'object') throw fail(400, '请求无效');
   const listener = { userId: user.id, sessionId };
   switch (data.action) {
     case 'sync': {
       const version = data.transportVersion ?? 0;
       if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) throw fail(400, '播放版本无效');
+      if (data.seed !== undefined) await initializeListeningQueue(listener, id(data.roomId), data.seed);
       return syncSocial(listener, track(data.track), data.roomId == null ? undefined : id(data.roomId), playback(data.playback), version);
     }
     case 'visibility':
@@ -76,6 +78,8 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
       controlListening(listener, id(data.roomId), catalogId(data.songId), data.playing);
       break;
     case 'leave': leaveListening(listener, id(data.roomId)); break;
+    case 'saveRoomQueue': return { playlist: saveListeningQueue(listener, id(data.roomId), data.name) };
+    case 'roomQueue': await editListeningQueue(listener, id(data.roomId), data.command); break;
     default: throw fail(400, '未知操作');
   }
   return socialState(listener);

@@ -13,7 +13,8 @@ export const GET = userRoute(async (_req, _ctx, u) => {
   const row = one<{ data: string }>('SELECT data FROM queue WHERE user_id=?', u.id);
   const q: Saved = row ? JSON.parse(row.data) : { ids: [], index: 0, position: 0 };
   const onlineIds = q.ids.filter(id => !isUploadSong(id));
-  const online = onlineIds.length ? await songs(onlineIds) : [];
+  const online: Song[] = [];
+  for (let offset = 0; offset < onlineIds.length; offset += 100) online.push(...await songs(onlineIds.slice(offset, offset + 100)));
   const byId = new Map<string, Song>(online.map(song => [song.id, song]));
   const slots = q.ids.map(id => isUploadSong(id) ? visibleSong(u.id, { id } as Song) : byId.get(id));
   const index = slots.slice(0, q.index).filter(Boolean).length;

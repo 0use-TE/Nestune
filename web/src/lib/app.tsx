@@ -4,6 +4,7 @@ import { del, get, post, put } from './api';
 import { isDeviceSong, useDeviceMusic } from './device-music';
 import type { Me, PlaylistLite, Song } from './types';
 import { loadTint, seededTint } from './util';
+import { PLAYBACK_MODES, type PlaybackMode, type QueueCommand, type QueueSeed, type SharedQueue } from './shared-queue';
 
 /* ---------- playback clock (kept out of React context so ticks do not re-render the app) ---------- */
 type Clock = { time: number; duration: number };
@@ -12,8 +13,7 @@ const subs = new Set<() => void>();
 const setClock = (time: number, duration: number) => { clock = { time, duration }; subs.forEach(f => f()); };
 export const useClock = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f); }; }, () => clock, () => clock);
 
-const PLAYBACK_MODES = ['off', 'all', 'one', 'shuffle'] as const;
-type PlaybackMode = (typeof PLAYBACK_MODES)[number];
+type PersonalQueue = { songs: Song[]; index: number; position: number; mode: PlaybackMode };
 type Theme = 'auto' | 'light' | 'dark';
 type ToastKind = 'message' | 'invite';
 type Toast = { id: number; text: string; kind?: ToastKind };
@@ -31,6 +31,11 @@ export type AppCtx = {
   playbackPosition: () => number; followPlayback: (song: Song | null, position: number, playing: boolean) => void; setFollowingRoom: (following: boolean) => void;
   playbackRunning: () => boolean; setRoomTransport: (handler: ((playing?: boolean) => boolean) | null) => void;
   enqueue: (s: Song) => void; playNext: (s: Song) => void; removeFromQueue: (i: number) => void; jumpTo: (i: number) => void;
+  clearQueue: () => void; sharedQueue: boolean;
+  queueSeed: () => QueueSeed;
+  beginSharedQueue: () => void; endSharedQueue: () => void;
+  applyRoomQueue: (queue: SharedQueue, position: number, playing: boolean) => void;
+  setRoomQueueHandler: (handler: ((command: QueueCommand) => void) | null) => void;
   nowOpen: boolean; setNowOpen: (v: boolean) => void;
   menu: { song: Song; x: number; y: number } | null; openMenu: (s: Song, e: { clientX: number; clientY: number }) => void; closeMenu: () => void;
   toast: (t: string, kind?: ToastKind) => void; toasts: Toast[];
@@ -66,6 +71,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [saveDialog, setSaveDialog] = useState<Song | null>(null);
   const [audioInfo, setAudioInfo] = useState<{ quality?: string; source?: string } | null>(null);
 
+  const [sharedQueue, setSharedQueue] = useState(false);
+  const roomQueueHandler = useRef<((command: QueueCommand) => void) | null>(null);
+  const personalQueue = useRef<PersonalQueue | null>(null);
+  const roomKeys = useRef<string[]>([]);
+  const roomSignature = useRef('');
   const audio = useRef<HTMLAudioElement | null>(null);
   const live = useRef({ queue, index, playbackMode, playing });
   live.current = { queue, index, playbackMode, playing };
@@ -104,7 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     audio.current?.pause();
     if (audio.current) audio.current.removeAttribute('src');
     setQueue([]); setIndex(-1); setPlaying(false); setFavIds(new Set()); setPlaylists([]); setNowOpen(false);
-    restored.current = false; setClock(0, 0);
+    restored.current = false; setClock(0, 0); personalQueue.current = null; roomQueueHandler.current = null; followingRoom.current = false; setSharedQueue(false);
   }, []);
 
   const loadUserData = useCallback(async () => {
@@ -144,6 +154,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const go = useCallback((n: number) => { autoplay.current = true; pendingSeek.current = 0; setIndex(n); setLoadKey(k => k + 1); }, []);
 
   const next = useCallback((fromEnded = false) => {
+    if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'next', automatic: fromEnded }); return; }
     const { queue: q, index: i, playbackMode: mode } = live.current;
     if (!q.length) return;
     let n: number;
@@ -205,6 +216,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     a.addEventListener('canplay', () => setLoading(false));
     a.addEventListener('loadedmetadata', onMeta);
     a.addEventListener('ended', () => {
+      if (roomQueueHandler.current) { next(true); return; }
       if (followingRoom.current) { setPlaying(false); return; }
       if (live.current.playbackMode === 'one') { a.currentTime = 0; a.play().catch(() => {}); } else next(true);
     });
@@ -275,18 +287,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ms.setActionHandler('pause', () => { if (!roomTransport.current?.(false)) audio.current?.pause(); });
     ms.setActionHandler('previoustrack', () => prevRef.current());
     ms.setActionHandler('nexttrack', () => next());
-    ms.setActionHandler('seekto', d => { if (audio.current && d.seekTime != null) audio.current.currentTime = d.seekTime; });
+    ms.setActionHandler('seekto', d => { if (d.seekTime != null) { if (roomQueueHandler.current) roomQueueHandler.current({ type: 'seek', position: d.seekTime }); else if (audio.current) audio.current.currentTime = d.seekTime; } });
     ms.playbackState = playing ? 'playing' : 'paused';
   }, [playing, next]);
 
   // remember the queue between visits
   useEffect(() => {
-    if (!me || !restored.current || followingRoom.current) return;
+    if (!me || !restored.current || followingRoom.current || personalQueue.current) return;
     if (queue[index] && isDeviceSong(queue[index].id)) return;
     const onlineIds = queue.filter(song => !isDeviceSong(song.id)).slice(0, 500).map(song => song.id);
     const onlineIndex = queue.slice(0, Math.max(0, index)).filter(song => !isDeviceSong(song.id)).length;
     const t = setTimeout(() => {
-      if (followingRoom.current) return;
+      if (followingRoom.current || personalQueue.current) return;
       put('/api/me/queue', { ids: onlineIds, index: onlineIndex, position: Math.floor(audio.current?.currentTime || 0) }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
@@ -294,6 +306,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   /* ----- controls ----- */
   const play = useCallback((all: Song[], start = 0, mode?: PlaybackMode) => {
+    if (roomQueueHandler.current) {
+      const songs = all.filter(song => !isDeviceSong(song.id) && song.access?.playable !== false).slice(0, 500);
+      if (!songs.length) { toast('一起听需要使用双方都能访问的歌曲'); return; }
+      roomQueueHandler.current({ type: 'replace', songIds: songs.map(song => song.id), index: Math.max(0, songs.findIndex(song => song.id === all[start]?.id)), mode }); return;
+    }
     const songs = all.filter(s => s.access?.playable !== false);
     if (!songs.length) { toast(all[0]?.access?.reason || '这些歌曲暂时都无法播放'); return; }
     const target = all[Math.max(0, Math.min(start, all.length - 1))];
@@ -310,13 +327,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (a.paused) { setError(null); a.play().catch(() => {}); } else a.pause();
   }, []);
   const prev = useCallback(() => {
+    if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'prev' }); return; }
     const a = audio.current, { queue: q, index: i } = live.current;
     if (!a || !q.length) return;
     if (a.currentTime > 3) { a.currentTime = 0; return; }
     go(i > 0 ? i - 1 : q.length - 1);
   }, [go]);
   const prevRef = useRef(prev); prevRef.current = prev;
-  const seek = useCallback((t: number) => { const a = audio.current; if (a) { a.currentTime = Math.max(0, t); setClock(a.currentTime, clock.duration); } }, []);
+  const seek = useCallback((t: number) => { if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'seek', position: t }); return; } const a = audio.current; if (a) { a.currentTime = Math.max(0, t); setClock(a.currentTime, clock.duration); } }, []);
   const playbackPosition = useCallback(() => audio.current?.currentTime || 0, []);
   const playbackRunning = useCallback(() => !!audio.current && !audio.current.paused && !audio.current.ended && audio.current.readyState >= 2, []);
   const setRoomTransport = useCallback((handler: ((playing?: boolean) => boolean) | null) => { roomTransport.current = handler; }, []);
@@ -342,19 +360,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (shouldPlay && a.paused && !a.ended) a.play().catch(() => {});
     if (!shouldPlay && !a.paused) a.pause();
   }, []);
+  const queueSong = (type: 'append' | 'insertNext', song: Song) => {
+    if (!roomQueueHandler.current) return false;
+    if (isDeviceSong(song.id)) toast('设备本地文件需要先上传并分享，才能加入一起听');
+    else roomQueueHandler.current({ type, songId: song.id });
+    return true;
+  };
   const enqueue = useCallback((s: Song) => {
+    if (queueSong('append', s)) return;
     if (s.access?.playable === false) { toast(s.access.reason || '这首歌暂时无法播放'); return; }
     if (!live.current.queue.length) { autoplay.current = false; setQueue([s]); setIndex(0); setLoadKey(k => k + 1); }
     else setQueue(q => [...q, s]);
     toast('已加入播放队列');
   }, [toast]);
   const playNext = useCallback((s: Song) => {
+    if (queueSong('insertNext', s)) return;
     if (s.access?.playable === false) { toast(s.access.reason || '这首歌暂时无法播放'); return; }
     if (!live.current.queue.length) { play([s]); return; }
     setQueue(q => { const i = live.current.index; const c = q.slice(); c.splice(i + 1, 0, s); return c; });
     toast('将在下一首播放');
   }, [play, toast]);
   const removeFromQueue = useCallback((i: number) => {
+    if (roomQueueHandler.current) { if (roomKeys.current[i]) roomQueueHandler.current({ type: 'remove', key: roomKeys.current[i] }); return; }
     const { queue: q, index: cur } = live.current;
     if (i === cur) {
       const rest = q.filter((_, k) => k !== i);
@@ -362,6 +389,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setQueue(rest); autoplay.current = live.current.playing; setIndex(Math.min(i, rest.length - 1)); setLoadKey(k => k + 1);
     } else { setQueue(q.filter((_, k) => k !== i)); if (i < cur) setIndex(cur - 1); }
     function resetUserStatePlayer() { audio.current?.pause(); audio.current?.removeAttribute('src'); setQueue([]); setIndex(-1); setPlaying(false); setClock(0, 0); }
+  }, []);
+
+  const clearQueue = useCallback(() => {
+    if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'clear' }); return; }
+    audio.current?.pause(); audio.current?.removeAttribute('src');
+    autoplay.current = false; pendingSeek.current = 0;
+    setQueue([]); setIndex(-1); setPlaying(false); setLoading(false); setError(null); setAudioInfo(null); setNowOpen(false); setClock(0, 0);
+    toast('播放列表已清空');
+  }, [toast]);
+  const queueSeed = useCallback((): QueueSeed => {
+    const { queue: songs, index, playbackMode } = live.current;
+    const online = songs.filter(song => !isDeviceSong(song.id)).slice(0, 500);
+    return { ids: online.map(song => song.id), index: Math.max(0, songs.slice(0, index).filter(song => !isDeviceSong(song.id)).length),
+      position: isDeviceSong(songs[index]?.id ?? '') ? 0 : audio.current?.currentTime || 0,
+      playing: !!audio.current && !audio.current.paused, mode: playbackMode };
+  }, []);
+  const beginSharedQueue = useCallback(() => {
+    if (personalQueue.current) return;
+    const snapshot: PersonalQueue = { songs: [...live.current.queue], index: live.current.index, position: audio.current?.currentTime || 0, mode: live.current.playbackMode };
+    let saved = snapshot;
+    try {
+      const existing = sessionStorage.getItem('nt-personal-queue-' + me?.id);
+      if (existing) { const parsed = JSON.parse(existing); if (Array.isArray(parsed.songs) && Number.isInteger(parsed.index) && Number.isFinite(parsed.position) && PLAYBACK_MODES.includes(parsed.mode)) saved = parsed; }
+      sessionStorage.setItem('nt-personal-queue-' + me?.id, JSON.stringify(saved));
+    } catch { /* The in-memory copy still preserves this session. */ }
+    personalQueue.current = saved; roomSignature.current = ''; setSharedQueue(true);
+    const seed = queueSeed();
+    put('/api/me/queue', { ids: seed.ids, index: seed.index, position: seed.position }).catch(() => {});
+  }, [me?.id, queueSeed]);
+  const applyRoomQueue = useCallback((snapshot: SharedQueue, position: number, shouldPlay: boolean) => {
+    const songs = snapshot.entries.map(entry => entry.song);
+    const song = songs[snapshot.index];
+    const signature = snapshot.entries.map(entry => entry.key).join(',') + ':' + snapshot.index + ':' + snapshot.mode;
+    const previousKey = roomKeys.current[live.current.index];
+    const changedSong = live.current.queue[live.current.index]?.id !== song?.id || previousKey !== snapshot.entries[snapshot.index]?.key;
+    roomKeys.current = snapshot.entries.map(entry => entry.key);
+    if (roomSignature.current !== signature) {
+      setQueue(songs); setIndex(snapshot.index); setPlaybackMode(snapshot.mode);
+      live.current = { ...live.current, queue: songs, index: snapshot.index, playbackMode: snapshot.mode };
+      roomSignature.current = signature;
+    }
+    if (!song) { audio.current?.pause(); audio.current?.removeAttribute('src'); setPlaying(false); setLoading(false); setError(null); setAudioInfo(null); setNowOpen(false); setClock(0, 0); return; }
+    if (changedSong) { autoplay.current = shouldPlay; pendingSeek.current = position; setLoadKey(key => key + 1); }
+    else followPlayback(song, position, shouldPlay);
+  }, [followPlayback]);
+  const endSharedQueue = useCallback(() => {
+    let saved = personalQueue.current;
+    if (!saved) {
+      try { const stored = JSON.parse(sessionStorage.getItem('nt-personal-queue-' + me?.id) || 'null');
+        if (stored && Array.isArray(stored.songs) && Number.isInteger(stored.index) && Number.isFinite(stored.position) && PLAYBACK_MODES.includes(stored.mode)) saved = stored;
+      } catch { /* ignore */ }
+    }
+    if (!saved) return;
+    personalQueue.current = null; roomQueueHandler.current = null; roomKeys.current = []; roomSignature.current = ''; followingRoom.current = false; setSharedQueue(false);
+    try { sessionStorage.removeItem('nt-personal-queue-' + me?.id); } catch { /* ignore */ }
+    audio.current?.pause(); autoplay.current = false; pendingSeek.current = saved.position;
+    setQueue(saved.songs); setIndex(saved.index); setPlaybackMode(saved.mode); setPlaying(false); setError(null); setLoadKey(key => key + 1);
+    if (!saved.songs.length) { audio.current?.removeAttribute('src'); setNowOpen(false); setClock(0, 0); }
+    toast('已恢复你的个人列表，播放已暂停');
+  }, [me?.id, toast]);
+  const setRoomQueueHandler = useCallback((handler: ((command: QueueCommand) => void) | null) => { roomQueueHandler.current = handler; }, []);
+  const jumpTo = useCallback((index: number) => {
+    if (roomQueueHandler.current) { if (roomKeys.current[index]) roomQueueHandler.current({ type: 'jump', key: roomKeys.current[index] }); return; }
+    go(index);
+  }, [go]);
+  const cyclePlaybackMode = useCallback(() => {
+    if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'mode' }); return; }
+    setPlaybackMode(mode => PLAYBACK_MODES[(PLAYBACK_MODES.indexOf(mode) + 1) % PLAYBACK_MODES.length]);
   }, []);
 
   /* ----- favourites ----- */
@@ -381,12 +476,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveDialog, openSave: (s: Song) => setSaveDialog(s), closeSave: () => setSaveDialog(null), audioInfo,
     queue, index, current, playing, loading, error, playbackMode,
     play, toggle, next: () => next(), prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport,
-    cyclePlaybackMode: () => setPlaybackMode(mode => PLAYBACK_MODES[(PLAYBACK_MODES.indexOf(mode) + 1) % PLAYBACK_MODES.length]),
-    enqueue, playNext, removeFromQueue, jumpTo: go,
+    cyclePlaybackMode, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler,
+    enqueue, playNext, removeFromQueue, jumpTo,
     nowOpen, setNowOpen, menu, openMenu: (song, e) => setMenu({ song, x: e.clientX, y: e.clientY }), closeMenu: () => setMenu(null),
     toast, toasts, theme, setTheme, showTr, setShowTr, tint,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, enqueue, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
+  }), [clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, enqueue, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

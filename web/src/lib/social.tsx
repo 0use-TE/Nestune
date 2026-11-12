@@ -1,11 +1,10 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { get, post } from './api';
+import { post } from './api';
 import { useApp } from './app';
 import { isDeviceSong } from './device-music';
 import type { ListeningRoom, SocialState } from './social-types';
-import type { Song } from './types';
 
 const NOTICE_DEFAULTS = { messageToast: true, messageSound: false, inviteToast: true };
 type Notices = typeof NOTICE_DEFAULTS;
@@ -28,7 +27,7 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
 function SocialSession({ userId, children }: { userId: number; children: ReactNode }) {
   const app = useApp();
-  const { setFollowingRoom, followPlayback, setRoomTransport } = app;
+  const { setFollowingRoom, setRoomTransport, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler } = app;
   const player = useRef(app);
   player.current = app;
   const latest = useRef<SocialState | null>(null);
@@ -43,7 +42,6 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
   const [state, setState] = useState<SocialState | null>(null);
   const [error, setError] = useState('');
   const [playbackError, setPlaybackError] = useState('');
-  const [sharedSong, setSharedSong] = useState<Song | null>(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -123,7 +121,8 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
     async function pulse() {
       const current = player.current;
       const room = latest.current?.rooms.find(item => item.active && item.onThisDevice);
-      const hostCanPublish = room?.hostId === userId && (room.transportVersion === 0 ||
+      const seed = room?.hostId === userId && !room.queue ? current.queueSeed() : undefined;
+      const hostCanPublish = room?.hostId === userId && !current.loading && (room.transportVersion === 0 ||
         (applied.current?.id === room.id && applied.current.version === room.transportVersion));
       const song = current.current && !isDeviceSong(current.current.id) ? current.current : null;
       const playing = current.playing && !current.loading;
@@ -132,7 +131,8 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
         await action({
           action: 'sync',
           track: playing && song && name ? { id: song.id, name, artist: song.artists.map(a => a.name).join(' / ').slice(0, 160) } : null,
-          roomId: hostCanPublish ? room.id : undefined,
+          roomId: hostCanPublish || seed ? room!.id : undefined,
+          seed,
           transportVersion: hostCanPublish ? room.transportVersion : undefined,
           playback: hostCanPublish && song ? { songId: song.id, position: current.playbackPosition(), playing: current.playbackRunning() } : null,
         });
@@ -153,40 +153,30 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
     openedRoom.current = activeRoom.id;
     app.setNowOpen(true);
   }, [activeRoom, app.current, app.setNowOpen, userId]);
-  const guestRoom = activeRoom?.guestId === userId ? activeRoom : undefined;
-  const songId = guestRoom?.playback?.songId;
-  const following = !!guestRoom;
   useEffect(() => {
-    setFollowingRoom(following);
-    return () => setFollowingRoom(false);
-  }, [following, setFollowingRoom]);
-
-  useEffect(() => {
+    if (!state || !app.ready) return;
+    if (!activeRoom) {
+      setRoomQueueHandler(null); setFollowingRoom(false); endSharedQueue(); applied.current = null;
+      return;
+    }
+    beginSharedQueue();
+    setFollowingRoom(activeRoom.guestId === userId);
+    setRoomQueueHandler(command => {
+      const current = latest.current?.rooms.find(room => room.active && room.onThisDevice);
+      if (!current?.queue) { player.current.toast('共同列表正在准备中'); return; }
+      if (command.type === 'next' && command.automatic && current.hostId !== userId) return;
+      action({ action: 'roomQueue', roomId: current.id, command: command.type === 'next' && command.automatic ? { ...command, version: current.transportVersion } : command })
+        .catch(e => player.current.toast(e instanceof Error ? e.message : '无法更新共同列表'));
+    });
+    if (!activeRoom.queue) { if (activeRoom.guestId === userId) player.current.followPlayback(null, 0, false); return; }
+    const playback = activeRoom.playback;
+    if (activeRoom.guestId === userId || applied.current?.id !== activeRoom.id || applied.current.version !== activeRoom.transportVersion) {
+      applyRoomQueue(activeRoom.queue, roomPosition(activeRoom, state.serverTime, receivedAt.current), !!playback?.playing);
+      applied.current = { id: activeRoom.id, version: activeRoom.transportVersion };
+    }
     setPlaybackError('');
-    if (!songId) { setSharedSong(null); return; }
-    let live = true;
-    get<{ song: Song }>('/api/songs/' + songId).then(({ song }) => {
-      if (!live) return;
-      if (song.access?.playable === false) setPlaybackError(song.access.reason || '你的账号暂时无法播放这首歌');
-      else setSharedSong(song);
-    }).catch(e => { if (live) setPlaybackError(e.message); });
-    return () => { live = false; };
-  }, [songId]);
-
-  useEffect(() => {
-    if (!guestRoom || !state) return;
-    const playback = guestRoom.playback;
-    if (!playback || sharedSong?.id !== playback.songId) { followPlayback(null, 0, false); return; }
-    followPlayback(sharedSong, roomPosition(guestRoom, state.serverTime, receivedAt.current), playback.playing);
-  }, [state, guestRoom, sharedSong, followPlayback]);
-
-  useEffect(() => {
-    if (!state || !activeRoom || activeRoom.hostId !== userId || !activeRoom.transportVersion || !activeRoom.playback) return;
-    if (applied.current?.id === activeRoom.id && applied.current.version === activeRoom.transportVersion) return;
-    const song = player.current.current;
-    if (song?.id === activeRoom.playback.songId) followPlayback(song, roomPosition(activeRoom, state.serverTime, receivedAt.current), activeRoom.playback.playing);
-    applied.current = { id: activeRoom.id, version: activeRoom.transportVersion };
-  }, [state, activeRoom, userId, followPlayback]);
+    return () => { setRoomQueueHandler(null); };
+  }, [state, activeRoom, app.ready, action, userId, beginSharedQueue, endSharedQueue, applyRoomQueue, setFollowingRoom, setRoomQueueHandler]);
 
   return <Context.Provider value={{ state, error, playbackError, action, notices, setNotice }}>{children}</Context.Provider>;
 }

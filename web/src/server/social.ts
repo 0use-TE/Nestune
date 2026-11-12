@@ -3,6 +3,7 @@ import { isUploadSong } from '@/lib/upload-types';
 import { all, db, now, one, run } from './db';
 import { fail } from './http';
 import { visibleUpload } from './uploads';
+import { readSharedQueue } from './listening-queue';
 
 type MessageRow = Omit<Message, 'song' | 'invite'> & { song: string | null; inviteId: number | null };
 function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRow): Message {
@@ -17,7 +18,7 @@ function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRo
   return { ...message, song: shared };
 }
 type Friendship = { requested_by: number; accepted: number };
-type RoomRow = { id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null; active: number; song_id: string | null; position: number; playing: number; updated_at: number; transport_version: number };
+type RoomRow = { queue_data: string | null; id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null; active: number; song_id: string | null; position: number; playing: number; updated_at: number; transport_version: number };
 type Listener = { userId: number; sessionId: string };
 type DirectoryRow = { id: number; username: string; name: string; avatar: string; visible: number; last_seen: number; track: string | null; requested_by: number | null; accepted: number | null };
 const pair = (a: number, b: number) => a < b ? [a, b] : [b, a];
@@ -78,6 +79,7 @@ export function socialState({ userId: user, sessionId }: Listener): SocialState 
       const onThisDevice = row.host_id === user ? row.host_session_id === sessionId : !row.active || row.guest_session_id === sessionId;
       return {
         id: row.id, hostId: row.host_id, guestId: row.guest_id, active: !!row.active, onThisDevice, updatedAt: row.updated_at, transportVersion: row.transport_version,
+        queue: onThisDevice && row.active ? readSharedQueue(row) : null,
         playback: onThisDevice && row.song_id && canListenTogether(row.host_id, row.guest_id, row.song_id)
           ? { songId: row.song_id, position: row.position, playing: !!row.playing } : null,
       };
@@ -101,8 +103,8 @@ export function syncSocial(listener: Listener, track: ListeningTrack | null, roo
   run(`INSERT INTO social_presence(user_id,last_seen,track) VALUES(?,?,?) ON CONFLICT(user_id)
     DO UPDATE SET last_seen=excluded.last_seen,track=excluded.track WHERE visible=1`, user, time, visibleTrack ? JSON.stringify(visibleTrack) : null);
   if (room) run(`UPDATE listening_rooms SET song_id=?,position=?,playing=?,updated_at=?
-    WHERE id=? AND host_id=? AND host_session_id=? AND active=1 AND updated_at>=? AND transport_version=?`, playback?.songId ?? null, playback?.position ?? 0,
-    Number(playback?.playing ?? false), time, room, user, sessionId, time - 90_000, version);
+    WHERE id=? AND host_id=? AND host_session_id=? AND active=1 AND updated_at>=? AND transport_version=? AND (queue_data IS NULL OR song_id IS ?)`, playback?.songId ?? null, playback?.position ?? 0,
+    Number(playback?.playing ?? false), time, room, user, sessionId, time - 90_000, version, playback?.songId ?? null);
   return socialState(listener);
 }
 
