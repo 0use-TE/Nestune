@@ -1,6 +1,6 @@
 # Nestune installable clients
 
-The clients open `https://music.0use.net/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package. Android packaging is currently stopped at the user's request.
+The clients open `https://music.0use.net/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
 ## Windows x64 — Tauri V1.0.0
 
@@ -20,7 +20,7 @@ The installer downloads WebView2 only when it is missing. The browser engine and
 
 The webview stays on the music HTTPS origin; external HTTPS links open in the system browser. Browser file access still requires the user's permission. No Tauri command capabilities are granted to remote web content. `--smoke-test` starts a hidden window with an isolated temporary browser profile for runtime checks; it runs until explicitly closed. The release is not signed with a public Windows code-signing certificate.
 
-For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; the `frontendDist` URL in `src-tauri/tauri.conf.json` and the trusted origin in `src/main.rs` must agree when changing domains.
+For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; the `frontendDist` URL in `src-tauri/tauri.conf.json` and the trusted origin in `src/lib.rs` must agree when changing domains.
 
 ## Linux x64 and macOS universal — Tauri V1.0.0
 
@@ -60,7 +60,21 @@ Run `./build-windows.ps1` with the Inno Setup compiler available. Compiler and b
 
 The installer has no public Windows code-signing certificate; Windows may show an unknown-publisher notice. It is not an offline music client.
 
-## Android
+## Android — Tauri V1.0.0
+
+The Android client uses the same Rust shell in `desktop/`, with `tauri.android.conf.json` setting the Android package to `net.ouse.nestune`. It requires Android 7.0+ and the system Android WebView; a TWA-compatible browser is no longer required. The app opens the live HTTPS music site and requires an internet connection. Web changes appear without reinstalling; native shell changes require a new APK. Background playback and lock-screen controls have not been certified on physical Android devices.
+
+The [Android workflow](https://github.com/0use-TE/Nestune/actions/workflows/android.yml) is started manually with **Run workflow**. It builds one unsigned release APK with ARM64, ARMv7 and x86-64 native libraries. No signing key or keystore password is uploaded to GitHub. Download and extract its artifact, verify the included SHA-256 checksum, then sign locally:
+
+```powershell
+./clients/sign-tauri-android.ps1 -UnsignedApk ./path/to/Nestune-1.0.0-Android-Tauri-unsigned.apk
+```
+
+The script uses the existing private credentials under `%USERPROFILE%/.nestune/signing/`, aligns and signs the APK, verifies its signature against the existing published Android certificate, checks the package/version, and writes `releases/1.0.0-tauri/android/Nestune-1.0.0-Android-Tauri.apk` and `SHA256SUMS.txt`. It requires JDK 21 and Android SDK Build Tools 36. The private release key must be backed up securely and must never be shared with APK recipients. Version name stays `1.0.0`; Android version code is `2`, allowing upgrades from the earlier TWA package with version code `1` using the same signing key. Android may require signing in again because the native WebView has its own cookie storage.
+
+For a local build, install the [Tauri Android prerequisites](https://v2.tauri.app/start/prerequisites/#android), set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME`, and install the ARM64, ARMv7 and x86-64 Rust Android targets. From `clients/desktop/`, run `npm ci`, `npm run android:init`, and `npm run build:android`. The init script generates the Android project and Nestune launcher icons; generated Android files stay git-ignored. Sign the generated release APK using the script above. Remote web content receives no native Tauri command capabilities.
+
+## Android — previous TWA client
 
 `android/` builds a release APK using Android Browser Helper (Trusted Web Activity). Requires Android 7+ and a compatible TWA browser, such as Chrome. Without a TWA browser the helper can use a browser tab. No advertising, analytics or push delegation is configured.
 
