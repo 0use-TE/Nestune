@@ -24,7 +24,7 @@ For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rus
 
 ## Linux x64 and macOS universal — Tauri V1.0.0
 
-The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**. Download the packages from a successful run's **Artifacts** section. Artifacts are retained for 30 days; these are build artifacts rather than a public GitHub Release.
+The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Download the packages from a successful job's **Artifacts** section. Artifacts are retained for 30 days; these are build artifacts rather than a public GitHub Release.
 
 | Platform | Packages | Checks |
 | --- | --- | --- |
