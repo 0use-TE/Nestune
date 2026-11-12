@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build --bundles nsis -- --locked",
+    "build:linux": "tauri build --bundles appimage,deb -- --locked",
+    "build:macos": "tauri build --target universal-apple-darwin --bundles app,dmg -- --locked",
     "tauri": "tauri"
   },
   "devDependencies": {
