@@ -696,7 +696,8 @@ main{overflow-y:auto;padding:38px 48px 150px}
   :root[data-keyboard] #tabbar{height:64px;padding-bottom:0}
   :root[data-keyboard] #bar{display:none}
   :root[data-keyboard] #main{padding-bottom:80px}
-  :root[data-keyboard] #app #main:has(>.wrap>.chat-page){padding-bottom:76px}
+  :root[data-keyboard] #app #main:has(>.wrap>.chat-page),
+  :root[data-keyboard] #app:has(~#bar) #main:has(>.wrap>.chat-page){padding-bottom:76px}
 }
 
 .share-playlist-sheet{height:min(520px,100%)}
