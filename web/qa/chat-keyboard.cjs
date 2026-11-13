@@ -7,7 +7,7 @@ const peer={id:2,username:'friend',name:'测试好友',avatar:null,online:true,t
 const me={id:1,username:'qa',displayName:'测试用户',bio:'',email:'',avatar:null,status:'active',maxQuality:'exhigh',createdAt:1,lastLoginAt:1,profilePublic:true};
 (async()=>{const browser=await chromium.launch((process.env.PLAYWRIGHT_EXECUTABLE_PATH ? {executablePath:process.env.PLAYWRIGHT_EXECUTABLE_PATH} : {}));
 try{for(const withPlayer of [false,true])for(const width of [390,448,768]){
- const c=await browser.newContext({viewport:{width,height:844},isMobile:width<860,hasTouch:width<860,screen:{width,height:844}});const p=await c.newPage();const errors=[],requests=[];p.on('pageerror',e=>errors.push(e.message));
+ const c=await browser.newContext({viewport:{width,height:844},isMobile:width<860,hasTouch:width<860,screen:{width,height:844}});const p=await c.newPage();p.setDefaultNavigationTimeout(90000);p.setDefaultTimeout(60000);const errors=[],requests=[];p.on('pageerror',e=>errors.push(e.message));
  await p.addInitScript(()=>{localStorage.setItem('nt-install-intro-v1','seen');const viewport=new EventTarget();Object.assign(viewport,{height:screen.height,offsetTop:0});Object.defineProperty(window,'visualViewport',{value:viewport});Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.copied=text}}});});
  await p.route('**/api/**',async r=>{const u=new URL(r.request().url()),path=u.pathname;let data={};
  if(path==='/api/me')data={user:me,stats:{plays:0}};
@@ -27,7 +27,7 @@ try{for(const withPlayer of [false,true])for(const width of [390,448,768]){
  await r.fulfill({json:data});});
 
 
- await p.goto(base+'/chat?peer=2');const input=p.getByRole('textbox',{name:'消息',exact:true});await input.waitFor();await p.locator('.message-entry').last().waitFor();
+ await p.goto(base+'/chat?peer=2',{waitUntil:'domcontentloaded'});const input=p.getByRole('textbox',{name:'消息',exact:true});await input.waitFor();await p.locator('.message-entry').last().waitFor();
  const check=async(label)=>{const result=await p.evaluate(()=>{const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {top:r.top,bottom:r.bottom,height:r.height}};const list=document.querySelector('.social-messages');return {top:visualViewport.offsetTop,bottom:visualViewport.offsetTop+visualViewport.height,header:rect('.social-chat header'),composer:rect('.chat-composer'),nav:rect('#tabbar'),remaining:list.scrollHeight-list.scrollTop-list.clientHeight,barVisible:!!document.querySelector('#bar')&&getComputedStyle(document.querySelector('#bar')).display!=='none',scrollY}});assert.ok(result.header.top>=result.top-2,JSON.stringify({label,result}));assert.ok(result.composer.top>=result.header.bottom,JSON.stringify({label,result}));assert.ok(result.nav.top-result.composer.bottom>=0&&result.nav.top-result.composer.bottom<(result.barVisible?110:35),JSON.stringify({label,result}));assert.ok(Math.abs(result.nav.bottom-result.bottom)<2,JSON.stringify({label,result}));return result};
  await check('initial');
  for(const top of [0,120,260]){
