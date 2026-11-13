@@ -23,7 +23,11 @@ if (!manifest.includes('android:usesCleartextTraffic="')) {
 } else {
   manifest = manifest.replace(/android:usesCleartextTraffic="[^"]*"/, 'android:usesCleartextTraffic="false"');
 }
+manifest = manifest.replace('</manifest>', '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n</manifest>');
+manifest = manifest.replace('</application>', '  <service android:name=".NativeMediaService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n</application>');
 writeFileSync(manifestPath, manifest);
+cpSync(path.join(root, 'android/MainActivity.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/MainActivity.kt'));
+cpSync(path.join(root, 'android/NativeMediaService.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/NativeMediaService.kt'));
 
 // The release APK stays unsigned in CI. The private release key remains on the owner's PC.
 const gradlePath = path.join(android, 'app/build.gradle.kts');
@@ -32,4 +36,5 @@ const gradle = readFileSync(gradlePath, 'utf8');
 if (!gradle.includes('applicationId = "net.ouse.nestune"')) {
   throw new Error('Unexpected Android application ID');
 }
+writeFileSync(gradlePath, gradle.replace('dependencies {', 'dependencies {\n    implementation("androidx.webkit:webkit:1.14.0")'));
 console.log('Android project ready: net.ouse.nestune, production HTTPS origin, Nestune icons.');
