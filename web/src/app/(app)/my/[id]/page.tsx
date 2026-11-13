@@ -18,6 +18,7 @@ export default function MyPlaylistPage() {
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [preparingShare, setPreparingShare] = useState(false);
   const [name, setName] = useState('');
 
   useEffect(() => {
@@ -43,8 +44,14 @@ export default function MyPlaylistPage() {
     setPl(result.playlist); await app.reloadPlaylists();
   }
   async function prepareShare() {
-    if (!app.me?.profilePublic) throw new Error('请先在设置中开启公开个人主页');
-    if (!pl?.isPublic) await publish(true);
+    if (preparingShare) return;
+    setPreparingShare(true);
+    try {
+      if (!app.me?.profilePublic) throw new Error('请先在设置中开启公开个人主页');
+      if (!pl?.isPublic) await publish(true);
+      setSharing(true);
+    } catch (e) { app.toast(e instanceof Error ? e.message : '分享失败'); }
+    finally { setPreparingShare(false); }
   }
 
   if (err) return <div className="note">{err}</div>;
@@ -54,11 +61,11 @@ export default function MyPlaylistPage() {
       <Hero cover={songs[0]?.cover} seed={`pl${pl.id}`} tag="我的歌单" title={pl.name} sub={`${songs.length} 首歌曲`}>
         <button className="btn light" onClick={() => app.play(songs)} disabled={!songs.length}><Icon n="play" s={16} />播放全部</button>
         <button className="btn ghost" onClick={() => setEditing(true)}>重命名</button>
-        <button className="btn ghost" onClick={() => setSharing(true)}>分享</button>
+        <button className="btn ghost" disabled={preparingShare} onClick={prepareShare}>{preparingShare ? <Loading inline label="正在准备分享" /> : '分享'}</button>
         <button className="btn ghost" aria-pressed={!!pl.isPublic} onClick={() => publish(!pl.isPublic).catch(e => app.toast(e.message))}>{pl.isPublic ? '公开' : '私密'}</button>
         <button className="btn ghost" onClick={remove}><Icon n="trash" s={16} />删除</button>
       </Hero>
-      {sharing && <SharePlaylist playlist={pl} prepare={prepareShare} onClose={() => setSharing(false)} />}
+      {sharing && <SharePlaylist playlist={pl} onClose={() => setSharing(false)} />}
       {editing && (
         <form className="row" style={{ marginTop: 20 }} onSubmit={e => { e.preventDefault(); rename(); }}>
           <div className="field" style={{ margin: 0, flex: 1, maxWidth: 360 }}><input value={name} maxLength={40} onChange={e => setName(e.target.value)} autoFocus /></div>

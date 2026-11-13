@@ -9,7 +9,7 @@ import { Avatar } from './Cover';
 import { Icon } from './Icon';
 import { Loading } from './Loading';
 
-export function SharePlaylist({ playlist, prepare, onClose }: { playlist: PlaylistLite; prepare?: () => Promise<void>; onClose: () => void }) {
+export function SharePlaylist({ playlist, onClose }: { playlist: PlaylistLite; onClose: () => void }) {
   const app = useApp();
   const social = useSocial();
   const [query, setQuery] = useState('');
@@ -20,7 +20,6 @@ export function SharePlaylist({ playlist, prepare, onClose }: { playlist: Playli
     if (busy !== null) return;
     setBusy(peer ?? 'copy');
     try {
-      await prepare?.();
       if (peer === undefined) {
         await navigator.clipboard.writeText(new URL(`/shared/${playlist.id}`, location.origin).href);
         app.toast('链接已复制'); onClose();
