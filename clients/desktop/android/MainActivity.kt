@@ -6,6 +6,11 @@ import android.os.Environment
 import android.net.Uri
 import android.os.Build
 import android.webkit.WebView
+import android.view.ViewGroup
+import android.view.WindowManager
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
@@ -16,6 +21,22 @@ import java.lang.ref.WeakReference
 class MainActivity : TauriActivity() {
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+            ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
+                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+                val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+                val layout = view.layoutParams as? ViewGroup.MarginLayoutParams
+                val bottom = maxOf(bars.bottom, ime.bottom)
+                if (layout != null && (layout.leftMargin != bars.left || layout.topMargin != bars.top || layout.rightMargin != bars.right || layout.bottomMargin != bottom)) {
+                    layout.setMargins(bars.left, bars.top, bars.right, bottom)
+                    view.layoutParams = layout
+                }
+                insets
+            }
+            ViewCompat.requestApplyInsets(webView)
+        } else window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         NativeMediaService.webView = WeakReference(webView)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(webView, "NestuneNative", setOf("https://music.0use.net")) { _, message, origin, mainFrame, reply ->
