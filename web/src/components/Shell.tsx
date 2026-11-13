@@ -16,6 +16,7 @@ import { NowPlaying } from './NowPlaying';
 import { PlayerBar } from './PlayerBar';
 import { QueuePopover } from './PlaybackQueue';
 import { StartupLoading } from './StartupLoading';
+import { dismissTopOverlay } from '@/lib/overlays';
 
 const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/chat', '聊天', 'lyrics']] as const;
 
@@ -35,6 +36,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const target = window as Window & { __nestuneBack?: () => boolean };
     target.__nestuneBack = () => {
+      if (dismissTopOverlay()) return true;
       if (queueOpen) { closeQueue(); return true; }
       if (app.menu) { app.closeMenu(); return true; }
       if (app.saveDialog) { app.closeSave(); return true; }

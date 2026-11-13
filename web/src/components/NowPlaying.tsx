@@ -14,6 +14,7 @@ import { FloatingLyrics } from './FloatingLyrics';
 import { Icon } from './Icon';
 import { PlayerLyrics } from './PlayerLyrics';
 import { PlayerTogether } from './PlayerTogether';
+import { Sheet } from './Sheet';
 
 const PLAYBACK_ICONS = {
   off: ['repeatOff', '不循环'],
@@ -34,6 +35,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const deviceSong = !!songId && isDeviceSong(songId);
   const [lyrics, setLyrics] = useState<{ id: string; lines: LyricLine[]; credits: string[]; plainText?: string } | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [creditsOpen, setCreditsOpen] = useState(false);
   const [mobileCover, setMobileCover] = useState(true);
   const [keepPlayerContents, setKeepPlayerContents] = useState(false);
   const [chatPeer, setChatPeer] = useState<Person | null>(null);
@@ -77,7 +79,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const getDeviceLyrics = app.deviceMusic.getLyrics;
 
   useEffect(() => {
-    if (!app.nowOpen) { setChatPeer(null); setMobilePage('playback'); }
+    if (!app.nowOpen) { setCreditsOpen(false); setChatPeer(null); setMobilePage('playback'); }
     if (app.nowOpen) {
       setKeepPlayerContents(true);
       return;
@@ -184,10 +186,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
               <div className="np-meta sub">
                 <span>{songDetails}</span>
                 {!!currentLyrics?.credits.length && (
-                  <details className="song-credits" key={songId}>
-                    <summary className="ib" aria-label="制作信息" title="制作信息"><Icon n="info" s={15} /></summary>
-                    <ul>{currentLyrics.credits.map((credit, index) => <li key={index}>{credit}</li>)}</ul>
-                  </details>
+                  <button type="button" className="ib song-credits-toggle" aria-label="制作信息" title="制作信息" onClick={() => setCreditsOpen(true)}><Icon n="info" s={15} /></button>
                 )}
               </div>
             </div>
@@ -234,6 +233,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           <Conversation key={conversationPeer.id} person={conversationPeer} userId={app.me!.id} visible={app.nowOpen && mobilePage === 'chat'} />
         </div>}
       </div>
+      {creditsOpen && app.nowOpen && currentLyrics?.credits.length ? <Sheet title="制作信息" onClose={() => setCreditsOpen(false)}><ul className="credits-list">{currentLyrics.credits.map((credit, index) => <li key={index}>{credit}</li>)}</ul></Sheet> : null}
       <FloatingLyrics visible={lyricsPinned && !app.nowOpen} text={currentLine?.text || lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
     </>
   );

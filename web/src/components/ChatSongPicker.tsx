@@ -6,6 +6,7 @@ import { isDeviceSong } from '@/lib/device-music';
 import type { Song } from '@/lib/types';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
+import { Sheet } from './Sheet';
 
 export function ChatSongPicker({ current, busy, onShare, onClose }: {
   current: Song | null; busy: boolean; onShare: (id: string) => void; onClose: () => void;
@@ -33,11 +34,7 @@ export function ChatSongPicker({ current, busy, onShare, onClose }: {
   const songs = keyword ? matches?.songs ?? [] : shareable ? [shareable] : [];
 
   return (
-    <section className="chat-song-picker" aria-label="分享歌曲">
-      <div className="chat-song-heading">
-        <h3>分享歌曲</h3>
-        <button type="button" className="ib" aria-label="关闭歌曲选择" onClick={onClose}><Icon n="x" s={16} /></button>
-      </div>
+    <Sheet className="chat-song-sheet" title="分享歌曲" onClose={onClose}>
       <label className="chat-song-search">
         <Icon n="search" s={16} />
         <input type="search" autoFocus aria-label="搜索歌曲" placeholder="搜索歌曲或歌手" maxLength={100} value={query} onChange={e => setQuery(e.target.value)} />
@@ -53,6 +50,6 @@ export function ChatSongPicker({ current, busy, onShare, onClose }: {
           </button>
         ))}
       </div>
-    </section>
+    </Sheet>
   );
 }

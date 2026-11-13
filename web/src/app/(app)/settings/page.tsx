@@ -9,9 +9,9 @@ import { Avatar } from '@/components/Cover';
 import { Icon } from '@/components/Icon';
 import { AvatarCrop } from '@/components/AvatarCrop';
 import { ManageUploads } from '@/components/ManageUploads';
-import { PwaInstall } from '@/components/Pwa';
+import { PwaInstall, AboutNestune } from '@/components/Pwa';
 
-const SECTIONS = ['资料', '我的上传', '偏好', '账号与安全'] as const;
+const SECTIONS = ['资料', '我的上传', '偏好', '账号与安全', '关于'] as const;
 
 export default function SettingsPage() {
   const app = useApp();
@@ -71,6 +71,7 @@ export default function SettingsPage() {
       </div>
 
       {section === '我的上传' && <ManageUploads />}
+      {section === '关于' && <AboutNestune />}
 
       {section === '资料' && (
         <section className="panel pad" aria-label="资料">

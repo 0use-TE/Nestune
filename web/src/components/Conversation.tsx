@@ -99,15 +99,6 @@ export function Conversation({ person, userId, onClose, compact = false, visible
     } else if (followBottom.current) node.scrollTop = node.scrollHeight;
   }, [messages]);
 
-  useEffect(() => {
-    if (!pickingSong) return;
-    function dismiss(event: PointerEvent) {
-      if (event.target instanceof Node && !composer.current?.contains(event.target)) setPickingSong(false);
-    }
-    document.addEventListener('pointerdown', dismiss);
-    return () => document.removeEventListener('pointerdown', dismiss);
-  }, [pickingSong]);
-
   async function earlier() {
     setBusy(true);
     try {
