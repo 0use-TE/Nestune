@@ -235,3 +235,38 @@ describe('social visibility and permissions', () => {
     expect(social.socialState(host).rooms).toHaveLength(0);
   });
 });
+
+
+describe('progressive directory and playlist sharing', () => {
+  it('loads basic users without presence or inbox, then omits unchanged users on sync', () => {
+    makeFriends(1, 2);
+    social.syncSocial(listener(1), track, undefined, null);
+    expect(social.socialDirectory(2)).toHaveLength(3);
+    expect(social.socialDirectory(2)[0]).toMatchObject({ name: 'alice', online: null, track: null, friendship: 'friend' });
+    const first = social.socialUpdate(listener(2));
+    expect(first.people![0]).toMatchObject({ online: true, track });
+    expect(social.socialUpdate(listener(2), { peopleVersion: first.peopleVersion }).people).toBeUndefined();
+    social.setOnlineVisibility(1, false);
+    expect(social.socialUpdate(listener(2), { peopleVersion: first.peopleVersion }).people![0].online).toBeNull();
+  });
+  it('sends a public playlist card only to friends and hides cards when made private', async () => {
+    const playlists = await import('@/server/playlists');
+    database.run('UPDATE users SET profile_public=1 WHERE id=1');
+    const playlist = playlists.createPlaylist(1, 'Shared music');
+    expect(() => social.sharePlaylist(1, 2, playlist.id)).toThrow();
+    makeFriends(1, 2);
+    expect(() => social.sharePlaylist(1, 2, playlist.id)).toThrow();
+    playlists.updatePlaylist(1, playlist.id, { isPublic: true });
+    const message = social.sharePlaylist(1, 2, playlist.id);
+    expect(message.playlist).toMatchObject({ id: playlist.id, name: 'Shared music', trackCount: 0 });
+    expect(social.readMessages(2, 1)).toEqual([message]);
+    expect(social.socialState(listener(2)).inbox[0].latest.playlist?.id).toBe(playlist.id);
+    expect(() => social.sharePlaylist(1, 3, playlist.id)).toThrow();
+    database.run('UPDATE users SET profile_public=0 WHERE id=1');
+    expect(social.readMessages(2, 1)[0]).toMatchObject({ text: '歌单已不可用' });
+    expect(social.readMessages(2, 1)[0].playlist).toBeUndefined();
+    database.run('UPDATE users SET profile_public=1 WHERE id=1');
+    playlists.updatePlaylist(1, playlist.id, { isPublic: false });
+    expect(social.readMessages(2, 1)[0].playlist).toBeUndefined();
+  });
+});

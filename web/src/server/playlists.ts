@@ -67,6 +67,13 @@ export function personProfile(viewer: number, id: number) {
   };
 }
 
+export function sharedPlaylistSummary(viewer: number, id: number) {
+  const p = one<PRow>(`SELECT p.* FROM playlists p JOIN users u ON u.id=p.user_id
+    WHERE p.id=? AND p.is_public=1 AND u.status='active' AND (u.profile_public=1 OR u.id=?)`, id, viewer);
+  if (!p) throw fail(404, '歌单未公开或已删除');
+  return shape(p, viewer);
+}
+
 export function sharedPlaylist(viewer: number, id: number) {
   const p = one<PRow>('SELECT * FROM playlists WHERE id=?', id);
   if (!p || !p.is_public) throw fail(404, '歌单未公开或已删除');

@@ -1,11 +1,13 @@
-import { INVITE_STATUS, type ListeningInvite, type ConversationSummary, type ListeningRoom, type ListeningTrack, type Message, type Person, type Playback, type SharedSong, type SocialState } from '@/lib/social-types';
+import { createHash } from 'node:crypto';
+import { sharedPlaylistSummary } from './playlists';
+import { INVITE_STATUS, type ListeningInvite, type ConversationSummary, type ListeningRoom, type ListeningTrack, type Message, type Person, type Playback, type SharedSong, type SocialState, type SocialUpdate, type SharedPlaylist } from '@/lib/social-types';
 import { isUploadSong } from '@/lib/upload-types';
 import { all, db, now, one, run } from './db';
 import { fail } from './http';
 import { visibleUpload } from './uploads';
 import { readSharedQueue } from './listening-queue';
 
-type MessageRow = Omit<Message, 'song' | 'invite'> & { song: string | null; inviteId: number | null };
+type MessageRow = Omit<Message, 'song' | 'invite' | 'playlist'> & { song: string | null; inviteId: number | null };
 function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRow): Message {
   if (inviteId) {
     const invite = one<ListeningInvite>(`SELECT id,room_id roomId,host_id hostId,guest_id guestId,status,
@@ -13,9 +15,14 @@ function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRo
     if (invite) return { ...message, text: `一起听邀请 · ${INVITE_STATUS[invite.status]}`, invite };
   }
   if (!song) return message;
-  const shared = JSON.parse(song) as SharedSong;
-  if (isUploadSong(shared.id) && !visibleUpload(viewer, shared.id)) return { ...message, text: '歌曲已不可用' };
-  return { ...message, song: shared };
+  const shared = JSON.parse(song) as SharedSong | (SharedPlaylist & { kind: 'playlist' });
+  if ('kind' in shared && shared.kind === 'playlist') {
+    try { const playlist = sharedPlaylistSummary(viewer, shared.id); return { ...message, playlist: { id: playlist.id, name: playlist.name, cover: playlist.cover, trackCount: playlist.trackCount } }; }
+    catch { return { ...message, text: '歌单已不可用' }; }
+  }
+  const sharedSong = shared as SharedSong;
+  if (isUploadSong(sharedSong.id) && !visibleUpload(viewer, sharedSong.id)) return { ...message, text: '歌曲已不可用' };
+  return { ...message, song: sharedSong };
 }
 type Friendship = { requested_by: number; accepted: number };
 type RoomRow = { queue_data: string | null; id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null; active: number; song_id: string | null; position: number; playing: number; updated_at: number; transport_version: number };
@@ -57,7 +64,7 @@ function transaction<T>(work: () => T): T {
   catch (error) { db().exec('ROLLBACK'); throw error; }
 }
 
-export function socialState({ userId: user, sessionId }: Listener): SocialState {
+export function socialState({ userId: user, sessionId }: Listener, queues: Record<string, number> = {}): SocialState {
   expireRooms();
   const time = now();
   const people = all<DirectoryRow>(`SELECT u.id,u.username,COALESCE(NULLIF(u.display_name,''),u.username) name,u.avatar,
@@ -77,9 +84,11 @@ export function socialState({ userId: user, sessionId }: Listener): SocialState 
     JOIN users guest ON guest.id=r.guest_id AND guest.status='active'
     WHERE r.host_id=? OR r.guest_id=? ORDER BY r.active DESC,r.id DESC`, user, user).map((row): ListeningRoom => {
       const onThisDevice = row.host_id === user ? row.host_session_id === sessionId : !row.active || row.guest_session_id === sessionId;
+      const reuseQueue = !!row.queue_data && !row.queue_data.includes('upload-') && queues[row.id] === row.transport_version;
       return {
         id: row.id, hostId: row.host_id, guestId: row.guest_id, active: !!row.active, onThisDevice, updatedAt: row.updated_at, transportVersion: row.transport_version,
-        queue: onThisDevice && row.active ? readSharedQueue(row) : null,
+        queue: onThisDevice && row.active && !reuseQueue ? readSharedQueue(row) : null,
+        ...(onThisDevice && row.active && reuseQueue ? { queueUnchanged: true } : {}),
         playback: onThisDevice && row.song_id && canListenTogether(row.host_id, row.guest_id, row.song_id)
           ? { songId: row.song_id, position: row.position, playing: !!row.playing } : null,
       };
@@ -87,12 +96,27 @@ export function socialState({ userId: user, sessionId }: Listener): SocialState 
   return { people, rooms, inbox: listConversations(user), showOnline: people.find(person => person.id === user)?.online !== null, serverTime: time };
 }
 
+// The directory has no room queues, message history or presence lookups.
+export function socialDirectory(user: number): Person[] {
+  return all<{ id: number; username: string; name: string; avatar: string; requested_by: number | null; accepted: number | null }>(`SELECT u.id,u.username,COALESCE(NULLIF(u.display_name,''),u.username) name,u.avatar,f.requested_by,f.accepted
+    FROM users u LEFT JOIN friendships f ON f.low_id=min(u.id,?) AND f.high_id=max(u.id,?)
+    WHERE u.status='active' ORDER BY name COLLATE NOCASE,u.id`, user, user).map(row => ({
+      id: row.id, username: row.username, name: row.name, avatar: row.avatar ? `/api/avatars/${row.avatar}` : null,
+      online: null, track: null, friendship: row.accepted ? 'friend' : row.requested_by === user ? 'outgoing' : row.requested_by ? 'incoming' : null,
+    }));
+}
+export function socialUpdate(listener: Listener, known: { peopleVersion?: string; queues?: Record<string, number> } = {}): SocialUpdate {
+  const state = socialState(listener, known.queues);
+  const peopleVersion = createHash('sha256').update(JSON.stringify(state.people)).digest('hex');
+  return { ...state, people: peopleVersion === known.peopleVersion ? undefined : state.people, peopleVersion };
+}
+
 export function setOnlineVisibility(user: number, visible: boolean) {
   run(`INSERT INTO social_presence(user_id,visible) VALUES(?,?)
     ON CONFLICT(user_id) DO UPDATE SET visible=excluded.visible,last_seen=0,track=NULL`, user, Number(visible));
 }
 
-export function syncSocial(listener: Listener, track: ListeningTrack | null, room: number | undefined, playback: Playback | null, version = 0) {
+export function syncSocial(listener: Listener, track: ListeningTrack | null, room: number | undefined, playback: Playback | null, version = 0, known?: { peopleVersion?: string; queues?: Record<string, number> }) {
   const { userId: user, sessionId } = listener;
   const time = now();
   const visibleTrack = publicTrack(user, track);
@@ -105,7 +129,7 @@ export function syncSocial(listener: Listener, track: ListeningTrack | null, roo
   if (room) run(`UPDATE listening_rooms SET song_id=?,position=?,playing=?,updated_at=?
     WHERE id=? AND host_id=? AND host_session_id=? AND active=1 AND updated_at>=? AND transport_version=? AND (queue_data IS NULL OR song_id IS ?)`, playback?.songId ?? null, playback?.position ?? 0,
     Number(playback?.playing ?? false), time, room, user, sessionId, time - 90_000, version, playback?.songId ?? null);
-  return socialState(listener);
+  return known ? socialUpdate(listener, known) : socialState(listener);
 }
 
 export function requestFriend(user: number, peer: number) {
@@ -162,6 +186,18 @@ export async function shareSong(user: number, peer: number, resolve: () => Promi
   const song = await resolve();
   return sendMessage(user, peer, `分享歌曲 · ${song.name}`, song);
 }
+export function sharePlaylist(user: number, peer: number, id: number): Message {
+  requireFriend(user, peer);
+  const playlist = sharedPlaylistSummary(peer, id);
+  // Resolving for both participants also rejects a private owner profile.
+  sharedPlaylistSummary(user, id);
+  const card: SharedPlaylist = { id: playlist.id, name: playlist.name, cover: playlist.cover, trackCount: playlist.trackCount };
+  const sentAt = now(), text = `分享歌单 · ${card.name}`;
+  const result = run('INSERT INTO friend_messages(low_id,high_id,sender_id,text,sent_at,song) VALUES(?,?,?,?,?,?)',
+    ...pair(user, peer), user, text, sentAt, JSON.stringify({ ...card, kind: 'playlist' }));
+  return { id: Number(result.lastInsertRowid), senderId: user, text, sentAt, playlist: card };
+}
+
 export function inviteListener({ userId: user, sessionId }: Listener, peer: number) {
   requireFriend(user, peer);
   expireRooms();

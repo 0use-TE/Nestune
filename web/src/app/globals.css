@@ -683,3 +683,28 @@ main{overflow-y:auto;padding:38px 48px 150px}
 @media(max-width:860px){.sheet-layer{align-items:flex-end;padding:10px 10px max(10px,env(safe-area-inset-bottom))}.sheet{border-radius:20px;padding:18px}.chat-song-sheet{height:min(520px,100%)}}
 
 .update-status{padding:0 20px 18px;overflow-wrap:anywhere}
+
+.playlist-card{position:relative;transition:background-color .15s,transform .15s}
+.playlist-card:active,.playlist-card:has(.playlist-opening){background:var(--soft);transform:scale(.985)}
+.playlist-card:focus-visible{outline:2px solid var(--text);outline-offset:3px}
+.playlist-opening{margin-left:auto;flex:none}
+@media(hover:hover){.playlist-card:hover{background:var(--soft)}}
+@media(prefers-reduced-motion:reduce){.playlist-card{transition:none}}
+@media(max-width:860px){
+  #app{height:var(--visible-height,100%)}
+  #tabbar{bottom:var(--keyboard-bottom,0px)}
+  :root[data-keyboard] #tabbar{height:64px;padding-bottom:0}
+  :root[data-keyboard] #bar{display:none}
+  :root[data-keyboard] #main{padding-bottom:80px}
+  :root[data-keyboard] #app #main:has(>.wrap>.chat-page){padding-bottom:76px}
+}
+
+.share-playlist-sheet{height:min(520px,100%)}
+.share-copy{justify-content:center;margin-bottom:16px;flex:none}
+.share-playlist-sheet>.search{flex:none;width:100%}
+.share-recipients{overflow:auto;overscroll-behavior:contain;min-height:0;flex:1;margin-top:12px}
+.share-recipient{display:flex;align-items:center;gap:12px;width:100%;padding:12px 8px;border-radius:12px;text-align:left}
+.share-recipient b{flex:1}.share-recipient:is(:hover,:active){background:var(--soft)}
+.chat-playlist-card{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--soft);max-width:310px}
+.chat-playlist-card .cv{width:54px;flex:none;border-radius:8px}.chat-playlist-card span{min-width:0}.chat-playlist-card b,.chat-playlist-card small{display:block}
+.chat-playlist-card:active{background:var(--line)}

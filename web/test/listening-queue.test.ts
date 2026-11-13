@@ -137,3 +137,17 @@ it('does not disclose a private upload through seeding, addition or later permis
   database.run("UPDATE uploaded_songs SET visibility='private' WHERE id=?", id);
   expect(room(2).queue?.entries).toHaveLength(1);
 });
+
+it('omits a known room queue until its revision changes and never reuses another device queue', async () => {
+  await queues.initializeListeningQueue(listener(1), roomId, seed);
+  const first = social.socialUpdate(listener(2));
+  const revision = first.rooms[0].transportVersion;
+  const next = social.socialUpdate(listener(2), { peopleVersion: first.peopleVersion, queues: { [roomId]: revision } });
+  expect(next.rooms[0]).toMatchObject({ queue: null, queueUnchanged: true });
+  expect(next.people).toBeUndefined();
+  expect(social.socialUpdate(listener(2, 2), { queues: { [roomId]: revision } }).rooms[0].queueUnchanged).toBeUndefined();
+  await queues.editListeningQueue(listener(1), roomId, { type: 'append', songId: '105' });
+  const changed = social.socialUpdate(listener(2), { queues: { [roomId]: revision } });
+  expect(changed.rooms[0].queueUnchanged).toBeUndefined();
+  expect(changed.rooms[0].queue!.entries.at(-1)!.song.id).toBe('105');
+});

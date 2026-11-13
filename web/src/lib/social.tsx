@@ -1,15 +1,17 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { post } from './api';
+import { get, post } from './api';
+import { usePathname } from 'next/navigation';
 import { useApp } from './app';
 import { isDeviceSong } from './device-music';
-import type { ListeningRoom, SocialState } from './social-types';
+import type { ListeningRoom, Person, SocialState, SocialUpdate } from './social-types';
 
 const NOTICE_DEFAULTS = { messageToast: true, messageSound: false, inviteToast: true };
 type Notices = typeof NOTICE_DEFAULTS;
 type SocialContext = {
   state: SocialState | null;
+  directory: Person[] | null;
   error: string;
   playbackError: string;
   action: (data: Record<string, unknown>) => Promise<SocialState>;
@@ -27,6 +29,9 @@ export function SocialProvider({ children }: { children: ReactNode }) {
 
 function SocialSession({ userId, children }: { userId: number; children: ReactNode }) {
   const app = useApp();
+  const path = usePathname();
+  const pathRef = useRef(path); pathRef.current = path;
+  const [directory, setDirectory] = useState<Person[] | null>(null);
   const { setFollowingRoom, setRoomTransport, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler } = app;
   const player = useRef(app);
   player.current = app;
@@ -77,9 +82,17 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
   const action = useCallback((data: Record<string, unknown>) => {
     const request = chain.current.then(async () => {
       if (!mounted.current) throw new Error('当前会话已结束');
-      const next = await post<SocialState>('/api/social', data);
-      if (!mounted.current) return next;
       const previous = latest.current;
+      const payload = data.action === 'sync' ? { ...data, known: {
+        peopleVersion: previous?.peopleVersion,
+        queues: Object.fromEntries(previous?.rooms.filter(room => room.queue).map(room => [room.id, room.transportVersion]) ?? []),
+      } } : data;
+      const update = await post<SocialUpdate>('/api/social', payload);
+      const next: SocialState = { ...update, people: update.people ?? previous?.people ?? [], rooms: update.rooms.map(room => {
+        const old = previous?.rooms.find(item => item.id === room.id);
+        return { ...room, queue: room.queueUnchanged && old?.transportVersion === room.transportVersion ? old.queue : room.queue };
+      }) };
+      if (!mounted.current) return next;
       const options = noticeRef.current;
       if (previous) {
         const incoming = new Map(previous.inbox?.map(item => [item.peerId, item.latestIncomingId]));
@@ -96,7 +109,7 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
       if (data.action === 'invite' && options.inviteToast) player.current.toast('一起听邀请已发送', 'invite');
       receivedAt.current = Date.now();
       latest.current = next;
-      setState(next);
+      setState(next); setDirectory(next.people);
       setError('');
       return next;
     });
@@ -118,7 +131,13 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
+    let running = false;
+    let bootstrapped = false;
     async function pulse() {
+      if (!live || running) return;
+      clearTimeout(timer);
+      if (document.hidden && !latest.current?.rooms.some(room => room.active && room.onThisDevice)) return;
+      running = true;
       const current = player.current;
       const room = latest.current?.rooms.find(item => item.active && item.onThisDevice);
       const seed = room?.hostId === userId && !room.queue ? current.queueSeed() : undefined;
@@ -139,12 +158,19 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
       } catch (e) {
         if (live) setError(e instanceof Error ? e.message : '暂时无法连接');
       } finally {
-        if (live) timer = setTimeout(pulse, latest.current?.rooms.some(item => item.active && item.onThisDevice) ? 1700 : 5000);
+        running = false;
+        if (live) timer = setTimeout(pulse, latest.current?.rooms.some(item => item.active && item.onThisDevice) ? 1700 : pathRef.current === '/social' || pathRef.current === '/chat' ? 5000 : 10000);
       }
     }
-    pulse();
-    return () => { live = false; clearTimeout(timer); };
+    // Show the small user directory before downloading presence, inbox and queues.
+    get<{ people: Person[] }>('/api/social?scope=directory').then(data => { if (live && !latest.current) setDirectory(data.people); }).catch(() => {}).finally(() => { bootstrapped = true; if (live) void pulse(); });
+    const wake = () => { if (bootstrapped && !document.hidden) void pulse(); };
+    document.addEventListener('visibilitychange', wake);
+    window.addEventListener('nt:social-refresh', wake);
+    return () => { live = false; clearTimeout(timer); document.removeEventListener('visibilitychange', wake); window.removeEventListener('nt:social-refresh', wake); };
   }, [action, userId]);
+
+  useEffect(() => { if (path === '/social' || path === '/chat') window.dispatchEvent(new Event('nt:social-refresh')); }, [path]);
 
   const activeRoom = state?.rooms.find(room => room.active && room.onThisDevice);
   useEffect(() => {
@@ -178,7 +204,7 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
     return () => { setRoomQueueHandler(null); };
   }, [state, activeRoom, app.ready, action, userId, beginSharedQueue, endSharedQueue, applyRoomQueue, setFollowingRoom, setRoomQueueHandler]);
 
-  return <Context.Provider value={{ state, error, playbackError, action, notices, setNotice }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ state, directory, error, playbackError, action, notices, setNotice }}>{children}</Context.Provider>;
 }
 
 function roomPosition(room: ListeningRoom, serverTime: number, receivedAt: number) {

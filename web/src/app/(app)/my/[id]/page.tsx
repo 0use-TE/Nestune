@@ -3,7 +3,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { del, get, patch } from '@/lib/api';
 import { useApp } from '@/lib/app';
-import { shareLink } from '@/lib/share';
+import { SharePlaylist } from '@/components/SharePlaylist';
 import type { PlaylistLite, Song } from '@/lib/types';
 import { Hero } from '@/components/Hero';
 import { Icon } from '@/components/Icon';
@@ -17,6 +17,7 @@ export default function MyPlaylistPage() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [name, setName] = useState('');
 
   useEffect(() => {
@@ -41,12 +42,9 @@ export default function MyPlaylistPage() {
     const result = await patch(`/api/me/playlists/${id}`, { isPublic: value });
     setPl(result.playlist); await app.reloadPlaylists();
   }
-  async function share() {
-    try {
-      if (!app.me?.profilePublic) { app.toast('请先在设置中开启公开个人主页'); return; }
-      if (!pl?.isPublic) await publish(true);
-      const message = await shareLink(pl!.name, `/shared/${id}`); if (message) app.toast(message);
-    } catch (e) { app.toast(e instanceof Error ? e.message : '分享失败'); }
+  async function prepareShare() {
+    if (!app.me?.profilePublic) throw new Error('请先在设置中开启公开个人主页');
+    if (!pl?.isPublic) await publish(true);
   }
 
   if (err) return <div className="note">{err}</div>;
@@ -56,10 +54,11 @@ export default function MyPlaylistPage() {
       <Hero cover={songs[0]?.cover} seed={`pl${pl.id}`} tag="我的歌单" title={pl.name} sub={`${songs.length} 首歌曲`}>
         <button className="btn light" onClick={() => app.play(songs)} disabled={!songs.length}><Icon n="play" s={16} />播放全部</button>
         <button className="btn ghost" onClick={() => setEditing(true)}>重命名</button>
-        <button className="btn ghost" onClick={share}>分享</button>
+        <button className="btn ghost" onClick={() => setSharing(true)}>分享</button>
         <button className="btn ghost" aria-pressed={!!pl.isPublic} onClick={() => publish(!pl.isPublic).catch(e => app.toast(e.message))}>{pl.isPublic ? '公开' : '私密'}</button>
         <button className="btn ghost" onClick={remove}><Icon n="trash" s={16} />删除</button>
       </Hero>
+      {sharing && <SharePlaylist playlist={pl} prepare={prepareShare} onClose={() => setSharing(false)} />}
       {editing && (
         <form className="row" style={{ marginTop: 20 }} onSubmit={e => { e.preventDefault(); rename(); }}>
           <div className="field" style={{ margin: 0, flex: 1, maxWidth: 360 }}><input value={name} maxLength={40} onChange={e => setName(e.target.value)} autoFocus /></div>

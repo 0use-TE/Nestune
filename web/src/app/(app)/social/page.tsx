@@ -9,11 +9,11 @@ import { useSocial } from '@/lib/social';
 
 export default function SocialPage() {
   const app = useApp();
-  const { state, error, playbackError, action } = useSocial();
+  const { state, directory, error, playbackError, action } = useSocial();
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const userId = app.me!.id;
-  const people = state?.people ?? [];
+  const people = state?.people ?? directory ?? [];
   const room = state?.rooms.find(item => item.active);
   const invites = state?.rooms.filter(item => !item.active) ?? [];
   const roomPeer = room && people.find(person => person.id === (room.hostId === userId ? room.guestId : room.hostId));
@@ -67,8 +67,8 @@ export default function SocialPage() {
           <h2>所有用户</h2>
           <label className="search"><Icon n="search" s={16} /><input aria-label="搜索用户" placeholder="昵称或用户名" value={query} onChange={e => setQuery(e.target.value)} /></label>
         </div>
-        {!state && !error && <Loading />}
-        {state && !shown.length && <div className="center sub">没有找到用户</div>}
+        {!state && !directory && !error && <Loading />}
+        {(state || directory) && !shown.length && <div className="center sub">没有找到用户</div>}
         {shown.map(person => (
           <div className="social-person" key={person.id}>
             <Link href={`/people/${person.id}`} aria-label={`查看 ${person.name} 的主页`}><Avatar src={person.avatar} name={person.name} /></Link>

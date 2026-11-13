@@ -16,6 +16,7 @@ import { NowPlaying } from './NowPlaying';
 import { PlayerBar } from './PlayerBar';
 import { QueuePopover } from './PlaybackQueue';
 import { StartupLoading } from './StartupLoading';
+import { KeyboardViewport } from './KeyboardViewport';
 import { dismissTopOverlay } from '@/lib/overlays';
 
 const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/chat', '聊天', 'lyrics']] as const;
@@ -73,6 +74,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <KeyboardViewport />
       <div id="app">
         <aside>
           <div className="brand"><span className="logo" />Nestune</div>

@@ -189,7 +189,11 @@ export function Conversation({ person, userId, onClose, compact = false, visible
                     : <small className="sub">请在发出邀请的设备上操作</small>}
                 </div>}
               </section>;
-            })() : message.song ? (
+            })() : message.playlist ? (
+              <Link className="chat-playlist-card" href={`/shared/${message.playlist.id}`} onClick={() => app.setNowOpen(false)}>
+                <Cover src={message.playlist.cover} seed={`pl${message.playlist.id}`} /><span><b className="t1">{message.playlist.name}</b><small className="sub">歌单 · {message.playlist.trackCount} 首</small></span><Icon n="next" s={16} />
+              </Link>
+            ) : message.song ? (
               <button type="button" className="chat-song-card chat-song-row" aria-label={`播放 ${message.song.name}`}
                 disabled={loadingSong !== null} onClick={() => playSong(message.song!.id)}>
                 <Cover src={message.song.cover} seed={message.song.id} />

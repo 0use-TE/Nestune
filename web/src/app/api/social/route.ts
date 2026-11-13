@@ -6,7 +6,7 @@ import { userRoute } from '@/server/guard';
 import { body, fail, numericId, str } from '@/server/http';
 import { requireUpload } from '@/server/uploads';
 import { editListeningQueue, initializeListeningQueue, saveListeningQueue } from '@/server/listening-queue';
-import { acceptListening, answerFriend, controlListening, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, socialState, syncSocial } from '@/server/social';
+import { acceptListening, answerFriend, controlListening, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, sharePlaylist, socialDirectory, socialState, syncSocial } from '@/server/social';
 
 const options = { bucket: 'social' };
 
@@ -36,6 +36,7 @@ function playback(value: unknown): Playback | null {
 export const GET = userRoute((req, _ctx, user, sessionId) => {
   const peer = req.nextUrl.searchParams.get('peer');
   const before = req.nextUrl.searchParams.get('before');
+  if (req.nextUrl.searchParams.get('scope') === 'directory') return { people: socialDirectory(user.id) };
   if (!peer) return socialState({ userId: user.id, sessionId });
   const other = id(peer);
   return { messages: readMessages(user.id, other, before ? id(before) : undefined), peerReadThrough: peerReadThrough(user.id, other) };
@@ -50,7 +51,22 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
       const version = data.transportVersion ?? 0;
       if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) throw fail(400, '播放版本无效');
       if (data.seed !== undefined) await initializeListeningQueue(listener, id(data.roomId), data.seed);
-      return syncSocial(listener, track(data.track), data.roomId == null ? undefined : id(data.roomId), playback(data.playback), version);
+      let known: { peopleVersion?: string; queues?: Record<string, number> } | undefined;
+      if (data.known !== undefined) {
+        if (!data.known || typeof data.known !== 'object' || Array.isArray(data.known)) throw fail(400, '同步版本无效');
+        const value = data.known as Record<string, unknown>;
+        if (value.peopleVersion !== undefined && (typeof value.peopleVersion !== 'string' || !/^[a-f0-9]{64}$/.test(value.peopleVersion))) throw fail(400, '用户版本无效');
+        const queues: Record<string, number> = {};
+        if (value.queues !== undefined) {
+          if (!value.queues || typeof value.queues !== 'object' || Array.isArray(value.queues) || Object.keys(value.queues).length > 10) throw fail(400, '队列版本无效');
+          for (const [key, revision] of Object.entries(value.queues)) {
+            if (!/^[1-9][0-9]{0,14}$/.test(key) || typeof revision !== 'number' || !Number.isSafeInteger(revision) || revision < 0) throw fail(400, '队列版本无效');
+            queues[key] = revision;
+          }
+        }
+        known = { peopleVersion: value.peopleVersion as string | undefined, queues };
+      }
+      return syncSocial(listener, track(data.track), data.roomId == null ? undefined : id(data.roomId), playback(data.playback), version, known);
     }
     case 'visibility':
       if (typeof data.visible !== 'boolean') throw fail(400, '在线状态无效');
@@ -70,6 +86,7 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
       });
       return { message };
     }
+    case 'sharePlaylist': return { message: sharePlaylist(user.id, id(data.peerId), id(data.playlistId)) };
     case 'read': markMessagesRead(user.id, id(data.peerId), id(data.throughId)); break;
     case 'invite': inviteListener(listener, id(data.peerId)); break;
     case 'acceptInvite': acceptListening(listener, id(data.roomId)); break;
