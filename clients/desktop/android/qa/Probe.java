@@ -39,7 +39,7 @@ public class Probe extends Instrumentation {
     private MediaController controller() throws Exception {
         MediaSessionManager manager=getTargetContext().getSystemService(MediaSessionManager.class);
         for (int i=0;i<30;i++) {
-            for (MediaController c:manager.getActiveSessions(null)) if (c.getPackageName().equals("net.ouse.nestune")) return c;
+            for (MediaController c:manager.getActiveSessions(null)) if (c.getPackageName().equals("net.ouse.nestune") && c.getMetadata()!=null && c.getPlaybackState()!=null) return c;
             SystemClock.sleep(100);
         }
         throw new AssertionError("Native media session not published");
