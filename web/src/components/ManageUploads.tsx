@@ -52,7 +52,7 @@ export function ManageUploads() {
     {!!items?.length && <div className="panel uploads-list">
       {items.map(item => (
         <div className="uploads-row" key={item.song.id}>
-          <button type="button" className="uploads-song" onClick={() => app.play([item.song])} aria-label={`播放 ${item.song.name}`}>
+          <button type="button" className="uploads-song" onClick={() => app.playNow(item.song)} aria-label={`播放 ${item.song.name}`}>
             <Cover src={item.song.cover} seed={item.song.id} />
             <span className="uploads-song-text"><b className="t1">{item.song.name}</b><small className="sub t1">{[item.artist, mmss(item.song.duration), fmtDate(item.createdAt)].filter(Boolean).join(' · ')}</small></span>
           </button>

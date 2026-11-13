@@ -7,7 +7,7 @@ const pid = (v: string) => { if (!/^\d{1,12}$/.test(v)) throw fail(400, '歌单 
 export const GET = userRoute(async (_req, ctx, u) => getPlaylist(u.id, pid((await ctx.params).id)));
 
 export const PATCH = userRoute(async (req, ctx, u) => {
-  const b = await body<{ name?: string; description?: string }>(req);
+  const b = await body<{ name?: string; description?: string; isPublic?: boolean }>(req);
   return { playlist: updatePlaylist(u.id, pid((await ctx.params).id), b) };
 });
 

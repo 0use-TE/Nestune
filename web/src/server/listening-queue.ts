@@ -109,7 +109,7 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
   let command: QueueCommand;
   let requested: string[] = [];
   switch (raw.type) {
-    case 'append': case 'insertNext': requested = [catalogId(raw.songId)]; command = { type: raw.type, songId: requested[0] }; break;
+    case 'append': case 'insertNext': case 'playNow': requested = [catalogId(raw.songId)]; command = { type: raw.type, songId: requested[0] }; break;
     case 'replace':
       requested = ids(raw.songIds);
       if (!integer(raw.index)) throw fail(400, '歌曲位置无效');
@@ -131,7 +131,7 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
     if (command.type === 'next' && command.automatic &&
       (current.host_id !== listener.userId || current.transport_version !== command.version)) return;
     const queue = readSharedQueue(current)!;
-    if ((command.type === 'append' || command.type === 'insertNext') && queue.entries.length + additions.length > 500) throw fail(400, '共同列表最多 500 首歌曲');
+    if ((command.type === 'append' || command.type === 'insertNext' || command.type === 'playNow' && !queue.entries.some(entry => entry.song.id === command.songId)) && queue.entries.length + additions.length > 500) throw fail(400, '共同列表最多 500 首歌曲');
     const elapsed = current.playing ? Math.max(0, now() - current.updated_at) / 1000 : 0;
     let changed;
     try { changed = changeQueue(queue, command, Math.min(86400, current.position + elapsed), !!current.playing, additions); }

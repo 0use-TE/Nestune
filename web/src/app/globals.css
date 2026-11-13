@@ -554,7 +554,7 @@ main{overflow-y:auto;padding:38px 48px 150px}
   }
   #np .np-needle::before{content:"";position:absolute;inset:6px 1px 0 8px;background:#e8ebf2;clip-path:polygon(0 4%,4% 0,47% 60%,83% 80%,85% 73%,100% 85%,96% 100%,81% 91%,43% 69%)}
   #np .np-needle i{position:absolute;top:0;left:0;width:17px;height:17px;border:5px solid #eceff6;border-radius:50%;background:#a7afbd;box-shadow:0 0 0 5px #1b1e27a8}
-  #np[data-playing] .np-needle{transform:rotate(10deg)}
+  #np[data-playing] .np-needle{transform:rotate(38deg)}
   @media(prefers-reduced-motion:no-preference){
     #np[data-mobile-cover] .np-record .cv{animation:np-record-spin 32s linear infinite paused}
     #np[data-playing] .np-record .cv{animation-play-state:running}
@@ -662,3 +662,15 @@ main{overflow-y:auto;padding:38px 48px 150px}
 }
 
 @media(max-width:420px){.queue-toolbar{margin-inline:14px;gap:6px}.queue-toolbar>div{gap:9px}.queue-popover header{padding-inline:16px}.queue-song{grid-template-columns:16px 36px minmax(0,1fr);gap:8px}.qlist .queue-song .cv{width:36px}.qlist .tr{gap:5px;grid-template-columns:minmax(0,1fr) 30px 26px}}
+
+.queue-header-actions{display:flex;align-items:center;gap:10px;flex:none}
+.queue-header-actions .queue-clear{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:6px 8px;border-radius:8px}
+.queue-popover header{border-bottom:1px solid var(--line)}
+.queue-popover header h2{min-width:0}
+
+.my-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px}
+.personal-playlists{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px}
+.playlist-card{display:flex;align-items:center;gap:14px;padding:14px}
+.playlist-card .cv,.playlist-card .favorites-cover{width:64px;height:64px;flex:none;border-radius:10px;display:grid;place-items:center}
+.public-profile{display:flex;align-items:center;gap:22px}.public-profile h1{margin-bottom:5px}.public-profile p{margin-top:14px;white-space:pre-wrap;overflow-wrap:anywhere}
+.section-heading{margin-top:28px;margin-bottom:16px}

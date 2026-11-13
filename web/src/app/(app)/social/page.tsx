@@ -71,9 +71,9 @@ export default function SocialPage() {
         {state && !shown.length && <div className="center sub">没有找到用户</div>}
         {shown.map(person => (
           <div className="social-person" key={person.id}>
-            <Avatar src={person.avatar} name={person.name} />
+            <Link href={`/people/${person.id}`} aria-label={`查看 ${person.name} 的主页`}><Avatar src={person.avatar} name={person.name} /></Link>
             <div className="social-person-info">
-              <div className="social-person-name"><b className="t1">{person.name}</b>{person.id === userId && <span className="sub sm">你</span>}</div>
+              <div className="social-person-name"><Link className="t1" href={`/people/${person.id}`}><b>{person.name}</b></Link>{person.id === userId && <span className="sub sm">你</span>}</div>
               <div className="sub sm t1">@{person.username}{person.online !== null && <span className={person.online ? 'social-online' : ''}> · {person.online ? '在线' : '离线'}</span>}</div>
               {person.track && <div className="social-track t1" title={`${person.track.name} · ${person.track.artist}`}>正在听 {person.track.name}{person.track.artist && ` · ${person.track.artist}`}</div>}
             </div>

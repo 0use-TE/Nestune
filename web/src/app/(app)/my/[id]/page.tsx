@@ -3,6 +3,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { del, get, patch } from '@/lib/api';
 import { useApp } from '@/lib/app';
+import { shareLink } from '@/lib/share';
 import type { PlaylistLite, Song } from '@/lib/types';
 import { Hero } from '@/components/Hero';
 import { Icon } from '@/components/Icon';
@@ -36,6 +37,17 @@ export default function MyPlaylistPage() {
     try { await del(`/api/me/playlists/${id}/songs/${s.id}`); setSongs(p => p.filter(x => x.id !== s.id)); app.reloadPlaylists(); }
     catch (e: any) { app.toast(e.message); }
   }
+  async function publish(value: boolean) {
+    const result = await patch(`/api/me/playlists/${id}`, { isPublic: value });
+    setPl(result.playlist); await app.reloadPlaylists();
+  }
+  async function share() {
+    try {
+      if (!app.me?.profilePublic) { app.toast('请先在设置中开启公开个人主页'); return; }
+      if (!pl?.isPublic) await publish(true);
+      const message = await shareLink(pl!.name, `/shared/${id}`); if (message) app.toast(message);
+    } catch (e) { app.toast(e instanceof Error ? e.message : '分享失败'); }
+  }
 
   if (err) return <div className="note">{err}</div>;
   if (!pl) return <Loading />;
@@ -44,6 +56,8 @@ export default function MyPlaylistPage() {
       <Hero cover={songs[0]?.cover} seed={`pl${pl.id}`} tag="我的歌单" title={pl.name} sub={`${songs.length} 首歌曲`}>
         <button className="btn light" onClick={() => app.play(songs)} disabled={!songs.length}><Icon n="play" s={16} />播放全部</button>
         <button className="btn ghost" onClick={() => setEditing(true)}>重命名</button>
+        <button className="btn ghost" onClick={share}>分享</button>
+        <button className="btn ghost" aria-pressed={!!pl.isPublic} onClick={() => publish(!pl.isPublic).catch(e => app.toast(e.message))}>{pl.isPublic ? '公开' : '私密'}</button>
         <button className="btn ghost" onClick={remove}><Icon n="trash" s={16} />删除</button>
       </Hero>
       {editing && (

@@ -39,7 +39,7 @@ export default function HomePage() {
           title={feature.name} sub={`${feature.artists.map(a => a.name).join(' / ')}${feature.album.name ? ` · ${feature.album.name}` : ''}`}>
           {app.current?.id === feature.id
             ? <button className="btn light" onClick={app.toggle}><Icon n={app.playing ? 'pause' : 'play'} s={16} />{app.playing ? '暂停' : '播放'}</button>
-            : <button className="btn light" onClick={() => app.play([feature])}><Icon n="play" s={16} />播放</button>}
+            : <button className="btn light" onClick={() => app.playNow(feature)}><Icon n="play" s={16} />播放</button>}
           {app.current && <button className="btn ghost" onClick={() => app.setNowOpen(true)}>歌曲详情</button>}
         </Hero>
       )}

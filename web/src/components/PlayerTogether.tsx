@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
@@ -37,7 +38,7 @@ export function PlayerTogether({ inviting, onClose, active }: {
     <section className="player-together active" aria-label="一起听">
       <header className="together-header">
         <div className="together-avatars" aria-label={`${me.displayName} 和 ${activePeer.name}`}>
-          <Avatar src={me.avatar} name={me.displayName} /><Avatar src={activePeer.avatar} name={activePeer.name} />
+          <Avatar src={me.avatar} name={me.displayName} /><Link href={`/people/${activePeer.id}`} aria-label={`查看 ${activePeer.name} 的主页`} onClick={() => app.setNowOpen(false)}><Avatar src={activePeer.avatar} name={activePeer.name} /></Link>
         </div>
         <div className="together-status"><b>{playing ? '正在一起听' : '一起听 · 已暂停'}</b><small className="t1">你和 {activePeer.name}</small></div>
         <button className="link" disabled={busy} onClick={() => change({ action: 'leave', roomId: room.id })}>退出</button>

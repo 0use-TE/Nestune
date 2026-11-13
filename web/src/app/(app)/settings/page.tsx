@@ -103,6 +103,7 @@ export default function SettingsPage() {
 
       {section === '偏好' && (
         <section className="panel" aria-label="偏好">
+          <div className="set"><b>公开个人主页</b><button className={`switch ${me.profilePublic ? 'on' : ''}`} role="switch" aria-label="公开个人主页" aria-checked={!!me.profilePublic} disabled={busy} onClick={async () => { setBusy(true); try { const r = await patch('/api/me', { profilePublic: !me.profilePublic }); app.setMe(r.user); } catch (e) { app.toast(e instanceof Error ? e.message : '保存失败'); } finally { setBusy(false); } }} /></div>
           <PwaInstall />
           <div className="set">
             <b>外观</b>

@@ -179,6 +179,8 @@ function open() {
   `);
   db.exec('BEGIN IMMEDIATE');
   try {
+    if (!db.prepare('PRAGMA table_info(users)').all().some(column => column.name === 'profile_public')) db.exec('ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 1');
+    if (!db.prepare('PRAGMA table_info(playlists)').all().some(column => column.name === 'is_public')) db.exec('ALTER TABLE playlists ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
     const columns = db.prepare('PRAGMA table_info(listening_rooms)').all();
     if (!columns.some(column => column.name === 'queue_data')) db.exec('ALTER TABLE listening_rooms ADD COLUMN queue_data TEXT');
     if (!columns.some(column => column.name === 'transport_version')) {

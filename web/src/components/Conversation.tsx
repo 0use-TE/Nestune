@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Loading } from './Loading';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { get, post } from '@/lib/api';
@@ -148,7 +149,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
     setLoadingSong(id);
     try {
       const { song } = await get<{ song: Song }>(`/api/songs/${id}`);
-      app.play([song]);
+      app.playNow(song);
     } catch (e) { app.toast(e instanceof Error ? e.message : '无法播放歌曲'); }
     finally { setLoadingSong(null); }
   }
@@ -159,7 +160,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
         <header>
           <div className="chat-contact">
             {onClose && <button className="ib chat-back" aria-label="返回聊天列表" onClick={onClose}><Icon n="back" /></button>}
-            <Avatar src={person.avatar} name={person.name} /><h2 className="t1">{person.name}</h2>
+            <Link href={`/people/${person.id}`} aria-label={`查看 ${person.name} 的主页`} onClick={() => app.setNowOpen(false)}><Avatar src={person.avatar} name={person.name} /></Link><Link href={`/people/${person.id}`} className="t1" onClick={() => app.setNowOpen(false)}><h2>{person.name}</h2></Link>
           </div>
           <div className="row">
             {peerRoom?.active && peerRoom.onThisDevice ? <button type="button" className="btn ghost sm" disabled={inviteBusy}

@@ -4,7 +4,7 @@ export const PLAYBACK_MODES = ['off', 'all', 'one', 'shuffle'] as const;
 export type PlaybackMode = typeof PLAYBACK_MODES[number];
 export type SharedQueue = { entries: { key: string; song: Song }[]; index: number; mode: PlaybackMode };
 export type QueueCommand =
-  | { type: 'append' | 'insertNext'; songId: string }
+  | { type: 'append' | 'insertNext' | 'playNow'; songId: string }
   | { type: 'replace'; songIds: string[]; index: number; mode?: PlaybackMode }
   | { type: 'remove' | 'jump'; key: string }
   | { type: 'clear' | 'prev' | 'mode' }
@@ -19,6 +19,15 @@ export function changeQueue(queue: SharedQueue, command: QueueCommand, position:
   const previousKey = queue.entries[queue.index]?.key;
   let restart = false;
   switch (command.type) {
+    case 'playNow': {
+      const existing = next.entries.findIndex(entry => entry.song.id === command.songId);
+      if (existing >= 0) next.index = existing;
+      else {
+        const at = Math.max(0, next.index + 1);
+        next.entries.splice(at, 0, ...additions); next.index = at;
+      }
+      playing = true; restart = true; break;
+    }
     case 'replace':
       next.entries = additions; next.index = Math.max(0, Math.min(command.index, additions.length - 1));
       next.mode = command.mode ?? next.mode; playing = true; restart = true; break;

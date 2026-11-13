@@ -32,6 +32,30 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const toggleLyrics = () => setLyricsPinned(pinned => !pinned);
   const hasSong = !!app.current;
 
+  useEffect(() => {
+    const target = window as Window & { __nestuneBack?: () => boolean };
+    target.__nestuneBack = () => {
+      if (queueOpen) { closeQueue(); return true; }
+      if (app.menu) { app.closeMenu(); return true; }
+      if (app.saveDialog) { app.closeSave(); return true; }
+      if (newPl) { setNewPl(null); return true; }
+      if (app.nowOpen) { app.setNowOpen(false); return true; }
+      return false;
+    };
+    return () => { delete target.__nestuneBack; };
+  }, [app, queueOpen, newPl, closeQueue]);
+  useEffect(() => {
+    if (!app.nowOpen) return;
+    const key = `player-${Date.now()}`;
+    history.pushState({ ...history.state, ntPlayer: key }, '', location.href);
+    const back = () => { if (history.state?.ntPlayer !== key) app.setNowOpen(false); };
+    window.addEventListener('popstate', back);
+    return () => {
+      window.removeEventListener('popstate', back);
+      if (history.state?.ntPlayer === key) history.back();
+    };
+  }, [app.nowOpen, app.setNowOpen]);
+
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [path]);
   useEffect(() => { if (!app.me) setLyricsPinned(false); }, [app.me]);
   useEffect(() => { closeQueue(); }, [app.nowOpen, hasSong, closeQueue]);
@@ -72,7 +96,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         <main id="main" ref={main}><div className="wrap">{children}</div></main>
       </div>
       <nav id="tabbar">
-        {[...NAV, ['/settings', '我的', 'user'] as const].map(([href, label, icon]) => (
+        {[...NAV, ['/my', '我的', 'user'] as const].map(([href, label, icon]) => (
           <Link key={href} href={href} className={on(href) ? 'on' : ''} aria-label={href === '/chat' && unread ? `聊天，${unread} 条未读` : undefined}><Icon n={icon} s={21} />{label}{href === '/chat' && unread > 0 && <UnreadCount count={unread} />}</Link>
         ))}
       </nav>

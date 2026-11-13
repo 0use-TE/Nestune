@@ -33,6 +33,18 @@ beforeEach(() => {
 });
 afterAll(() => { database.db().close(); fs.rmSync(directory, { recursive: true, force: true }); vi.unstubAllEnvs(); });
 
+it('plays a single selection without replacing the shared queue, and reuses an existing entry', async () => {
+  await queues.initializeListeningQueue(listener(1), roomId, seed);
+  const original = room().queue!;
+  await queues.editListeningQueue(listener(2), roomId, { type: 'playNow', songId: '104' });
+  expect(room().queue!.entries.map(e => e.song.id)).toEqual(['101', '102', '101', '104', '103']);
+  expect(room().playback).toMatchObject({ songId: '104', playing: true, position: 0 });
+  await queues.editListeningQueue(listener(1), roomId, { type: 'playNow', songId: '102' });
+  expect(room().queue!.entries).toHaveLength(5);
+  expect(room().queue!.entries[1].key).toBe(original.entries[1].key);
+  expect(room().playback?.songId).toBe('102');
+});
+
 it('starts from the host queue, preserving duplicate occurrences, index, mode and position', async () => {
   await queues.initializeListeningQueue(listener(1), roomId, seed);
   expect(room(2)).toMatchObject({ queue: { index: 2, mode: 'all' }, playback: { songId: '101', position: 41, playing: true } });

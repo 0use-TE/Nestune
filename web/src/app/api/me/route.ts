@@ -13,7 +13,11 @@ export const GET = userRoute(async (_req, _ctx, u) => {
 });
 
 export const PATCH = userRoute(async (req, _ctx, u) => {
-  const b = await body<{ displayName?: string; bio?: string; email?: string }>(req);
+  const b = await body<{ displayName?: string; bio?: string; email?: string; profilePublic?: boolean }>(req);
+  if (b.profilePublic !== undefined) {
+    if (typeof b.profilePublic !== 'boolean') throw fail(400, '公开设置无效');
+    run('UPDATE users SET profile_public=? WHERE id=?', Number(b.profilePublic), u.id);
+  }
   if (b.displayName !== undefined) {
     const v = String(b.displayName).trim();
     if (v.length < 1 || v.length > 24) throw fail(400, '昵称长度需要在 1 到 24 之间');

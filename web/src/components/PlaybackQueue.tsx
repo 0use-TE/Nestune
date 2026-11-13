@@ -64,11 +64,13 @@ export function QueuePopover({ inPlayer, onClose }: { inPlayer: boolean; onClose
 
   return (
     <section className={`queue-popover ${inPlayer ? 'in-player' : ''}`} ref={panel} id="player-queue" aria-label="播放列表">
-      <header><h2>{app.sharedQueue ? '共同播放列表' : '播放列表'} <small>{queue.length} 首</small></h2><button className="ib" aria-label="关闭播放列表" onClick={onClose}><Icon n="x" s={20} /></button></header>
-      <div className="queue-toolbar"><div>
-        {app.sharedQueue && <button type="button" className="link" disabled={!queue.length} onClick={() => setSaving(value => !value)}><Icon n="plus" s={14} />保存为歌单</button>}
-        <button type="button" className="link queue-clear" disabled={!queue.length} onClick={app.clearQueue}><Icon n="trash" s={14} />清空</button>
-      </div></div>
+      <header><h2>{app.sharedQueue ? '共同播放列表' : '播放列表'} <small>{queue.length} 首</small></h2>
+        <div className="queue-header-actions">
+          <button type="button" className="link queue-clear" disabled={!queue.length} onClick={app.clearQueue}><Icon n="trash" s={14} />清空</button>
+          <button className="ib" aria-label="关闭播放列表" onClick={onClose}><Icon n="x" s={20} /></button>
+        </div>
+      </header>
+      {app.sharedQueue && <div className="queue-toolbar"><button type="button" className="link" disabled={!queue.length} onClick={() => setSaving(value => !value)}><Icon n="plus" s={14} />保存为歌单</button></div>}
       {saving && <form className="queue-save" onSubmit={save}><input aria-label="歌单名称" value={name} onChange={e => setName(e.target.value)} maxLength={40} required autoFocus /><button className="btn sm" disabled={busy || !name.trim()}>{busy ? <Loading inline label="正在保存歌单" /> : '保存'}</button></form>}
       <PlaybackQueue />
     </section>

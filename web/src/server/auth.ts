@@ -10,7 +10,7 @@ export const sha = (s: string) => crypto.createHash('sha256').update(s).digest('
 
 export type UserRow = {
   id: number; username: string; display_name: string; bio: string; email: string; avatar: string;
-  pwd_hash: string; status: 'pending' | 'active' | 'disabled'; act_hash: string; act_expires: number;
+  profile_public?: number; pwd_hash: string; status: 'pending' | 'active' | 'disabled'; act_hash: string; act_expires: number;
   max_quality: string; can_save: number; created_at: number; last_login_at: number;
 };
 
@@ -49,7 +49,7 @@ export function publicUser(u: UserRow) {
   return {
     id: u.id, username: u.username, displayName: u.display_name || u.username, bio: u.bio, email: u.email,
     avatar: u.avatar ? `/api/avatars/${u.avatar}` : null, status: u.status, maxQuality: u.max_quality,
-    createdAt: u.created_at, lastLoginAt: u.last_login_at,
+    createdAt: u.created_at, lastLoginAt: u.last_login_at, profilePublic: u.profile_public !== 0,
   };
 }
 

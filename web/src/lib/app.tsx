@@ -30,7 +30,7 @@ export type AppCtx = {
   play: (songs: Song[], start?: number, mode?: PlaybackMode) => void; toggle: () => void; next: () => void; prev: () => void; seek: (t: number) => void;
   playbackPosition: () => number; followPlayback: (song: Song | null, position: number, playing: boolean) => void; setFollowingRoom: (following: boolean) => void;
   playbackRunning: () => boolean; setRoomTransport: (handler: ((playing?: boolean) => boolean) | null) => void;
-  enqueue: (s: Song) => void; playNext: (s: Song) => void; removeFromQueue: (i: number) => void; jumpTo: (i: number) => void;
+  playNow: (s: Song) => void; enqueue: (s: Song) => void; playNext: (s: Song) => void; removeFromQueue: (i: number) => void; jumpTo: (i: number) => void;
   clearQueue: () => void; sharedQueue: boolean;
   queueSeed: () => QueueSeed;
   beginSharedQueue: () => void; endSharedQueue: () => void;
@@ -293,6 +293,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // remember the queue between visits
   useEffect(() => {
+    const bridge = (window as Window & { NestuneNative?: { postMessage: (data: string) => void } }).NestuneNative;
+    if (!bridge) return;
+    const sync = () => bridge.postMessage(JSON.stringify({ type: 'media', id: current?.id || '', title: current?.name || '',
+      artist: current?.artists.map(a => a.name).join(' / ') || '', album: current?.album.name || '', playing,
+      position: audio.current?.currentTime || 0, duration: Number.isFinite(audio.current?.duration) ? audio.current!.duration : current?.duration || 0 }));
+    const control = (event: Event) => {
+      const { action, position } = (event as CustomEvent).detail || {};
+      if (action === 'play') { if (!roomTransport.current?.(true)) audio.current?.play().catch(() => {}); }
+      else if (action === 'pause') { if (!roomTransport.current?.(false)) audio.current?.pause(); }
+      else if (action === 'next') next();
+      else if (action === 'previous') prevRef.current();
+      else if (action === 'seek' && typeof position === 'number' && Number.isFinite(position)) {
+        const value = Math.max(0, Math.min(position, current?.duration || 86400));
+        if (roomQueueHandler.current) roomQueueHandler.current({ type: 'seek', position: value });
+        else if (audio.current) audio.current.currentTime = value;
+      }
+    };
+    sync();
+    const timer = window.setInterval(sync, 5000);
+    const element = audio.current;
+    element?.addEventListener('seeked', sync);
+    window.addEventListener('nt:media', control);
+    return () => { clearInterval(timer); element?.removeEventListener('seeked', sync); window.removeEventListener('nt:media', control); };
+  }, [current, playing, next]);
+
+  useEffect(() => {
     if (!me || !restored.current || followingRoom.current || personalQueue.current) return;
     if (queue[index] && isDeviceSong(queue[index].id)) return;
     const onlineIds = queue.filter(song => !isDeviceSong(song.id)).slice(0, 500).map(song => song.id);
@@ -366,6 +392,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     else roomQueueHandler.current({ type, songId: song.id });
     return true;
   };
+  const playNow = useCallback((song: Song) => {
+    if (song.access?.playable === false) { toast(song.access.reason || '这首歌暂时无法播放'); return; }
+    if (roomQueueHandler.current) {
+      if (isDeviceSong(song.id)) { toast('设备本地文件需要先上传并分享，才能加入一起听'); return; }
+      roomQueueHandler.current({ type: 'playNow', songId: song.id }); return;
+    }
+    const { queue: existing, index: currentIndex } = live.current;
+    let at = existing.findIndex(item => item.id === song.id);
+    const songs = [...existing];
+    if (at < 0) { at = Math.max(0, currentIndex + 1); songs.splice(at, 0, song); }
+    autoplay.current = true; pendingSeek.current = 0;
+    live.current = { ...live.current, queue: songs, index: at };
+    setQueue(songs); setIndex(at); setLoadKey(key => key + 1);
+  }, [toast]);
   const enqueue = useCallback((s: Song) => {
     if (queueSong('append', s)) return;
     if (s.access?.playable === false) { toast(s.access.reason || '这首歌暂时无法播放'); return; }
@@ -477,11 +517,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     queue, index, current, playing, loading, error, playbackMode,
     play, toggle, next: () => next(), prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport,
     cyclePlaybackMode, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler,
-    enqueue, playNext, removeFromQueue, jumpTo,
+    playNow, enqueue, playNext, removeFromQueue, jumpTo,
     nowOpen, setNowOpen, menu, openMenu: (song, e) => setMenu({ song, x: e.clientX, y: e.clientY }), closeMenu: () => setMenu(null),
     toast, toasts, theme, setTheme, showTr, setShowTr, tint,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, enqueue, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
+  }), [clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
