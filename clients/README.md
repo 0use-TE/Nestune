@@ -1,5 +1,7 @@
 # Nestune installable clients
 
+Download the published clients from [V1.0.0](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
+
 The clients open `https://music.0use.net/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
 ## Windows x64 — Tauri V1.0.0
@@ -24,7 +26,7 @@ For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rus
 
 ## Linux x64 and macOS universal — Tauri V1.0.0
 
-The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Download the packages from a successful job's **Artifacts** section. Artifacts are retained for 30 days; these are build artifacts rather than a public GitHub Release.
+The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Download the packages from a successful job's **Artifacts** section. Artifacts are retained for 30 days. Verified V1.0.0 packages are also published permanently in the [GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0), with a combined SHA-256 checksum file.
 
 | Platform | Packages | Checks |
 | --- | --- | --- |

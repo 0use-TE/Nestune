@@ -17,3 +17,16 @@ for (const button of document.querySelectorAll('[data-copy]')) {
     }
   });
 }
+const preview = document.querySelector('.preview-dialog');
+const previewImage = document.querySelector('#preview-image');
+const previewCaption = document.querySelector('#preview-caption');
+for (const button of document.querySelectorAll('[data-preview]')) {
+  button.addEventListener('click', () => {
+    previewImage.src = button.dataset.preview;
+    previewImage.alt = button.querySelector('img').alt;
+    previewCaption.textContent = button.dataset.caption;
+    preview.showModal();
+  });
+}
+document.querySelector('[data-close-preview]').addEventListener('click', () => preview.close());
+preview.addEventListener('click', event => { if (event.target === preview) preview.close(); });

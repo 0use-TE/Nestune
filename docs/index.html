@@ -3,12 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111312">
-  <meta name="description" content="Nestune，一个属于你的音乐空间。在线听歌、管理自己的音乐，邀请朋友一起听。">
-  <meta property="og:title" content="Nestune · 让音乐靠近一点">
-  <meta property="og:description" content="听喜欢的歌，把此刻分享给朋友。">
+  <meta name="theme-color" content="#f6f7f2">
+  <meta name="description" content="Nestune，一个属于你的音乐空间。搜索与收藏喜欢的音乐，邀请朋友一起听，在 Windows、macOS、Linux 和 Android 上继续播放。">
+  <meta property="og:title" content="Nestune · 好音乐，一起听。">
+  <meta property="og:description" content="听喜欢的歌，和喜欢的人分享此刻。V1.0.0 现已发布。">
+  <meta property="og:image" content="https://0use.net/Nestune/assets/showcase-home.webp">
   <meta property="og:type" content="website">
-  <title>Nestune · 让音乐靠近一点</title>
+  <link rel="canonical" href="https://0use.net/Nestune/">
+  <title>Nestune · 好音乐，一起听。</title>
   <link rel="icon" href="assets/favicon.png" type="image/png">
   <link rel="apple-touch-icon" href="assets/icon.png">
   <link rel="stylesheet" href="style.css">
@@ -16,45 +18,38 @@
 </head>
 <body>
   <a class="skip" href="#main">跳到正文</a>
-  <div class="shell">
-    <header class="header">
-      <a class="brand" href="./" aria-label="Nestune 首页"><img src="assets/icon.png" width="34" height="34" alt=""><span>Nestune</span></a>
-      <a class="source" href="https://github.com/0use-TE/Nestune">GitHub <span aria-hidden="true">↗</span></a>
-    </header>
-
-    <main id="main">
-      <section class="hero" aria-labelledby="title">
-        <div class="hero-copy">
-          <span class="eyebrow">为喜欢的音乐，留一个位置 <span class="version">V1.0.0</span></span>
-          <h1 id="title">随时听。<br><span>一起听。</span></h1>
-          <p class="intro">一个属于你的音乐空间。<br>听喜欢的歌，把此刻分享给朋友。</p>
-          <a class="primary" href="https://music.0use.net/">开始听歌 <span aria-hidden="true">↗</span></a>
-          <a class="demo-link" href="#try">用测试账号体验 <span aria-hidden="true">↓</span></a>
-        </div>
-        <div class="art" role="img" aria-label="一张绿色唱片，代表正在播放的音乐">
-          <div class="sleeve"><span class="sleeve-name">NESTUNE</span><span class="sleeve-caption">GOOD MUSIC.<br>GOOD COMPANY.</span><span class="sleeve-mark" aria-hidden="true">N.</span></div>
-          <div class="record"><div class="record-label"><span>Nestune</span><i></i><small>SIDE A · TOGETHER</small></div></div>
-          <span class="art-note">音乐，让我们靠近一点。</span>
-        </div>
-      </section>
-
-      <section class="features" aria-label="在 Nestune 可以做什么">
-        <div><span class="number">01 /</span><h2>听你喜欢</h2><p>搜索歌曲，跟着歌词，听进此刻。</p></div>
-        <div><span class="number">02 /</span><h2>收藏你的音乐</h2><p>管理歌单，上传歌曲，也能播放本地音乐。</p></div>
-        <div><span class="number">03 /</span><h2>把朋友拉进来</h2><p>发个邀请，一起听歌，边听边聊。</p></div>
-      </section>
-
-      <section class="try" id="try" aria-labelledby="try-title">
-        <div class="try-copy"><span class="eyebrow">先听听看</span><h2 id="try-title">用这个账号，直接开始。</h2><a href="https://music.0use.net/">music.0use.net <span aria-hidden="true">↗</span></a></div>
-        <div class="credentials">
-          <div class="credential"><span class="label">账号</span><code>test</code><button type="button" data-copy="test" aria-label="复制测试账号">复制</button></div>
-          <div class="credential"><span class="label">密码</span><code>W1111111</code><button type="button" data-copy="W1111111" aria-label="复制测试密码">复制</button></div>
-          <span class="copy-status" role="status" aria-live="polite"></span>
-        </div>
-      </section>
-    </main>
-
-    <footer><span>Nestune <span class="footer-dot">·</span> 给音乐，也给自己一点空间。</span><a href="https://github.com/0use-TE/Nestune">开源于 GitHub <span aria-hidden="true">↗</span></a></footer>
-  </div>
+  <header class="header container">
+    <a class="brand" href="./" aria-label="Nestune 首页"><img src="assets/icon.png" width="32" height="32" alt=""><span>Nestune</span></a>
+    <nav aria-label="主导航"><a href="#experience">界面</a><a href="#download">下载</a><a href="https://github.com/0use-TE/Nestune">GitHub <span aria-hidden="true">↗</span></a></nav>
+  </header>
+  <main id="main">
+    <section class="hero container" aria-labelledby="title">
+      <div class="hero-top"><a class="release-pill" href="https://github.com/0use-TE/Nestune/releases/tag/v1.0.0"><span class="live-dot" aria-hidden="true"></span> V1.0.0 现已发布 <span aria-hidden="true">↗</span></a><span class="hero-note">一个属于你的音乐空间</span></div>
+      <div class="hero-heading"><h1 id="title">好音乐，<br><em>一起听。</em></h1><div class="hero-copy"><p>留住喜欢的旋律，<br>也把此刻分享给朋友。</p><p class="hero-description">搜索、收藏、管理自己的音乐。<br>一个人沉浸，也可以两个人同行。</p><div class="actions"><a class="button primary" href="https://music.0use.net/">开始听歌 <span aria-hidden="true">↗</span></a><a class="button secondary" href="#download">下载客户端 <span aria-hidden="true">↓</span></a></div><a class="text-link" href="#try">用测试账号，先体验一下 <span aria-hidden="true">→</span></a></div></div>
+      <figure class="hero-stage" id="experience">
+        <div class="screen desktop-screen"><div class="window-bar" aria-hidden="true"><span class="window-dots"><i></i><i></i><i></i></span><span>music.0use.net</span><span class="window-mark">Nestune</span></div><button class="zoom" data-preview="assets/showcase-home.webp" data-caption="桌面首页 · 从最近播放，回到喜欢的音乐" aria-label="查看桌面首页大图"><img src="assets/showcase-home.webp" width="2160" height="1380" alt="Nestune 深色桌面首页，包含歌曲推荐、最近播放和底部播放器" fetchpriority="high"></button></div>
+        <div class="phone hero-phone"><button class="zoom" data-preview="assets/showcase-mobile.webp" data-caption="手机播放页 · 唱片封面与播放控制" aria-label="查看手机播放页大图"><img src="assets/showcase-mobile.webp" width="780" height="1688" alt="Nestune 手机唱片播放页"></button></div>
+        <figcaption><span>打开，就是你的音乐。</span><span>桌面 · 手机 · 浏览器</span></figcaption>
+      </figure>
+    </section>
+    <section class="principles container" aria-label="音乐体验"><div><span class="index">01</span><h2>专注于听</h2><p>封面、歌词和播放控制，各在其位。</p></div><div><span class="index">02</span><h2>收好喜欢</h2><p>歌曲、专辑、歌单，都能找到自己的位置。</p></div><div><span class="index">03</span><h2>分享此刻</h2><p>从一首歌，到一场两个人的音乐会。</p></div></section>
+    <section class="feature container" aria-labelledby="player-title">
+      <div class="section-heading"><div><span class="eyebrow">THE LISTENING EXPERIENCE</span><h2 id="player-title">把注意力，<br>交给音乐。</h2></div><p>舒展的封面、跟随播放的歌词，<br>加上随手可及的播放队列。<br>让每一次打开，都回到听歌本身。</p></div>
+      <div class="screen wide-screen"><button class="zoom" data-preview="assets/showcase-player.webp" data-caption="沉浸播放 · 当前歌曲与播放队列" aria-label="查看沉浸播放器大图"><img src="assets/showcase-player.webp" width="2160" height="1380" alt="沉浸播放器展示唱片封面、播放控制和右侧播放队列" loading="lazy"></button></div>
+      <ul class="inline-features"><li><span>01 /</span> 沉浸播放与滚动歌词</li><li><span>02 /</span> 单曲即播，队列随心调整</li><li><span>03 /</span> Android 系统媒体控制</li></ul>
+    </section>
+    <section class="library-section" aria-labelledby="library-title"><div class="container library-layout"><div class="section-copy"><span class="eyebrow">YOUR MUSIC, YOUR WAY</span><h2 id="library-title">喜欢的，<br>都留在这里。</h2><p>收藏一首歌，也收藏整张专辑。<br>把平台歌单和朋友分享的歌单，<br>一起放进自己的音乐库。</p><div class="small-divider"></div><p class="sub-copy">为不同心情创建歌单，上传自己的歌曲。<br>在支持的桌面浏览器中，也能授权播放本地音乐。</p><a class="text-link" href="https://music.0use.net/library">去整理我的音乐 <span aria-hidden="true">↗</span></a></div><div class="library-visual"><div class="screen"><button class="zoom" data-preview="assets/showcase-library.webp" data-caption="音乐库 · 歌曲、专辑与歌单分类收藏" aria-label="查看音乐库大图"><img src="assets/showcase-library.webp" width="2160" height="1380" alt="音乐库中收藏的歌单封面网格，以及歌曲、专辑和歌单分类" loading="lazy"></button></div><div class="visual-caption"><span class="live-dot" aria-hidden="true"></span> 随账号保存，换个设备也能找到。</div></div></div></section>
+    <section class="together container" aria-labelledby="together-title"><div class="section-heading"><div><span class="eyebrow">BETTER WITH COMPANY</span><h2 id="together-title">各在一方，<br>也能听到一起。</h2></div><p>在聊天中发起邀请，分享同一个播放队列。<br>你加一首，我添一首。<br>音乐之外，还有想说的话。</p></div><div class="together-stage"><div class="together-label"><span class="live-dot" aria-hidden="true"></span> SAME SONG. SAME MOMENT.</div><div class="together-desktop screen"><button class="zoom" data-preview="assets/showcase-chat.webp" data-caption="聊天与一起听 · 对话内容为演示数据" aria-label="查看一起听聊天大图"><img src="assets/showcase-chat.webp" width="2160" height="1380" alt="聊天界面包含歌曲分享卡片、已接受的一起听邀请和消息输入栏" loading="lazy"></button></div><div class="phone together-phone"><button class="zoom" data-preview="assets/showcase-chat-mobile.webp" data-caption="手机聊天 · 对话内容为演示数据" aria-label="查看手机聊天大图"><img src="assets/showcase-chat-mobile.webp" width="780" height="1688" alt="手机上的歌曲分享和一起听邀请记录" loading="lazy"></button></div></div><div class="together-bottom"><p>共同队列 · 双方增删歌曲 · 站内分享 · 邀请记录</p><small>截图来自当前产品界面，个人收藏及聊天内容使用演示数据。</small></div></section>
+    <section class="downloads" id="download" aria-labelledby="download-title"><div class="container"><div class="section-heading"><div><span class="eyebrow">TAKE YOUR MUSIC WITH YOU</span><h2 id="download-title">在哪打开，<br>都很顺手。</h2></div><p>在浏览器里直接听，<br>或给音乐留一个独立窗口。<br><a class="text-link" href="https://github.com/0use-TE/Nestune/releases/tag/v1.0.0">查看 V1.0.0 更新说明 <span aria-hidden="true">↗</span></a></p></div><div class="download-list">
+      <article class="download-row"><span class="platform-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 4h8v8H3zm10 0h8v8h-8zM3 14h8v7H3zm10 0h8v7h-8z"/></svg></span><div class="platform"><h3>Windows</h3><p>x64 · Windows 10 / 11</p></div><span class="package-size">安装包 1.2 MB</span><div class="download-actions"><a class="button download" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Windows-x64-Tauri-Setup.exe">下载安装版 <span aria-hidden="true">↓</span></a><a class="minor-link" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Windows-x64-Tauri.exe">便携版 ↗</a></div></article>
+      <article class="download-row"><span class="platform-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 3c-1.6 0-3 1.2-3.3 3 1.8.2 3.2-1.2 3.3-3ZM18.3 13c0-1.7 1-2.6 1.7-3.1-1-1.5-2.6-1.7-3.2-1.7-1.4-.1-2.8.9-3.5.9-.8 0-1.9-.9-3.1-.8-1.6 0-3.1 1-3.9 2.4-1.6 2.8-.4 7 1.1 9.1.7 1 1.5 2.1 2.6 2 1.1 0 1.5-.6 2.9-.6s1.8.6 3 .6 1.9-1 2.6-2c.8-1.1 1.1-2.2 1.2-2.3-2.5-1-2.4-3.4-2.4-3.5Z"/></svg></span><div class="platform"><h3>macOS</h3><p>Universal · Apple Silicon / Intel</p></div><span class="package-size">DMG 5.0 MB</span><div class="download-actions"><a class="button download" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-macOS-universal.dmg">下载 DMG <span aria-hidden="true">↓</span></a><a class="minor-link" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-macOS-universal.app.zip">App ZIP ↗</a></div></article>
+      <article class="download-row"><span class="platform-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.7" d="m8 6-5 6 5 6m8-12 5 6-5 6M14 3l-4 18"/></svg></span><div class="platform"><h3>Linux</h3><p>x86-64 · AppImage / Debian</p></div><span class="package-size">AppImage 137 MB</span><div class="download-actions"><a class="button download" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Linux-x64.AppImage">下载 AppImage <span aria-hidden="true">↓</span></a><a class="minor-link" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Linux-amd64.deb">DEB ↗</a></div></article>
+      <article class="download-row"><span class="platform-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="m7 5-2-3m12 3 2-3M4 12a8 8 0 0 1 16 0v7H4Zm0 2h16M8 19v3m8-3v3"/><circle cx="8.5" cy="9" r="1"/><circle cx="15.5" cy="9" r="1"/></svg></span><div class="platform"><h3>Android</h3><p>Android 7+ · 通用 APK</p></div><span class="package-size">APK 13.0 MB</span><div class="download-actions"><a class="button download" href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Android-Tauri.apk">下载 APK <span aria-hidden="true">↓</span></a><a class="minor-link" href="https://music.0use.net/api/client-updates/android/4">备用下载 ↗</a></div></article>
+    </div><p class="download-note">客户端连接在线服务。Windows 使用 WebView2；macOS 安装包尚未公证，首次打开可能需要在系统设置中允许。<a href="https://github.com/0use-TE/Nestune/releases/download/v1.0.0/SHA256SUMS.txt">校验文件 ↗</a></p></div></section>
+    <section class="try container" id="try" aria-labelledby="try-title"><div><span class="eyebrow">PRESS PLAY</span><h2 id="try-title">先听一首，<br>再慢慢发现。</h2><p>不用从注册开始。用测试账号，<br>看看这里有没有你想要的听歌方式。</p><a class="button primary" href="https://music.0use.net/">打开 Nestune <span aria-hidden="true">↗</span></a></div><div class="credentials"><div class="credential"><span class="label">测试账号</span><code>test</code><button type="button" data-copy="test" aria-label="复制测试账号">复制 <span aria-hidden="true">↗</span></button></div><div class="credential"><span class="label">密码</span><code>W1111111</code><button type="button" data-copy="W1111111" aria-label="复制测试密码">复制 <span aria-hidden="true">↗</span></button></div><p class="copy-status" role="status" aria-live="polite"></p><span class="demo-tag">music.0use.net</span></div></section>
+    <section class="faq container" aria-labelledby="faq-title"><h2 id="faq-title">你可能想知道</h2><div><details><summary>需要安装才能听歌吗？<span aria-hidden="true">+</span></summary><p>不需要，直接打开网页版即可。在支持的浏览器中，也可以把网站安装为 PWA，添加到桌面或主屏幕。</p></details><details><summary>每次更新，都需要重新安装吗？<span aria-hidden="true">+</span></summary><p>网页功能随服务端更新，可在「设置 → 关于」检查并应用更新。客户端原生能力升级时才需要安装新版；Android 的后续安装包也可从设置里检查下载。</p></details><details><summary>可以和朋友怎么一起听？<span aria-hidden="true">+</span></summary><p>添加好友后，在「一起听」或聊天中发出邀请。接受后，从发起人的队列开始共同播放，双方都能添加、删除和切换歌曲，也能分享歌曲与公开歌单。</p></details></div></section>
+  </main>
+  <footer class="footer container"><a class="brand" href="./"><img src="assets/icon.png" width="26" height="26" alt="">Nestune</a><span>给音乐，也给自己一点空间。</span><nav aria-label="页脚"><a href="https://github.com/0use-TE/Nestune">源码 ↗</a><a href="https://github.com/0use-TE/Nestune/releases/tag/v1.0.0">V1.0.0 ↗</a><a href="https://github.com/0use-TE/Nestune/issues">反馈 ↗</a></nav></footer>
+  <dialog class="preview-dialog" aria-label="界面大图"><div class="preview-toolbar"><p id="preview-caption"></p><button type="button" data-close-preview aria-label="关闭大图">关闭 <span aria-hidden="true">×</span></button></div><img id="preview-image" alt=""></dialog>
 </body>
 </html>
