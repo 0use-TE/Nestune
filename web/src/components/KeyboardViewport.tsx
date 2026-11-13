@@ -7,9 +7,11 @@ export function KeyboardViewport() {
     const sync = () => {
       const viewport = window.visualViewport;
       const height = viewport?.height ?? innerHeight;
-      const bottom = Math.max(0, innerHeight - height - (viewport?.offsetTop ?? 0));
+      const top = viewport?.offsetTop ?? 0;
+      const bottom = Math.max(0, innerHeight - height - top);
       const typing = document.activeElement?.matches('input,textarea,[contenteditable=true]');
       root.style.setProperty('--visible-height', `${height}px`);
+      root.style.setProperty('--visible-top', `${top}px`);
       root.style.setProperty('--keyboard-bottom', `${bottom}px`);
       root.toggleAttribute('data-keyboard', !!typing && (bottom > 100 || height < screen.height * .7));
     };
@@ -25,7 +27,7 @@ export function KeyboardViewport() {
       window.removeEventListener('resize', sync);
       document.removeEventListener('focusin', sync);
       document.removeEventListener('focusout', sync);
-      root.style.removeProperty('--visible-height'); root.style.removeProperty('--keyboard-bottom'); root.removeAttribute('data-keyboard');
+      root.style.removeProperty('--visible-height'); root.style.removeProperty('--visible-top'); root.style.removeProperty('--keyboard-bottom'); root.removeAttribute('data-keyboard');
     };
   }, []);
   return null;

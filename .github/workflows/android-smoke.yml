@@ -6,6 +6,10 @@ on:
         description: Android build workflow run ID
         required: true
         type: string
+      chat_only:
+        description: Check chat layout with the real keyboard and isolated API fixtures
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -33,6 +37,8 @@ jobs:
       - name: Install probe build tools
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ''platforms;android-35'' ''build-tools;35.0.0'''
       - uses: reactivecircus/android-emulator-runner@v2
+        env:
+          CHAT_ONLY: ${{ inputs.chat_only }}
         with:
           api-level: 35
           target: google_apis

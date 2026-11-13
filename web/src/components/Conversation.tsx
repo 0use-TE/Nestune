@@ -99,6 +99,18 @@ export function Conversation({ person, userId, onClose, compact = false, visible
     } else if (followBottom.current) node.scrollTop = node.scrollHeight;
   }, [messages]);
 
+  useEffect(() => {
+    const node = list.current;
+    if (!node || !visible) return;
+    // Keep the latest message visible when the keyboard changes the available
+    // height, while preserving the position of someone reading older messages.
+    const resize = new ResizeObserver(() => {
+      if (followBottom.current) node.scrollTop = node.scrollHeight;
+    });
+    resize.observe(node);
+    return () => resize.disconnect();
+  }, [visible]);
+
   async function earlier() {
     setBusy(true);
     try {

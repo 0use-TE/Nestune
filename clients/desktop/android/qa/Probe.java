@@ -22,7 +22,8 @@ import org.json.JSONObject;
 public class Probe extends Instrumentation {
     private WebView web;
     private Activity activity;
-    @Override public void onCreate(Bundle args) { super.onCreate(args); start(); }
+    private boolean chatOnly;
+    @Override public void onCreate(Bundle args) { super.onCreate(args); chatOnly=args!=null && args.getString("chat_only", "false").equals("true"); start(); }
     private WebView find(View view) {
         if (view instanceof WebView) return (WebView) view;
         if (view instanceof ViewGroup) for (int i=0; i<((ViewGroup)view).getChildCount(); i++) {
@@ -40,6 +41,42 @@ public class Probe extends Instrumentation {
         for (int i=0;i<120;i++) { if ("true".equals(js(expression))) return; SystemClock.sleep(500); }
         throw new AssertionError("Condition failed: "+expression);
     }
+    private void tap(String selector) throws Exception {
+        JSONObject rect=new JSONObject(js("(()=>{const r=document.querySelector("+JSONObject.quote(selector)+").getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,width:innerWidth}})()"));
+        final int[] location={0,0};
+        runOnMainSync(() -> web.getLocationOnScreen(location));
+        float scale=(float)(web.getWidth()/rect.getDouble("width"));
+        float x=location[0]+(float)rect.getDouble("x")*scale, y=location[1]+(float)rect.getDouble("y")*scale;
+        long time=SystemClock.uptimeMillis();
+        sendPointerSync(MotionEvent.obtain(time,time,MotionEvent.ACTION_DOWN,x,y,0));
+        sendPointerSync(MotionEvent.obtain(time,time+80,MotionEvent.ACTION_UP,x,y,0));
+    }
+    private void checkChatKeyboard() throws Exception {
+        java.io.ByteArrayOutputStream script=new java.io.ByteArrayOutputStream();
+        try(java.io.InputStream input=getContext().getAssets().open("chat-fixture.js")) {
+            byte[] buffer=new byte[4096]; int count;
+            while((count=input.read(buffer))!=-1) script.write(buffer,0,count);
+        }
+        js(script.toString("UTF-8"));
+        expectJS("!!document.querySelector('#tabbar a[href=\"/chat\"]')");
+        js("document.querySelector('#tabbar a[href=\"/chat\"]').click();true");
+        expectJS("!!document.querySelector('.chat-thread')");
+        js("document.querySelector('.chat-thread').click();true");
+        expectJS("document.querySelectorAll('.message-entry').length===40 && window.__chatLayoutOK()");
+        final int[] height={0}; runOnMainSync(() -> height[0]=web.getHeight());
+        for(int cycle=0;cycle<2;cycle++) {
+            tap(".chat-composer input");
+            boolean resized=false;
+            for(int i=0;i<40;i++){SystemClock.sleep(250);if(web.getHeight()<height[0]-150){resized=true;break;}}
+            if(!resized) throw new AssertionError("Chat IME did not open");
+            SystemClock.sleep(400);
+            expectJS("window.__chatLayoutOK()");
+            expectJS("(()=>{const n=document.querySelector('.social-messages');return n.scrollHeight-n.scrollTop-n.clientHeight<5})()");
+            sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+            for(int i=0;i<40 && web.getHeight()<height[0]-30;i++)SystemClock.sleep(100);
+            expectJS("window.__chatLayoutOK()");
+        }
+    }
     private MediaController controller() throws Exception {
         MediaSessionManager manager=getTargetContext().getSystemService(MediaSessionManager.class);
         for (int i=0;i<30;i++) {
@@ -55,6 +92,11 @@ public class Probe extends Instrumentation {
             for (int i=0;i<40;i++) { runOnMainSync(() -> web=find(activity.getWindow().getDecorView())); if (web!=null) break; SystemClock.sleep(250); }
             if (web==null) throw new AssertionError("No native WebView");
             expectJS("location.origin==='https://music.0use.net' && document.readyState==='complete' && !!document.querySelector('#login,#app')");
+            if(chatOnly) {
+                checkChatKeyboard();
+                result.putString("report","NESTUNE_ANDROID_PASS: real chat UI, 40 fixture messages, real IME open/close twice, visible header, composer adjacent to navigation, latest message retained; no server data changed");
+                finish(Activity.RESULT_OK,result); return;
+            }
             expectJS("typeof NestuneNative !== 'undefined'");
             js("window.__nativeMessage=NestuneNative.onmessage;NestuneNative.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.type==='clientInfo')window.__probeClient=d}catch{};window.__nativeMessage?.(e)};NestuneNative.postMessage(JSON.stringify({type:'clientInfo'}));true");
             expectJS("window.__probeClient?.versionCode>=4 && window.__probeClient.canDownload===true");
