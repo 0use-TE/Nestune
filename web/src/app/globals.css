@@ -708,3 +708,5 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .chat-playlist-card{display:flex;align-items:center;gap:12px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--soft);max-width:310px}
 .chat-playlist-card .cv{width:54px;flex:none;border-radius:8px}.chat-playlist-card span{min-width:0}.chat-playlist-card b,.chat-playlist-card small{display:block}
 .chat-playlist-card:active{background:var(--line)}
+
+@media(max-width:860px){.sugg,.home-search .sugg{max-height:min(440px,max(100px,calc(var(--visible-height,100dvh) - 230px)));overflow-y:auto;overscroll-behavior:contain}}
