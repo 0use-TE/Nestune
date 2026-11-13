@@ -6,6 +6,7 @@ import { get } from '@/lib/api';
 import { SharePlaylist } from '@/components/SharePlaylist';
 import { useApp } from '@/lib/app';
 import type { PlaylistLite, Song } from '@/lib/types';
+import { CollectionFavoriteButton } from '@/components/CollectionFavorite';
 import { Hero } from '@/components/Hero';
 import { Icon } from '@/components/Icon';
 import { Loading, SongList } from '@/components/SongList';
@@ -23,6 +24,7 @@ export default function SharedPlaylistPage() {
   return <>
     <Hero cover={data.playlist.cover} seed={`pl${id}`} tag="公开歌单" title={data.playlist.name} sub={`${data.songs.length} 首歌曲`}>
       <button className="btn light" disabled={!data.songs.length} onClick={() => app.play(data.songs)}><Icon n="play" s={16} />播放全部</button>
+        <CollectionFavoriteButton kind="shared" id={data.playlist.id} />
       <Link className="btn ghost" href={`/people/${data.owner.id}`}>{data.owner.name}</Link>
       <button className="btn ghost" onClick={() => setSharing(true)}>分享</button>
     </Hero>

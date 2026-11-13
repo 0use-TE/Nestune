@@ -184,6 +184,18 @@ export async function album(id: string) {
   };
 }
 
+/** Bookmark metadata only; collecting a playlist must not fetch its tracks. */
+export async function collectionMetadata(kind: 'album' | 'playlist', id: string) {
+  if (kind === 'playlist') {
+    const { playlist: item } = await playlist(id, 0, 0);
+    return { name: item.name, cover: item.cover, sub: item.creator || '' };
+  }
+  const b = await call('album', { id });
+  const a = b.album;
+  if (!a?.id || !a.name) throw fail(404, '专辑不存在');
+  return { name: a.name, cover: cover(a.picUrl), sub: a.artist?.name || '' };
+}
+
 export async function playlist(id: string, limit: number, offset: number) {
   const b = await call('playlist_detail', { id, s: 0 });
   const p = b.playlist;

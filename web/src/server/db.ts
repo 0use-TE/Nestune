@@ -45,6 +45,14 @@ function open() {
       created_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, song_id)
     );
+    CREATE TABLE IF NOT EXISTS collection_favorites (
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('album','playlist','shared')),
+      target_id TEXT NOT NULL,
+      meta TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, kind, target_id)
+    );
     CREATE TABLE IF NOT EXISTS history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

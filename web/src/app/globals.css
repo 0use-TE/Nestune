@@ -711,3 +711,6 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .chat-playlist-card:active{background:var(--line)}
 
 @media(max-width:860px){.sugg,.home-search .sugg{max-height:min(440px,max(100px,calc(var(--visible-height,100dvh) - 230px)));overflow-y:auto;overscroll-behavior:contain}}
+
+.collection-favorite.is-collected svg{fill:currentColor}
+.collection-grid article{min-width:0}.collection-grid .card>.sub{display:block}.collection-grid article>.link{margin-top:8px}

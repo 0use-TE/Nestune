@@ -6,6 +6,7 @@ import { del, get } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import type { Song } from '@/lib/types';
 import { Empty, Loading, SongList } from '@/components/SongList';
+import { FavoriteCollections } from '@/components/CollectionFavorite';
 import { Icon } from '@/components/Icon';
 
 const TABS = [['favorites', '收藏'], ['history', '历史'], ['local', '本地'], ['uploads', '上传歌曲']] as const;
@@ -16,7 +17,9 @@ export default function LibraryPage() {
 
 function Library() {
   const app = useApp();
-  const requested = useSearchParams().get('tab');
+  const params = useSearchParams();
+  const requested = params.get('tab');
+  const category = params.get('kind') === 'album' ? 'album' : params.get('kind') === 'playlist' ? 'playlist' : 'song';
   const tab = TABS.find(([key]) => key === requested)?.[0] ?? 'favorites';
   const [result, setResult] = useState<{ tab: typeof tab; songs: Song[] } | null>(null);
 
@@ -25,13 +28,13 @@ function Library() {
     let live = true;
     setResult(null);
     document.getElementById('main')?.scrollTo({ top: 0 });
-    if (tab === 'local' || tab === 'uploads') return;
+    if (tab === 'local' || tab === 'uploads' || tab === 'favorites' && category !== 'song') return;
     const url = tab === 'favorites' ? '/api/me/favorites' : '/api/me/history?limit=100';
     get<{ songs: Song[] }>(url).then(r => {
       if (live) setResult({ tab, songs: r.songs });
     }).catch(e => { if (live) { app.toast(e.message); setResult({ tab, songs: [] }); } });
     return () => { live = false; };
-  }, [tab, app.toast]);
+  }, [tab, category, app.toast]);
 
   const songs = result?.tab === tab ? result.songs : null;
   const shown = tab === 'favorites' && songs ? songs.filter(s => app.favIds.has(s.id)) : songs;
@@ -56,8 +59,9 @@ function Library() {
           {tab === 'local' && app.deviceMusic.status === 'ready' && <DeviceRefreshButton refresh={app.deviceMusic.refresh} />}
         </div>
       </div>
+      {tab === 'favorites' && <nav className="chips" aria-label="收藏分类">{[['song','歌曲'],['album','专辑'],['playlist','歌单']].map(([key,label]) => <Link key={key} className={`chip ${category === key ? 'on' : ''}`} aria-current={category === key ? 'page' : undefined} href={key === 'song' ? '/library' : `/library?kind=${key}`} replace scroll={false}>{label}</Link>)}</nav>}
       {tab === 'history' && shown && shown.length > 0 && <div style={{ textAlign: 'right', marginBottom: 6 }}><button className="link" onClick={clearHistory}>清空历史</button></div>}
-      {tab === 'local' ? <DeviceLibrary /> : tab === 'uploads' ? <UploadLibrary /> : shown === null ? <Loading /> : shown.length === 0
+      {tab === 'favorites' && category !== 'song' ? <FavoriteCollections category={category} /> : tab === 'local' ? <DeviceLibrary /> : tab === 'uploads' ? <UploadLibrary /> : shown === null ? <Loading /> : shown.length === 0
         ? <Empty text={tab === 'favorites' ? '还没有收藏的歌曲，点歌曲旁边的爱心即可收藏。' : '还没有播放记录。'} />
         : <SongList songs={shown} />}
     </>
