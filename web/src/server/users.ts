@@ -1,7 +1,6 @@
 import fs from 'node:fs';
-import crypto from 'node:crypto';
 import { QUALITIES, dir } from './config';
-import { all, now, one, run } from './db';
+import { all, db, now, one, run } from './db';
 import {
   UserRow, checkPasswordRule, codeExpiry, codeHash, hashPassword, kickUser, newCode, normCode, publicUser, verifyPassword,
 } from './auth';
@@ -20,6 +19,49 @@ export function validQuality(q: unknown) {
 }
 
 /* ---------- admin operations ---------- */
+export function createActivationCode(input: { maxQuality?: string } = {}) {
+  const quality = input.maxQuality ? validQuality(input.maxQuality) : 'exhigh';
+  const code = newCode();
+  const expiresAt = codeExpiry();
+  const result = run('INSERT INTO activation_codes(code_hash,max_quality,created_at,expires_at) VALUES(?,?,?,?)', codeHash(code), quality, now(), expiresAt);
+  return { id: Number(result.lastInsertRowid), activationCode: code, expiresAt };
+}
+
+export function listActivationCodes() {
+  return all(`SELECT c.id,c.max_quality AS maxQuality,c.created_at AS createdAt,c.expires_at AS expiresAt,
+    u.username,CASE WHEN c.used_at>0 THEN 'used' WHEN c.revoked_at>0 THEN 'revoked'
+    WHEN c.expires_at<=? THEN 'expired' ELSE 'unused' END AS status
+    FROM activation_codes c LEFT JOIN users u ON u.id=c.used_by ORDER BY c.id DESC`, now());
+}
+
+export function revokeActivationCode(id: number) {
+  if (!Number.isSafeInteger(id) || id < 1) throw fail(400, '无效的激活码');
+  if (!one('SELECT id FROM activation_codes WHERE id=?', id)) throw fail(404, '激活码不存在');
+  run('UPDATE activation_codes SET revoked_at=? WHERE id=? AND used_at=0 AND revoked_at=0', now(), id);
+}
+
+function resolveActivation(code: string) {
+  if (normCode(code).length !== 12) throw fail(401, '激活码不正确或已失效');
+  const hash = codeHash(code);
+  const entry = one<{ id: number; max_quality: string; expires_at: number; used_at: number; revoked_at: number }>('SELECT * FROM activation_codes WHERE code_hash=?', hash);
+  if (entry) {
+    if (entry.used_at || entry.revoked_at) throw fail(401, '激活码不正确或已失效');
+    if (entry.expires_at <= now()) throw fail(410, '激活码已过期，请联系管理员重新生成', 'code_expired');
+    return { kind: 'register' as const, entry };
+  }
+  const user = one<UserRow>("SELECT * FROM users WHERE act_hash=? AND status='pending'", hash);
+  if (!user) throw fail(401, '激活码不正确或已失效');
+  if (user.act_expires <= now()) throw fail(410, '激活码已过期，请联系管理员重新生成', 'code_expired');
+  return { kind: 'reset' as const, user };
+}
+
+export function checkActivation(code: string, ip: string) {
+  hit(`act-check:${ip}`, 20, 60_000, '尝试过多，请稍后再试');
+  const result = resolveActivation(code);
+  return result.kind === 'register' ? { kind: result.kind } : { kind: result.kind, username: result.user.username, displayName: result.user.display_name || result.user.username };
+}
+
+// Kept for compatibility with existing pending accounts; new invitations use createActivationCode.
 export function createUser(input: { username: string; displayName?: string; maxQuality?: string }) {
   const username = String(input.username || '').trim().toLowerCase();
   if (!USERNAME_RE.test(username)) throw fail(400, '用户名需为 3 到 24 位小写字母、数字或下划线');
@@ -85,21 +127,39 @@ export async function login(username: string, password: string, ip: string) {
   return u;
 }
 
-export async function activate(username: string, code: string, password: string, ip: string) {
+export async function activate(username: string, code: string, password: string, ip: string, displayName?: string) {
   const name = String(username || '').trim().toLowerCase();
   hit(`act:ip:${ip}`, 20, 60_000, '尝试过多，请稍后再试');
   hit(`act:user:${name}`, 6, 300_000, '激活尝试过多，请 5 分钟后再试');
-  const u = byName(name);
-  const given = Buffer.from(codeHash(code));
-  const stored = Buffer.from(u?.act_hash || '0'.repeat(64));
-  const match = given.length === stored.length && crypto.timingSafeEqual(given, stored);
-  if (!u || !match || u.status !== 'pending' || normCode(code).length !== 12) throw fail(401, '用户名或激活码不正确');
-  if (u.act_expires < now()) throw fail(410, '激活码已过期，请联系管理员重新生成', 'code_expired');
+  const initial = resolveActivation(code);
+  if (!USERNAME_RE.test(name)) throw fail(400, '用户名需为 3 到 24 位小写字母、数字或下划线');
+  const nickname = String(displayName || '').trim();
+  if (initial.kind === 'register' && (!nickname || nickname.length > 24)) throw fail(400, '昵称需为 1 到 24 个字符');
+  if (initial.kind === 'reset' && initial.user.username !== name) throw fail(401, '用户名或激活码不正确');
   checkPasswordRule(password);
-  run("UPDATE users SET pwd_hash=?, status='active', act_hash='', act_expires=0, last_login_at=? WHERE id=?",
-    await hashPassword(password), now(), u.id);
+  const passwordHash = await hashPassword(password);
+  let id: number;
+  db().exec('BEGIN IMMEDIATE');
+  try {
+    // Recheck after hashing: another request may have consumed, revoked or replaced the code.
+    const current = resolveActivation(code);
+    if (current.kind === 'register') {
+      if (byName(name)) throw fail(409, '用户名已存在，请换一个');
+      const result = run("INSERT INTO users(username,display_name,pwd_hash,status,max_quality,created_at,last_login_at) VALUES(?,?,?,'active',?,?,?)", name, nickname, passwordHash, current.entry.max_quality, now(), now());
+      id = Number(result.lastInsertRowid);
+      run('UPDATE activation_codes SET used_at=?,used_by=? WHERE id=?', now(), id, current.entry.id);
+    } else {
+      if (current.user.username !== name) throw fail(401, '用户名或激活码不正确');
+      id = current.user.id;
+      run("UPDATE users SET pwd_hash=?, status='active', act_hash='', act_expires=0, last_login_at=? WHERE id=?", passwordHash, now(), id);
+    }
+    db().exec('COMMIT');
+  } catch (error) {
+    db().exec('ROLLBACK');
+    throw error;
+  }
   clear(`act:user:${name}`);
-  return byId(u.id)!;
+  return byId(id)!;
 }
 
 export async function changePassword(u: UserRow, current: string, next: string) {

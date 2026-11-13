@@ -27,6 +27,16 @@ function open() {
       created_at INTEGER NOT NULL,
       last_login_at INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS activation_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code_hash TEXT NOT NULL UNIQUE,
+      max_quality TEXT NOT NULL DEFAULT 'exhigh',
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER NOT NULL DEFAULT 0,
+      used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      revoked_at INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       kind TEXT NOT NULL,

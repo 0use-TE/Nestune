@@ -129,18 +129,25 @@ function Overview({ guard, go }: { guard: P['guard']; go: (t: Tab) => void }) {
 
 /* ---------------- users ---------------- */
 type U = { id: number; username: string; displayName: string; status: string; maxQuality: string; createdAt: number; lastLoginAt: number; favorites: number; plays: number };
+type ActivationCode = { id: number; maxQuality: string; createdAt: number; expiresAt: number; status: 'unused' | 'used' | 'expired' | 'revoked'; username: string | null };
 function Users({ guard, toast }: P) {
   const [users, setUsers] = useState<U[] | null>(null);
-  const [form, setForm] = useState<null | { username: string; displayName: string; maxQuality: string }>(null);
+  const [codes, setCodes] = useState<ActivationCode[]>([]);
+  const [form, setForm] = useState<null | { maxQuality: string }>(null);
+  const [creating, setCreating] = useState(false);
   const [reveal, setReveal] = useState<null | { title: string; code: string }>(null);
   const [err, setErr] = useState('');
-  const load = useCallback(() => get('/api/admin/users').then(r => setUsers(r.users)).catch(guard), [guard]);
+  const load = useCallback(() => Promise.all([
+    get('/api/admin/users').then(r => setUsers(r.users)),
+    get('/api/admin/activation-codes').then(r => setCodes(r.codes)),
+  ]).catch(guard), [guard]);
   useEffect(() => { load(); }, [load]);
 
   async function create(e: React.FormEvent) {
-    e.preventDefault(); setErr('');
-    try { const r = await post('/api/admin/users', form); setForm(null); setReveal({ title: `已创建：${r.user.username}`, code: r.activationCode }); load(); }
+    e.preventDefault(); if (creating) return; setErr(''); setCreating(true);
+    try { const r = await post('/api/admin/activation-codes', form); setForm(null); setReveal({ title: '激活码已生成', code: r.activationCode }); load(); }
     catch (e: any) { setErr(e.message); }
+    finally { setCreating(false); }
   }
   const act = async (fn: () => Promise<any>, ok: string) => { try { await fn(); toast(ok); load(); } catch (e) { guard(e); } };
   const reset = async (u: U) => {
@@ -151,8 +158,8 @@ function Users({ guard, toast }: P) {
 
   return (
     <>
-      <div className="head"><div><h1>用户</h1><div className="sub">账号只能由管理员创建。新用户用一次性激活码首次登录，并自己设置密码，你不会知道对方的密码。</div></div>
-        <button className="btn" onClick={() => { setErr(''); setForm({ username: '', displayName: '', maxQuality: 'exhigh' }); }}><Icon n="plus" s={16} />创建用户</button></div>
+      <div className="head"><div><h1>用户</h1><div className="sub">生成激活码，用户兑换时自行设置用户名、昵称和密码。</div></div>
+        <button className="btn" onClick={() => { setErr(''); setForm({ maxQuality: 'exhigh' }); }}><Icon n="plus" s={16} />生成激活码</button></div>
       {users === null ? <Loading /> : (
         <div className="box" style={{ overflowX: 'auto' }}>
           <table>
@@ -173,22 +180,30 @@ function Users({ guard, toast }: P) {
                   </div></td>
                 </tr>
               ))}
-              {!users.length && <tr><td colSpan={6} className="center sub">还没有用户，点右上角「创建用户」。</td></tr>}
+              {!users.length && <tr><td colSpan={6} className="center sub">还没有用户</td></tr>}
             </tbody>
           </table>
         </div>
       )}
+      <h2 style={{ margin: '28px 0 14px' }}>激活码</h2>
+      <div className="box" style={{ overflowX: 'auto' }}><table>
+        <thead><tr><th>编号</th><th>状态</th><th>最高音质</th><th>有效期至</th><th>兑换用户</th><th /></tr></thead>
+        <tbody>{codes.map(code => <tr key={code.id}>
+          <td>#{code.id}</td>
+          <td><Pill kind={code.status === 'unused' ? 'ok' : ''}>{{ unused: '未使用', used: '已使用', expired: '已过期', revoked: '已撤销' }[code.status]}</Pill></td>
+          <td>{QUALITY_LABEL[code.maxQuality] || code.maxQuality}</td><td>{fmtDateTime(code.expiresAt)}</td><td>{code.username || '—'}</td>
+          <td>{code.status === 'unused' && <button className="btn ghost sm" onClick={() => act(() => del(`/api/admin/activation-codes/${code.id}`), '激活码已撤销')}>撤销</button>}</td>
+        </tr>)}{!codes.length && <tr><td colSpan={6} className="center sub">还没有激活码</td></tr>}</tbody>
+      </table></div>
 
       {form && (
-        <div className="mask" onMouseDown={e => e.target === e.currentTarget && setForm(null)}>
+        <div className="mask" onMouseDown={e => !creating && e.target === e.currentTarget && setForm(null)}>
           <form className="modal" onSubmit={create}>
-            <h2>创建用户</h2>
-            <p className="sub" style={{ margin: '6px 0 18px' }}>创建后会生成一次性激活码，有效期 48 小时。</p>
-            <div className="field"><label className="sm sub">用户名（小写字母、数字、下划线，3 到 24 位）</label><input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} required autoFocus pattern="[A-Za-z0-9_]{3,24}" /></div>
-            <div className="field"><label className="sm sub">昵称（选填）</label><input value={form.displayName} onChange={e => setForm({ ...form, displayName: e.target.value })} maxLength={24} /></div>
-            <div className="field"><label className="sm sub">最高音质（日常播放默认用「标准」，下载到设备时可以选到这个上限）</label><select value={form.maxQuality} onChange={e => setForm({ ...form, maxQuality: e.target.value })}>{Object.entries(QUALITY_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+            <h2>生成激活码</h2>
+            <p className="sub" style={{ margin: '6px 0 18px' }}>一次性使用，有效期 48 小时。</p>
+            <div className="field"><label className="sm sub">最高音质</label><select autoFocus disabled={creating} value={form.maxQuality} onChange={e => setForm({ ...form, maxQuality: e.target.value })}>{Object.entries(QUALITY_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
             {err && <div className="err">{err}</div>}
-            <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}><button type="button" className="btn ghost" onClick={() => setForm(null)}>取消</button><button className="btn">创建并生成激活码</button></div>
+            <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}><button type="button" className="btn ghost" disabled={creating} onClick={() => setForm(null)}>取消</button><button className="btn" disabled={creating}>{creating ? <Loading inline label="正在生成" /> : '生成'}</button></div>
           </form>
         </div>
       )}
@@ -198,7 +213,7 @@ function Users({ guard, toast }: P) {
           <p className="sub" style={{ marginTop: 6 }}>把激活码发给对方，48 小时内有效。关闭后将无法再次查看。</p>
           <div className="code">{reveal.code}</div>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn ghost" onClick={() => { navigator.clipboard?.writeText(reveal.code); toast('已复制'); }}><Icon n="copy" s={15} />复制</button>
+            <button className="btn ghost" onClick={async () => { try { await navigator.clipboard.writeText(reveal.code); toast('已复制'); } catch { toast('复制失败，请手动复制激活码'); } }}><Icon n="copy" s={15} />复制</button>
             <button className="btn" onClick={() => setReveal(null)}>完成</button>
           </div>
         </div></div>

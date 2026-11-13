@@ -15,7 +15,7 @@ npm run build; npm start        # production
 ## Accounts
 
 - There is **no admin account**. `/admin` unlocks only with `ADMIN_KEY` from the server environment (8 tries/min/IP, 12 h session).
-- Only the admin creates users (`/admin` → 用户). Creating one returns a **one-time activation code** (48 h). The user opens the login page → 收到激活码？首次登录 → username + code + their own new password. The admin never learns the password.
+- The admin generates **one-time activation codes** (`/admin` → 用户 → 生成激活码, valid for 48 h) without creating an account. Users choose 激活账号, verify their code, then set their own username, nickname and password. A successful registration consumes the code and signs them in; invalid fields or a username conflict leave it usable. Codes inherit the quality limit chosen by the admin and can be revoked before use. Existing accounts and password-reset codes continue to work.
 - Forgot password: admin → 重置密码 issues a new code, clears the password and signs the user out.
 - Per user the admin sets: max audio quality, whether they may save to the local library, enable/disable, force sign-out.
 - Users edit their own nickname, bio, email, avatar (PNG/JPG/WebP ≤ 2 MB, magic-byte checked) and password (changing it signs out other devices).
