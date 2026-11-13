@@ -2,6 +2,8 @@ package net.ouse.nestune.probe;
 
 import android.app.Activity;
 import android.app.Instrumentation;
+import android.app.DownloadManager;
+import android.database.Cursor;
 import android.content.Intent;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
@@ -83,7 +85,28 @@ public class Probe extends Instrumentation {
             media.getTransportControls().skipToNext(); expectJS("window.__probeEvents.some(e=>e.action==='next')");
             media.getTransportControls().seekTo(9000); expectJS("window.__probeEvents.some(e=>e.action==='seek'&&e.position===9)");
             js("NestuneNative.postMessage(JSON.stringify({type:'media',id:''}));true");
-            result.putString("report","NESTUNE_ANDROID_PASS: production HTTPS startup, version/update bridge, real IME resize, hardware back interception, native MediaSession title/state, pause/next/seek callbacks");
+            js("NestuneNative.postMessage(JSON.stringify({type:'downloadUpdate',url:'https://music.0use.net/api/client-updates/android/4'}));true");
+            DownloadManager downloads=getTargetContext().getSystemService(DownloadManager.class);
+            boolean complete=false;
+            for(int i=0;i<120 && !complete;i++) {
+                SystemClock.sleep(500);
+                try(Cursor cursor=downloads.query(new DownloadManager.Query())) {
+                    while(cursor.moveToNext()) {
+                        String url=cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_URI));
+                        if(!url.equals("https://music.0use.net/api/client-updates/android/4")) continue;
+                        int state=cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
+                        if(state==DownloadManager.STATUS_FAILED) throw new AssertionError("System download failed: "+cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)));
+                        if(state==DownloadManager.STATUS_SUCCESSFUL) {
+                            long downloadId=cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_ID));
+                            if(downloads.getUriForDownloadedFile(downloadId)==null) throw new AssertionError("No downloaded package URI");
+                            if(cursor.getLong(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES))<1000000) throw new AssertionError("APK too small");
+                            complete=true;
+                        }
+                    }
+                }
+            }
+            if(!complete) throw new AssertionError("System package download timed out");
+            result.putString("report","NESTUNE_ANDROID_PASS: production HTTPS startup, version/update bridge, actual system APK download, real IME resize, hardware back interception, native MediaSession title/state, pause/next/seek callbacks");
             finish(Activity.RESULT_OK,result);
         } catch (Throwable error) {
             result.putString("failure",error.toString()); error.printStackTrace(); finish(Activity.RESULT_CANCELED,result);
