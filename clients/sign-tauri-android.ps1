@@ -35,7 +35,7 @@ try {
     }
     $badging = & (Join-Path $BuildTools 'aapt.exe') dump badging $output
     if ($LASTEXITCODE -ne 0) { throw 'APK metadata verification failed.' }
-    if (!(($badging -join "`n") -match "package: name='net.ouse.nestune' versionCode='3' versionName='1.0.0'")) {
+    if (!(($badging -join "`n") -match "package: name='net.ouse.nestune' versionCode='4' versionName='1.0.0'")) {
         throw 'Unexpected APK package or version.'
     }
     $badging | Select-String 'package:|sdkVersion:|targetSdkVersion:|native-code:|application-label:' | Write-Output
