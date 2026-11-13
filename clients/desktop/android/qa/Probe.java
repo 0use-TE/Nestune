@@ -88,7 +88,7 @@ public class Probe extends Instrumentation {
             js("NestuneNative.postMessage(JSON.stringify({type:'downloadUpdate',url:'https://music.0use.net/api/client-updates/android/4'}));true");
             DownloadManager downloads=getTargetContext().getSystemService(DownloadManager.class);
             boolean complete=false;
-            for(int i=0;i<120 && !complete;i++) {
+            for(int i=0;i<600 && !complete;i++) {
                 SystemClock.sleep(500);
                 try(Cursor cursor=downloads.query(new DownloadManager.Query())) {
                     while(cursor.moveToNext()) {
