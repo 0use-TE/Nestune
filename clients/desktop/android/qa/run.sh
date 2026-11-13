@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'adb logcat -d -t 400 > "$GITHUB_WORKSPACE/native-logcat.txt" || true' EXIT
 source_dir=$(cd "$(dirname "$0")" && pwd)
 output="$RUNNER_TEMP/nestune-native-check"
 mkdir -p "$output/classes" "$output/dex"

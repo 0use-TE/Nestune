@@ -43,4 +43,6 @@ jobs:
         if: always()
         with:
           name: android-native-check
-          path: native-check.txt
+          path: |
+            native-check.txt
+            native-logcat.txt

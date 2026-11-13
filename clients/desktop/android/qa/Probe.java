@@ -9,11 +9,13 @@ import android.media.session.PlaybackState;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.json.JSONObject;
 
 public class Probe extends Instrumentation {
     private WebView web;
@@ -52,6 +54,22 @@ public class Probe extends Instrumentation {
             if (web==null) throw new AssertionError("No native WebView");
             expectJS("location.origin==='https://music.0use.net' && document.readyState==='complete' && !!document.querySelector('#login,#app')");
             expectJS("typeof NestuneNative !== 'undefined'");
+            js("window.__nativeMessage=NestuneNative.onmessage;NestuneNative.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.type==='clientInfo')window.__probeClient=d}catch{};window.__nativeMessage?.(e)};NestuneNative.postMessage(JSON.stringify({type:'clientInfo'}));true");
+            expectJS("window.__probeClient?.versionCode>=4 && window.__probeClient.canDownload===true");
+            js("NestuneNative.onmessage=window.__nativeMessage;true");
+            final int[] initialHeight={0}, location={0,0};
+            runOnMainSync(() -> { initialHeight[0]=web.getHeight(); web.getLocationOnScreen(location); web.requestFocus(); });
+            JSONObject rect=new JSONObject(js("(()=>{const e=document.querySelector('#login input[name=u]');if(!e)throw new Error('Missing login input');const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,width:innerWidth}})()"));
+            float scale=(float)(web.getWidth()/rect.getDouble("width"));
+            float x=location[0]+(float)rect.getDouble("x")*scale, y=location[1]+(float)rect.getDouble("y")*scale;
+            long down=SystemClock.uptimeMillis();
+            sendPointerSync(MotionEvent.obtain(down,down,MotionEvent.ACTION_DOWN,x,y,0));
+            sendPointerSync(MotionEvent.obtain(down,down+80,MotionEvent.ACTION_UP,x,y,0));
+            boolean resized=false;
+            for(int i=0;i<40;i++){ SystemClock.sleep(250); if(web.getHeight()<initialHeight[0]-150){resized=true;break;} }
+            if(!resized) throw new AssertionError("IME did not resize native WebView");
+            sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
+            for(int i=0;i<30 && web.getHeight()<initialHeight[0]-30;i++) SystemClock.sleep(100);
             js("window.__originalBack=window.__nestuneBack;window.__probeBack=false;window.__nestuneBack=()=>{window.__probeBack=true;return true};true");
             sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
             expectJS("window.__probeBack===true");
@@ -65,7 +83,7 @@ public class Probe extends Instrumentation {
             media.getTransportControls().skipToNext(); expectJS("window.__probeEvents.some(e=>e.action==='next')");
             media.getTransportControls().seekTo(9000); expectJS("window.__probeEvents.some(e=>e.action==='seek'&&e.position===9)");
             js("NestuneNative.postMessage(JSON.stringify({type:'media',id:''}));true");
-            result.putString("report","NESTUNE_ANDROID_PASS: production HTTPS startup, main-frame bridge, hardware back interception, native MediaSession title/state, pause/next/seek callbacks");
+            result.putString("report","NESTUNE_ANDROID_PASS: production HTTPS startup, version/update bridge, real IME resize, hardware back interception, native MediaSession title/state, pause/next/seek callbacks");
             finish(Activity.RESULT_OK,result);
         } catch (Throwable error) {
             result.putString("failure",error.toString()); error.printStackTrace(); finish(Activity.RESULT_CANCELED,result);
