@@ -349,7 +349,10 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .set:last-child{border:0}
 .switch{width:44px;height:26px;border-radius:999px;background:var(--line);position:relative;flex:none;transition:.2s}
 .switch::after{content:"";position:absolute;left:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
-.switch.on{background:var(--accent)}.switch.on::after{left:21px}
+.switch.on{background:#315c91}.switch.on::after{left:21px}
+:root[data-theme=dark] .switch:not(.on){background:#37383c}
+:root[data-theme=dark] .switch:not(.on)::after{background:#c5c8cf}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .switch:not(.on){background:#37383c}:root:not([data-theme=light]) .switch:not(.on)::after{background:#c5c8cf}}
 .note{background:var(--soft);border-radius:14px;padding:14px 18px;color:var(--sub);margin-bottom:18px}
 .field{display:flex;flex-direction:column;gap:7px;margin-bottom:16px}
 .field input,.field textarea{background:var(--soft);border:1.5px solid transparent;border-radius:14px;padding:13px 16px;outline:0;resize:vertical}
@@ -715,11 +718,24 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .collection-favorite.is-collected svg{fill:currentColor}
 .collection-grid article{min-width:0}.collection-grid .card>.sub{display:block}.collection-grid article>.link{margin-top:8px}
 
-/* Music provider marks follow the existing compact song metadata. */
-.music-sources{display:inline-flex;gap:4px;vertical-align:middle;margin-left:7px}
-.music-provider{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;flex-shrink:0;border-radius:50%;background:color-mix(in srgb,currentColor 10%,transparent)}
-.music-provider svg{width:12px;height:12px}
-.music-provider.netease{color:#d95858}.music-provider.qq{color:#2b9c72}
-.playback-source{display:inline-flex;align-items:center;gap:4px;margin-left:8px;vertical-align:middle}
-.playback-source select{font:inherit;color:inherit;background:transparent;border:0;max-width:126px;padding:2px;cursor:pointer}
-.playback-source select option{background:var(--bg);color:var(--text)}
+.library-shelf{margin-top:24px}
+.library-likes-cover{display:grid;place-items:center;aspect-ratio:1;border-radius:14px;background:linear-gradient(145deg,#3f2534,#723e51);color:#fff5f7;box-shadow:var(--shadow-s)}
+.library-likes-cover svg{fill:currentColor}
+.library-back{margin:18px 0}
+.library-detail-songs{margin-top:24px}
+.library-targets{overflow:auto;overscroll-behavior:contain}
+.library-target{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:12px;width:100%;text-align:left;padding:9px;border-radius:10px}
+.library-target:hover{background:var(--soft)}
+.library-target .cv{width:36px;border-radius:6px}
+.song-album-cell{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.music-sources{color:var(--sub);font-size:11px;white-space:nowrap}
+.music-sources-mobile{display:none}
+.playback-source-label,.playback-source-button{white-space:nowrap}
+.playback-source-button{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:4px 8px;color:var(--text);background:var(--soft)}
+.playback-source-button:hover{background:var(--line)}
+.playback-source-choices{display:grid;gap:8px}
+.playback-source-choices .btn{justify-content:space-between}
+.playback-source-choices .selected{border-color:var(--sub);background:var(--soft)}
+.source-preference .row{justify-content:flex-end;flex-wrap:wrap;gap:6px}
+@media(max-width:860px){.music-sources-mobile{display:block;margin-top:2px}.music-sources-desktop{display:none}}
+@media(max-width:520px){.source-preference{align-items:flex-start;flex-wrap:wrap;gap:10px}.source-preference .row{justify-content:flex-start}}

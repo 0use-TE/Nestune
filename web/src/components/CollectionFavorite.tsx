@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { del, get, put } from '@/lib/api';
 import { useApp } from '@/lib/app';
-import { collectionHref, type CollectionFavorite as Favorite, type CollectionKind } from '@/lib/collection-types';
+import type { CollectionFavorite as Favorite, CollectionKind } from '@/lib/collection-types';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
 import { Loading } from './Loading';
@@ -41,7 +41,7 @@ export function CollectionFavoriteButton({ kind, id }: { kind: CollectionKind; i
   </button>;
 }
 
-export function FavoriteCollections({ category }: { category: 'album' | 'playlist' }) {
+export function FavoriteCollections({ hrefFor }: { hrefFor: (item: Favorite) => string }) {
   const app = useApp();
   const [items, setItems] = useState<Favorite[] | null>(null);
   const [error, setError] = useState('');
@@ -64,13 +64,11 @@ export function FavoriteCollections({ category }: { category: 'album' | 'playlis
     catch (error) { app.toast(error instanceof Error ? error.message : '取消收藏失败'); }
     finally { setBusy(null); }
   }
-  const shown = items?.filter(item => category === 'album' ? item.kind === 'album' : item.kind !== 'album');
   if (error) return <div className="center"><p className="sub">{error}</p><button className="btn ghost sm" onClick={() => setRetry(value => value + 1)}>重试</button></div>;
-  if (!shown) return <Loading />;
-  if (!shown.length) return <div className="center sub">暂无收藏的{category === 'album' ? '专辑' : '歌单'}</div>;
-  return <div className="grid collection-grid">{shown.map(item => <article key={`${item.kind}/${item.id}`}>
-    {item.available ? <Link className="card" href={collectionHref(item.kind, item.id)}><Cover src={item.cover} seed={`${item.kind}${item.id}`} /><b className="t1">{item.name}</b><span className="sub sm t1">{item.sub}</span></Link>
-      : <div className="card"><Cover seed={`${item.kind}${item.id}`} /><b className="t1">{item.name}</b></div>}
+  if (!items) return <Loading />;
+  return <>{items.map(item => <article key={`${item.kind}/${item.id}`}>
+    {item.available ? <Link className="card" href={hrefFor(item)} scroll={false}><Cover src={item.cover} seed={`${item.kind}${item.id}`} /><b className="t1">{item.name}</b><span className="sub sm t1">{item.kind === 'album' ? '收藏的专辑' : '收藏的歌单'}{item.sub && ` · ${item.sub}`}</span></Link>
+      : <div className="card"><Cover seed={`${item.kind}${item.id}`} /><b className="t1">{item.name}</b><span className="sub sm">已不可用</span></div>}
     <button className="link sm" disabled={busy !== null} aria-label={`取消收藏 ${item.name}`} onClick={() => remove(item)}>{busy === `${item.kind}/${item.id}` ? <Loading inline /> : '取消收藏'}</button>
-  </article>)}</div>;
+  </article>)}</>;
 }

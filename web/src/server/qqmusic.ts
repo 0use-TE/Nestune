@@ -1,6 +1,6 @@
 import { parseWordLyrics } from '@/lib/karaoke';
 import fs from 'node:fs';
-import { isQqId } from '@/lib/music-ids';
+import { isQqId, normalizeIsrc } from '@/lib/music-ids';
 import type { Song } from '@/lib/types';
 import { dir } from './config';
 import { fail, HttpError } from './http';
@@ -68,6 +68,7 @@ export function qqSong(s: any): Song {
   const qualities = [['standard', 'size_128mp3', 128000], ['exhigh', 'size_320mp3', 320000], ['lossless', 'size_flac', 0]] as const;
   const name = clean(s.name || s.title), subtitle = clean(s.subtitle);
   return { id: qqId(s.mid), provider: 'qq', name: subtitle && !name.includes(subtitle) ? `${name} (${subtitle})` : name,
+    recordingTitle: name, isrc: normalizeIsrc(s.isrc) ?? normalizeIsrc(s.isrcCode),
     duration: Number(s.interval) || 0, artists: (s.singer || []).map((x: any) => ({ id: qqId(x.mid), name: clean(x.name) })),
     album: { id: qqId(s.album?.mid) || null, name: clean(s.album?.name) }, cover: qqCover(s.album?.pmid || s.album?.mid),
     qualities: qualities.filter(([, key]) => Number(s.file?.[key]) > 0).map(([level, key, bitrate]) => ({ level, size: Number(s.file[key]), ...(bitrate ? { bitrate } : {}) })),

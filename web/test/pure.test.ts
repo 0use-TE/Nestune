@@ -6,6 +6,28 @@ import { hit, withSlot } from '@/server/ratelimit';
 import { checkPasswordRule, hashPassword, newCode, normCode, verifyPassword } from '@/server/auth';
 import { intParam, numericId } from '@/server/http';
 import { accessFromPrivilege, clampLevel, tiersFor } from '@/server/quality';
+import { mergeSongPages, sameRecording } from '@/lib/music-ids';
+import type { Song } from '@/lib/types';
+
+describe('cross-provider recordings', () => {
+  const base: Song = { id: '100', name: 'Same Song', duration: 180, artists: [{ id: '1', name: 'Artist' }], album: { id: '1', name: 'Album' }, cover: null };
+  const qq: Song = { ...base, id: 'qq-song', name: 'Same Song (TV soundtrack)', recordingTitle: 'Same Song' };
+
+  it('uses the QQ display subtitle separately and keeps live versions separate', () => {
+    expect(sameRecording(base, qq)).toBe(true);
+    expect(sameRecording(base, { ...qq, name: 'Same Song (Live)' })).toBe(false);
+    expect(sameRecording({ ...base, isrc: 'USAAA2400001' }, { ...qq, isrc: 'USAAA2400002' })).toBe(false);
+    expect(sameRecording({ ...base, isrc: 'US-AAA-24-00001' }, { ...qq, isrc: 'USAAA2400001', album: { id: '2', name: 'Compilation' } })).toBe(true);
+  });
+
+  it('collapses both old rows if a later result links their source IDs', () => {
+    const page = mergeSongPages([base, { ...base, id: '101' }, qq], [
+      { ...base, canonicalId: base.id, sources: [{ id: base.id, provider: 'netease' }, { id: qq.id, provider: 'qq' }] },
+    ]);
+    expect(page.map(track => track.id)).toEqual(['100', '101']);
+    expect(page[0].sources?.map(source => source.provider)).toEqual(['netease', 'qq']);
+  });
+});
 
 describe('lyrics', () => {
   it('parses timestamps and ignores metadata tags', () => {

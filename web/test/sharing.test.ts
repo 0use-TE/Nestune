@@ -33,6 +33,25 @@ it('keeps playlists private until explicitly shared, and immediately revokes old
   expect(() => playlists.sharedPlaylist(2, p.id)).toThrow();
 });
 
+it('copies every favorite in display order, skips recording aliases, and is safe to repeat', async () => {
+  const { rememberSongs } = await import('@/server/recordings');
+  const target = playlists.createPlaylist(1, 'All likes');
+  const song = (id: string, name: string) => ({ id, name, duration: 180, artists: [{ id: '1', name: 'Artist' }], album: { id: '1', name: 'Album' }, cover: null });
+  const existing = song('82000', 'Same recording');
+  const alias = song('qq-bulkcopy', 'Same recording');
+  rememberSongs([existing, alias]);
+  database.run('INSERT INTO playlist_songs VALUES(?,?,?,?)', target.id, existing.id, JSON.stringify(existing), 1);
+  for (let i = 1; i <= 105; i++) {
+    const favorite = song(String(82000 + i), `Track ${i}`);
+    database.run('INSERT INTO favorites(user_id,song_id,meta,created_at) VALUES(?,?,?,?)', 1, favorite.id, JSON.stringify(favorite), i);
+  }
+  database.run('INSERT INTO favorites(user_id,song_id,meta,created_at) VALUES(?,?,?,?)', 1, alias.id, JSON.stringify(alias), 999);
+  expect(() => playlists.addFavoritesToPlaylist(2, target.id)).toThrow();
+  expect(playlists.addFavoritesToPlaylist(1, target.id)).toEqual({ added: 105, skipped: 1 });
+  expect(playlists.getPlaylist(1, target.id).songs.map(s => s.id)).toEqual([existing.id, ...Array.from({ length: 105 }, (_, i) => String(82105 - i))]);
+  expect(playlists.addFavoritesToPlaylist(1, target.id)).toEqual({ added: 0, skipped: 106 });
+});
+
 it('never exposes account fields or private uploaded song metadata through a public playlist', () => {
   const p = playlists.createPlaylist(1, 'Mixed visibility');
   const privateId = 'upload-' + 'a'.repeat(32);

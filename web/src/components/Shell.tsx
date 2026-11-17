@@ -109,7 +109,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
           ))}
           <div className="lab">我的歌单<button aria-label="新建歌单" onClick={() => setNewPl({})}><Icon n="plus" s={16} /></button></div>
-          <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
+          <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library?collection=likes" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
             <span className="favorites-cover" aria-hidden="true"><Icon n="heart" s={16} /></span>
             <span className="t1">我喜欢的音乐</span>
           </Link></CanvasSource>

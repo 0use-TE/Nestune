@@ -143,10 +143,10 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
   const [modeIcon, modeLabel] = PLAYBACK_ICONS[app.playbackMode];
   const { quality, source } = app.audioInfo ?? {};
-  const sourceLabel = source === 'cache' ? '' : source === 'library' ? '服务器音乐库' : '在线';
+  const sourceLabel = source === 'library' ? '服务器音乐库' : '';
   const audioLabel = quality
     ? [`${QUALITY_LABEL[quality] || quality}音质`, sourceLabel].filter(Boolean).join(' · ')
-    : deviceSong ? '设备本地播放' : s.uploader ? '原始音质' : '在线播放';
+    : deviceSong ? '设备本地播放' : s.uploader ? '原始音质' : '';
   const songDetails = [s.artists.map(a => a.name).join(' / '), s.album.name, s.uploader && `由 ${s.uploader.name} 上传`].filter(Boolean).join(' · ');
   const toggleMobileArt = () => setMobileCover(cover => !cover);
   const qualityText = audioLabel;
@@ -211,7 +211,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
             <div className="np-bottom">
               <div className="np-progress">
                 <div className="track" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); app.seek(((e.clientX - r.left) / r.width) * (duration || s.duration)); }}><i style={{ width: `${pct}%` }} /></div>
-                <div className="times sub sm"><span>{mmss(time)}</span><span className="np-quality"><PlaybackSource /></span><span>{mmss(duration || s.duration)}</span></div>
+                <div className="times sub sm"><span>{mmss(time)}</span><span className="np-quality"><PlaybackSource key={songId} quality={qualityText} /></span><span>{mmss(duration || s.duration)}</span></div>
               </div>
               <div className="ctl">
                 <button className="ib" aria-label="上一首" onClick={app.prev}><Icon n="prev" s={22} /></button>
@@ -231,7 +231,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
                 <span className="np-desktop-queue">{queueButton}</span>
                 {!hasRoom && !deviceSong && <button className={`ib ${inviting ? 'act' : ''}`} aria-label="一起听" aria-pressed={inviting} title="一起听" onClick={() => setInviting(open => !open)}><Icon n="users" s={18} /></button>}
               </div>
-              <div className="np-audio sub sm">{qualityText} <PlaybackSource /></div>
+              <div className="np-audio sub sm"><PlaybackSource key={songId} quality={qualityText} /></div>
             </div>
             <div className="np-room">
               {showPlayerContents && <PlayerTogether inviting={inviting && !deviceSong} onClose={() => setInviting(false)} active={activeRoom} />}

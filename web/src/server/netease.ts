@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import { parseLrc } from '@/lib/lyrics';
 import { parseWordLyrics } from '@/lib/karaoke';
 import type { LyricLine } from '@/lib/types';
+import { normalizeIsrc } from '@/lib/music-ids';
 import { dir } from './config';
 import { fail, HttpError } from './http';
 import { accessFromPrivilege, type Access } from './quality';
@@ -116,6 +117,7 @@ export function songSummary(s: any, fallbackCover?: string | null, priv?: any) {
   return {
     id: String(s.id),
     name: String(s.name || ''),
+    isrc: normalizeIsrc(s.isrc) ?? normalizeIsrc(s.isrcCode),
     duration: Math.round((s.dt ?? s.duration ?? 0) / 1000),
     artists: (s.ar || s.artists || []).map((a: any) => ({ id: String(a.id), name: String(a.name || '') })),
     album: { id: al.id ? String(al.id) : null, name: String(al.name || '') },

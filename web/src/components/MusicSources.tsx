@@ -1,30 +1,44 @@
 'use client';
+import { useState } from 'react';
 import { musicSources } from '@/lib/music-ids';
 import { useApp } from '@/lib/app';
-import type { MusicProvider, Song } from '@/lib/types';
+import type { MusicPreference, MusicProvider, Song } from '@/lib/types';
+import { Sheet } from './Sheet';
 
-const names: Record<MusicProvider, string> = { netease: '网易云音乐', qq: 'QQ 音乐' };
-export function ProviderIcon({ provider }: { provider: MusicProvider }) {
-  return <span className={`music-provider ${provider}`} title={names[provider]} aria-label={names[provider]}>
-    <svg width="12" height="12" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      {provider === 'netease' ? <><circle cx="10" cy="11" r="6" stroke="currentColor" strokeWidth="1.8" /><path d="M12 2v9a2.4 2.4 0 1 1-2.4-2.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></> : <><path d="M8 3v10m0-8 7-2v8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /><ellipse cx="5.6" cy="14" rx="2.7" ry="2" fill="currentColor" /><ellipse cx="12.6" cy="12" rx="2.7" ry="2" fill="currentColor" /></>}
-    </svg>
-  </span>;
+const providers: MusicProvider[] = ['netease', 'qq'];
+const names: Record<MusicProvider, string> = { netease: '网易云', qq: 'QQ 音乐' };
+const songProviders = (song: Song) => providers.filter(provider => musicSources(song).some(source => source.provider === provider));
+
+export function MusicSources({ song, className = '' }: { song: Song; className?: string }) {
+  const label = songProviders(song).map(provider => names[provider]).join(' · ');
+  return label ? <span className={`music-sources ${className}`} title={`收录来源：${label}`}>{label}</span> : null;
 }
-export function MusicSources({ song }: { song: Song }) {
-  const providers = [...new Set(musicSources(song).map(s => s.provider))];
-  if (!providers.length) return null;
-  return <span className="music-sources">{providers.map(p => <ProviderIcon key={p} provider={p} />)}</span>;
-}
-export function PlaybackSource() {
+
+export function PlaybackSource({ quality }: { quality: string }) {
   const app = useApp();
-  if (!app.current || !musicSources(app.current).length) return null;
+  const [open, setOpen] = useState(false);
+  const available = app.current ? songProviders(app.current) : [];
   const actual = app.audioInfo?.provider;
-  return <label className="playback-source" onClick={e => e.stopPropagation()}>
-    {actual && <ProviderIcon provider={actual} />}
-    <select aria-label="播放音源" value={app.playbackSource} onChange={e => app.setPlaybackSource(e.target.value as 'auto' | MusicProvider)}>
-      <option value="auto">自动选择音源</option>
-      {[...new Set(musicSources(app.current).map(s => s.provider))].map(p => <option key={p} value={p}>{names[p]}</option>)}
-    </select>
-  </label>;
+  const provider = actual ?? (available.length === 1 ? available[0] : undefined);
+  const label = [quality, provider ? names[provider] : ''].filter(Boolean).join(' · ');
+
+  if (available.length < 2) return label ? <span className="playback-source-label">{label}</span> : null;
+
+  const choices: MusicPreference[] = ['auto', ...available];
+  return <>
+    <button className="playback-source-button" type="button" aria-haspopup="dialog" aria-expanded={open}
+      onClick={event => { event.stopPropagation(); setOpen(true); }}>
+      {label || '播放音源'} <span aria-hidden="true">⌄</span>
+    </button>
+    {open && <Sheet title="播放音源" onClose={() => setOpen(false)}>
+      <div className="playback-source-choices">{choices.map(choice => (
+        <button key={choice} className={`btn ghost ${choice === app.playbackSource ? 'selected' : ''}`}
+          type="button" aria-pressed={choice === app.playbackSource}
+          onClick={() => { app.setPlaybackSource(choice); setOpen(false); }}>
+          <span>{choice === 'auto' ? '自动' : names[choice]}</span>
+          {actual === choice && <span className="sub sm">正在播放</span>}
+        </button>
+      ))}</div>
+    </Sheet>}
+  </>;
 }

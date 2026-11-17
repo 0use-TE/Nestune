@@ -16,14 +16,14 @@ export function ReleaseNotes({ onClose }: { onClose: () => void }) {
       <p>有逐字时间的音源按实际演唱位置显示；只有整句时间的歌曲使用平滑的估算扫色。翻译、长句换行和明暗配色保持原有风格。</p>
       <p>播放器和应用内浮窗刷新后即可使用。系统独立悬浮窗的流光效果将随新版 Windows 和安卓安装包提供。</p>
       <h3>QQ 音乐与网易云，一起听</h3>
-      <p>搜索现在同时显示 QQ 音乐和网易云歌曲。同一录音合并成一行，并显示两个来源图标；现场、翻唱、伴奏和重制等版本保持独立。</p>
+      <p>同一录音在搜索中显示一行，行尾列出网易云和 QQ 音乐来源。现场、翻唱、伴奏和重制等版本各自保留。</p>
       <p>播放器可以手动切换音源，在设置中也能选择优先平台。切源保留播放进度，歌词跟随当前来源；收藏、歌单和画布兼容原有歌曲。QQ 音乐本次支持在线播放，是否可播放取决于音源账号的实际权限。</p>
-      <p>本次网页功能刷新后即可使用，手机和电脑无需为 QQ 音乐重新安装客户端。</p>
+      <p>音乐库新增收藏卡片，打开「我的喜欢」即可将全部歌曲添加到一张歌单。</p>
       <div className="release-downloads">
         {packages?.android && <a className="btn sm" href={packages.android.url} download>下载安卓 {packages.android.version}</a>}
         {packages?.windows && <a className="btn ghost sm" href={packages.windows.url} download>下载 Windows {packages.windows.version}</a>}
       </div>
-      <p className="sub sm">已有客户端刷新页面即可使用双音源功能。</p>
+      <p className="sub sm">浏览器访问当前网站即可使用这些功能。</p>
     </div>
   </Sheet>;
 }

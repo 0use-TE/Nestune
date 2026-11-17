@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-export const VERSION = '1.2.1';
+export { VERSION } from '@/lib/version';
 export const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), 'data');
 export const dir = (...p: string[]) => path.join(DATA_DIR, ...p);
 export const QUALITIES = ['standard', 'exhigh', 'lossless', 'hires'] as const;

@@ -1,5 +1,5 @@
 import type { Song } from '@/lib/types';
-import { isOnlineId, mergeSongPages, providerOf, sameRecording, recordingMatchKey } from '@/lib/music-ids';
+import { isOnlineId, mergeSongPages, normalizeIsrc, providerOf, sameRecording, recordingMatchKey } from '@/lib/music-ids';
 import { all, db, now, one, run } from './db';
 
 type Row = { source_id: string; recording_id: string; meta: string; checked_at: number };
@@ -23,7 +23,7 @@ export function rememberSongs(songs: Song[]) {
       run(`INSERT INTO music_sources(source_id,recording_id,meta,match_key,updated_at) VALUES(?,?,?,?,?)
         ON CONFLICT(source_id) DO UPDATE SET meta=excluded.meta,match_key=excluded.match_key,updated_at=excluded.updated_at`, s.id, s.id, JSON.stringify(plain), recordingMatchKey(s), now());
     }
-    const candidates = (s: Song) => all<Row>('SELECT * FROM music_sources WHERE match_key=? AND source_id<>? LIMIT 100', recordingMatchKey(s), s.id)
+    const candidates = (s: Song) => all<Row>("SELECT * FROM music_sources WHERE (match_key=? OR json_extract(meta,'$.isrc')=?) AND source_id<>? LIMIT 100", recordingMatchKey(s), normalizeIsrc(s.isrc) ?? null, s.id)
       .map(r => JSON.parse(r.meta) as Song).filter(x => sameRecording(s, x));
     for (const a of list) {
       const possible = candidates(a);

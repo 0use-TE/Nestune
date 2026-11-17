@@ -146,6 +146,7 @@ function open() {
     );
     CREATE INDEX IF NOT EXISTS music_sources_recording ON music_sources(recording_id);
     CREATE INDEX IF NOT EXISTS music_sources_match ON music_sources(match_key);
+    CREATE INDEX IF NOT EXISTS music_sources_isrc ON music_sources(json_extract(meta,'$.isrc'));
     CREATE TABLE IF NOT EXISTS social_presence (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       visible INTEGER NOT NULL DEFAULT 1,

@@ -1,4 +1,4 @@
-import { VERSION } from '@/server/config';
+import { VERSION } from '@/lib/version';
 import { json } from '@/server/http';
 
 export const dynamic = 'force-dynamic';

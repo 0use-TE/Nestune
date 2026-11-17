@@ -26,7 +26,7 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
             <Cover src={s.cover} seed={s.id} />
             <div className="t1">
               <div className="nm t1">{device ? <button aria-label={`播放 ${s.name}`}>{s.name}</button> : s.name}
-                <MusicSources song={s} />{bad && <span className="qtag bad">{unplayableText(s.access?.reason)}</span>}
+                {bad && <span className="qtag bad">{unplayableText(s.access?.reason)}</span>}
               </div>
               <div className="sub sm t1">
                 {s.artists.map((a, k) => (
@@ -34,8 +34,12 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
                 ))}
                 {s.uploader && <span className="song-uploader">{s.artists.length > 0 && ' · '}由 {s.uploader.name} 上传</span>}
               </div>
+              <MusicSources song={s} className="music-sources-mobile" />
             </div>
-            <div className="sub al t1">{s.album.id ? <Link href={`/album/${s.album.id}`} onClick={e => e.stopPropagation()}>{s.album.name}</Link> : s.album.name}</div>
+            <div className="sub al song-album-cell">
+              <span className="t1">{s.album.id ? <Link href={`/album/${s.album.id}`} onClick={e => e.stopPropagation()}>{s.album.name}</Link> : s.album.name}</span>
+              <MusicSources song={s} className="music-sources-desktop" />
+            </div>
             <div className="muted du sm">{device && !s.duration ? '' : mmss(s.duration)}</div>
             {device ? <span /> : <button className={`heart ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" onClick={e => { e.stopPropagation(); app.toggleFav(s); }}><Icon n="heart" s={18} /></button>}
             {onRemove

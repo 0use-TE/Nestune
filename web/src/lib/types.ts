@@ -9,6 +9,7 @@ export type Song = {
   access?: { playable: boolean; max: string | null; reason?: string };
   uploader?: { id: number; name: string };
   provider?: MusicProvider; canonicalId?: string; sources?: SongSource[];
+  isrc?: string; recordingTitle?: string;
 };
 export type Tier = { level: string; label: string; format: string; bitrate: number | null; size: number | null; state: 'ok' | 'over_cap' | 'no_access' | 'missing' };
 export type Me = {
