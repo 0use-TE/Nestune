@@ -76,8 +76,8 @@ pub fn run() {
                         "value: navigator.userAgent + ' NestuneDesktop/",
                         env!("CARGO_PKG_VERSION"),
                         " Tauri', configurable: true });",
-                        "if(!/Android/.test(navigator.userAgent)){Object.defineProperty(window,'NestuneDesktop',{value:Object.freeze({request:data=>window.__TAURI_INTERNALS__.invoke('lyrics_command',{data})})});}"
-                    ))
+                        "if(!/Android/.test(navigator.userAgent)){Object.defineProperty(window,'NestuneDesktop',{value:Object.freeze({architecture:'__NESTUNE_ARCH__',request:data=>window.__TAURI_INTERNALS__.invoke('lyrics_command',{data})})});}"
+                    ).replace("__NESTUNE_ARCH__", std::env::consts::ARCH))
                     .on_navigation(|url| {
                         if trusted(url) || url.as_str() == "about:blank" {
                             return true;

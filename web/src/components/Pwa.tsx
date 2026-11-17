@@ -1,4 +1,5 @@
 'use client';
+import { clientUpdatesUrl } from '@/lib/client-updates';
 import { Loading } from './Loading';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
@@ -71,7 +72,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => {
     if (!client) return;
-    fetch('/api/client-updates', { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(data => setAndroid(data.android)).catch(() => {});
+    fetch(clientUpdatesUrl(), { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(data => setAndroid(data.android)).catch(() => {});
   }, [client?.versionCode]);
   useEffect(() => {
     if (!client || !android || android.versionCode <= client.versionCode) { setHideAndroidUpdate(true); return; }
@@ -179,7 +180,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     if (checking) return;
     setChecking(true); setStatus('');
     try {
-      const response = await fetch('/api/client-updates', { cache: 'no-store' });
+      const response = await fetch(clientUpdatesUrl(), { cache: 'no-store' });
       if (!response.ok) throw new Error('暂时无法检查更新，请稍后重试');
       const data = await response.json(); setAndroid(data.android);
       const registration = registrationRef.current || (('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistration('/') : undefined);

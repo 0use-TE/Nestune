@@ -67,3 +67,25 @@ it('distinguishes Windows installers from portable executables for both architec
   expect(downloads.clientPackageLabel({ platform: 'macos', filename: 'Nestune.app.zip' })).toBe('App ZIP');
   expect(downloads.clientPackageLabel({ platform: 'linux', filename: 'Nestune.AppImage' })).toBe('AppImage');
 });
+
+it('keeps ARM64 update manifests and executables independent of x64', () => {
+  const releaseDir = path.join(dir, 'client-releases');
+  fs.mkdirSync(releaseDir, { recursive: true });
+  for (const architecture of ['x64', 'arm64'] as const) {
+    const bytes = architecture === 'arm64' ? 'arm-binary' : 'x64-binary-size';
+    const stem = architecture === 'arm64' ? 'windows-arm64' : 'windows';
+    fs.writeFileSync(updates.windowsPackage(122, architecture), bytes);
+    fs.writeFileSync(path.join(releaseDir, `${stem}.json`), JSON.stringify({ version: '1.2.2', versionCode: 122, size: bytes.length, sha256: 'a'.repeat(64) }));
+    expect(updates.windowsRelease(architecture)?.url).toBe(`/api/client-updates/windows/122${architecture === 'arm64' ? '?arch=arm64' : ''}`);
+    expect(updates.windowsRelease(architecture)?.size).toBe(bytes.length);
+  }
+  fs.unlinkSync(updates.windowsPackage(122, 'arm64'));
+  expect(updates.windowsRelease('arm64')).toBeNull();
+  expect(updates.windowsRelease()?.size).toBe(15);
+});
+it('requests updates for the running native executable architecture', async () => {
+  const { clientUpdatesUrl } = await import('@/lib/client-updates');
+  for (const architecture of ['aarch64', 'arm64']) expect(clientUpdatesUrl({ NestuneDesktop: { architecture } })).toBe('/api/client-updates?windows_arch=arm64');
+  for (const architecture of ['x86_64', 'x64', undefined]) expect(clientUpdatesUrl({ NestuneDesktop: { architecture } })).toBe('/api/client-updates');
+  expect(clientUpdatesUrl({})).toBe('/api/client-updates');
+});

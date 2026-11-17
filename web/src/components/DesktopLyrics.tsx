@@ -1,4 +1,5 @@
 'use client';
+import { clientUpdatesUrl } from '@/lib/client-updates';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { overlayCurrent, overlayLine, type OverlayData, type OverlayMedia } from '@/lib/overlay-lyrics';
 import { createRoot } from 'react-dom/client';
@@ -149,7 +150,7 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
 
 export function LyricsClientUpgrade() {
   const [release, setRelease] = useState<{ url: string; version: string } | null>(null);
-  useEffect(() => { let alive = true; fetch('/api/client-updates', { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(data => { if (alive && data?.windows) setRelease(data.windows); }).catch(() => {}); return () => { alive = false; }; }, []);
+  useEffect(() => { let alive = true; fetch(clientUpdatesUrl(), { cache: 'no-store' }).then(response => response.ok ? response.json() : null).then(data => { if (alive && data?.windows) setRelease(data.windows); }).catch(() => {}); return () => { alive = false; }; }, []);
   return release ? <a className="btn ghost sm" href={release.url} download>下载 Windows {release.version}</a> : <p className="sub sm">可在「关于 → 更新公告」下载新版 Windows 客户端。</p>;
 }
 

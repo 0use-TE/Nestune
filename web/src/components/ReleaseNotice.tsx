@@ -1,4 +1,5 @@
 'use client';
+import { clientUpdatesUrl } from '@/lib/client-updates';
 import { useEffect, useState } from 'react';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
@@ -7,7 +8,7 @@ import type { AndroidRelease, WindowsRelease } from '@/server/client-updates';
 const RELEASE = 'karaoke-1.2.1';
 export function ReleaseNotes({ onClose }: { onClose: () => void }) {
   const [packages, setPackages] = useState<{ android: AndroidRelease | null; windows: WindowsRelease | null } | null>(null);
-  useEffect(() => { let alive = true; fetch('/api/client-updates', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(data => { if (alive) setPackages(data); }).catch(() => {}); return () => { alive = false; }; }, []);
+  useEffect(() => { let alive = true; fetch(clientUpdatesUrl(), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(data => { if (alive) setPackages(data); }).catch(() => {}); return () => { alive = false; }; }, []);
   return <Sheet title="更新公告" onClose={onClose} className="release-sheet">
     <div className="release-notes">
       <p className="sub sm">Nestune 1.2.1 · 2026 年 11 月 17 日</p>
