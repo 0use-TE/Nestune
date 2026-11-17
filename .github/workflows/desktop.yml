@@ -6,7 +6,7 @@ on:
       platform:
         description: Platform to build
         type: choice
-        options: [both, linux, macos]
+        options: [both, linux, linux-arm64, macos]
         default: both
   push:
     branches: [main]
@@ -23,11 +23,11 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.os == 'macos-15' && 'macOS universal' || 'Linux x64' }}
+    name: ${{ matrix.os == 'macos-15' && 'macOS universal' || matrix.os == 'ubuntu-22.04-arm' && 'Linux ARM64' || 'Linux x64' }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.platform == 'macos' && '["macos-15"]' || inputs.platform == 'linux' && '["ubuntu-22.04"]' || '["ubuntu-22.04","macos-15"]') }}
+        os: ${{ fromJSON(inputs.platform == 'macos' && '["macos-15"]' || inputs.platform == 'linux-arm64' && '["ubuntu-22.04-arm"]' || inputs.platform == 'linux' && '["ubuntu-22.04","ubuntu-22.04-arm"]' || '["ubuntu-22.04","ubuntu-22.04-arm","macos-15"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -72,7 +72,10 @@ jobs:
       - name: Verify Linux build
         if: runner.os == 'Linux'
         run: |
+          expected=${{ matrix.os == 'ubuntu-22.04-arm' && 'aarch64' || 'x86_64' }}
+          test "$(uname -m)" = "$expected"
           file src-tauri/target/release/Nestune
+          test "$(dpkg-deb --field src-tauri/target/release/bundle/deb/*.deb Architecture)" = '${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'amd64' }}'
           dpkg-deb --info src-tauri/target/release/bundle/deb/*.deb
           if ldd src-tauri/target/release/Nestune | grep 'not found'; then exit 1; fi
           set +e
@@ -80,6 +83,12 @@ jobs:
           result=$?
           set -e
           cat linux-smoke.log
+          test "$result" -eq 124
+          set +e
+          dbus-run-session -- xvfb-run -a timeout 15s src-tauri/target/release/bundle/appimage/*.AppImage --appimage-extract-and-run --smoke-test > appimage-smoke.log 2>&1
+          result=$?
+          set -e
+          cat appimage-smoke.log
           test "$result" -eq 124
       - name: Verify macOS build
         if: runner.os == 'macOS'
@@ -105,10 +114,14 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           mkdir -p packages
           if [[ '${{ runner.os }}' == 'Linux' ]]; then
-            cp src-tauri/target/release/bundle/appimage/*.AppImage "packages/Nestune-$version-Linux-x64.AppImage"
-            cp src-tauri/target/release/bundle/deb/*.deb "packages/Nestune-$version-Linux-amd64.deb"
+            arch=${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'x64' }}
+            debarch=${{ matrix.os == 'ubuntu-22.04-arm' && 'arm64' || 'amd64' }}
+            echo "artifact_suffix=Linux-$arch" >> "$GITHUB_OUTPUT"
+            cp src-tauri/target/release/bundle/appimage/*.AppImage "packages/Nestune-$version-Linux-$arch.AppImage"
+            cp src-tauri/target/release/bundle/deb/*.deb "packages/Nestune-$version-Linux-$debarch.deb"
             (cd packages && sha256sum * > SHA256SUMS.txt)
           else
+            echo 'artifact_suffix=macOS-universal' >> "$GITHUB_OUTPUT"
             bundle=src-tauri/target/universal-apple-darwin/release/bundle
             cp "$bundle"/dmg/*.dmg "packages/Nestune-$version-macOS-universal.dmg"
             ditto -c -k --sequesterRsrc --keepParent "$bundle/macos/Nestune.app" "packages/Nestune-$version-macOS-universal.app.zip"
@@ -116,7 +129,7 @@ jobs:
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: Nestune-${{ steps.packages.outputs.version }}-${{ runner.os == 'macOS' && 'macOS-universal' || 'Linux-x64' }}
+          name: Nestune-${{ steps.packages.outputs.version }}-${{ steps.packages.outputs.artifact_suffix }}
           path: clients/desktop/packages/
           if-no-files-found: error
           retention-days: 30
