@@ -59,6 +59,9 @@ it('enforces private, selected friend, and public visibility through edits and d
   const { song } = await uploads.saveUpload(1, input);
   expect(song).toMatchObject({ duration: 1, uploader: { id: 1, name: 'Uploader' } });
   expect(uploads.searchUploads(1, 'Performer', 20, 0).total).toBe(1);
+  expect(uploads.searchUploads(1, 'Studio Performer', 20, 0).items[0]?.id).toBe(song.id);
+  expect(uploads.searchUploads(2, 'Studio Performer', 20, 0).items).toHaveLength(0);
+  expect(uploads.searchUploads(1, 'Studio MissingArtist', 20, 0).items).toHaveLength(0);
   expect(uploads.visibleUpload(2, song.id)).toBeUndefined();
   await expect(uploads.saveUpload(2, form('public'), song.id)).rejects.toMatchObject({ status: 404 });
   await expect(uploads.saveUpload(1, form('shared', [3]), song.id)).rejects.toMatchObject({ status: 400 });

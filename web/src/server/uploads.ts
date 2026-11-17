@@ -66,10 +66,10 @@ export function uploadLyrics(viewer: number, id: string) {
 }
 
 export function searchUploads(viewer: number, query: string, limit: number, offset: number) {
-  const where = `WHERE ${VISIBLE} AND (instr(lower(s.name),lower(:query))>0 OR instr(lower(s.artist),lower(:query))>0
-    OR instr(lower(s.album),lower(:query))>0 OR instr(lower(s.lyricist),lower(:query))>0 OR instr(lower(s.composer),lower(:query))>0
-    OR instr(lower(COALESCE(NULLIF(u.display_name,''),u.username)),lower(:query))>0)`;
-  const params = { viewer, query };
+  const tokens = query.trim().split(/\s+/u).filter(Boolean);
+  const fields = ['s.name', 's.artist', 's.album', 's.lyricist', 's.composer', "COALESCE(NULLIF(u.display_name,''),u.username)"];
+  const where = `WHERE ${VISIBLE} AND ${tokens.map((_, index) => `(${fields.map(field => `instr(lower(${field}),lower(:q${index}))>0`).join(' OR ')})`).join(' AND ') || '0'}`;
+  const params = { viewer, ...Object.fromEntries(tokens.map((token, index) => [`q${index}`, token])) };
   const { n: total } = one<{ n: number }>(`SELECT count(*) n FROM uploaded_songs s JOIN users u ON u.id=s.owner_id ${where}`, params)!;
   const items = all<UploadRow>(`${SELECT} ${where} ORDER BY s.created_at DESC,s.id LIMIT :limit OFFSET :offset`, { ...params, limit, offset }).map(songShape);
   return { items, total };
