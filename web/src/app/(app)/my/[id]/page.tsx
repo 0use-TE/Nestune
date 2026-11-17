@@ -3,6 +3,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { del, get, patch } from '@/lib/api';
 import { useApp } from '@/lib/app';
+import { AddPlaylistFolder, PlaylistFolders } from '@/components/PlaylistFolders';
+import type { PlaylistFolder } from '@/lib/playlist-folders';
 import { SharePlaylist } from '@/components/SharePlaylist';
 import type { PlaylistLite, Song } from '@/lib/types';
 import { Hero } from '@/components/Hero';
@@ -16,6 +18,10 @@ export default function MyPlaylistPage() {
   const router = useRouter();
   const [pl, setPl] = useState<PlaylistLite | null>(null);
   const [songs, setSongs] = useState<Song[]>([]);
+  const [direct, setDirect] = useState<Song[]>([]);
+  const [folders, setFolders] = useState<PlaylistFolder[]>([]);
+  const [revision, setRevision] = useState(0);
+  const refresh = () => setRevision(value => value + 1);
   const [err, setErr] = useState('');
   const [editing, setEditing] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -32,8 +38,8 @@ export default function MyPlaylistPage() {
 
   useEffect(() => {
     setPl(null); setErr('');
-    get(`/api/me/playlists/${id}`).then(r => { setPl(r.playlist); setSongs(r.songs); setName(r.playlist.name); }).catch(e => setErr(e.message));
-  }, [id]);
+    get(`/api/me/playlists/${id}`).then(r => { setPl(r.playlist); setSongs(r.songs); setDirect(r.directSongs ?? r.songs); setFolders(r.folders ?? []); setName(r.playlist.name); }).catch(e => setErr(e.message));
+  }, [id, revision]);
 
   async function rename() {
     try { const r = await patch(`/api/me/playlists/${id}`, { name }); setPl(r.playlist); setEditing(false); app.reloadPlaylists(); }
@@ -45,7 +51,7 @@ export default function MyPlaylistPage() {
     catch (e: any) { app.toast(e.message); }
   }
   async function removeSong(s: Song) {
-    try { await del(`/api/me/playlists/${id}/songs/${s.id}`); setSongs(p => p.filter(x => x.id !== s.id)); app.reloadPlaylists(); }
+    try { await del(`/api/me/playlists/${id}/songs/${s.id}`); refresh(); app.reloadPlaylists(); }
     catch (e: any) { app.toast(e.message); }
   }
   async function publish(value: boolean) {
@@ -71,6 +77,7 @@ export default function MyPlaylistPage() {
       <Hero cover={songs[0]?.cover} seed={`pl${pl.id}`} tag="我的歌单" title={pl.name} sub={`${songs.length} 首歌曲`}>
         <button className="btn light" onClick={() => app.play(songs)} disabled={!songs.length}><Icon n="play" s={16} />播放全部</button>
         <button className="btn ghost" onClick={() => void addToQueue()} disabled={!songs.length || addingQueue}>{addingQueue ? <Loading inline label="正在添加歌单" /> : <Icon n="plus" s={16} />}加入播放列表</button>
+        <AddPlaylistFolder parent={id} onChange={refresh} />
         <button className="btn ghost" onClick={() => setEditing(true)}>重命名</button>
         <button className="btn ghost" disabled={preparingShare} onClick={prepareShare}>{preparingShare ? <Loading inline label="正在准备分享" /> : '分享'}</button>
         <button className="btn ghost" aria-pressed={!!pl.isPublic} onClick={() => publish(!pl.isPublic).catch(e => app.toast(e.message))}>{pl.isPublic ? '公开' : '私密'}</button>
@@ -85,7 +92,8 @@ export default function MyPlaylistPage() {
         </form>
       )}
       <div style={{ marginTop: 26 }}>
-        {songs.length ? <SongList songs={songs} onRemove={removeSong} /> : <Empty text="这个歌单还是空的。在任意歌曲的「更多」菜单里可以添加到歌单。" />}
+        {folders.length > 0 && <PlaylistFolders folders={folders} parent={id} onChange={refresh} />}
+        {direct.length ? <SongList songs={direct} onRemove={removeSong} /> : folders.length ? null : <Empty text="这个歌单还是空的。在任意歌曲的「更多」菜单里可以添加到歌单。" />}
       </div>
     </>
   );

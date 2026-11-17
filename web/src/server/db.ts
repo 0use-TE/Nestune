@@ -139,6 +139,15 @@ function open() {
       added_at INTEGER NOT NULL,
       PRIMARY KEY (playlist_id, song_id)
     );
+    CREATE TABLE IF NOT EXISTS playlist_folders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      playlist_id INTEGER NOT NULL REFERENCES playlists(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN ('album','mine','shared','netease','qq')),
+      target_id TEXT NOT NULL,
+      meta TEXT NOT NULL,
+      added_at INTEGER NOT NULL,
+      UNIQUE(playlist_id,kind,target_id)
+    );
     CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS music_sources (
       source_id TEXT PRIMARY KEY,

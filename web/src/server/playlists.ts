@@ -1,3 +1,4 @@
+import { playlistContent } from './playlist-content';
 import { all, db, now, one, run } from './db';
 import { fail } from './http';
 import { catalogSong } from './catalog';
@@ -12,9 +13,7 @@ function owned(userId: number, id: number) {
   if (!p || p.user_id !== userId) throw fail(404, '歌单不存在');
   return p;
 }
-const shape = (p: PRow, viewer = p.user_id) => {
-  const songs = all<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at DESC', p.id)
-    .map(row => visibleSong(viewer, JSON.parse(row.meta))).filter((s): s is NonNullable<typeof s> => !!s);
+const shape = (p: PRow, viewer = p.user_id, songs = playlistContent(viewer, p.id).songs) => {
   return {
     id: p.id, name: p.name, description: p.description, createdAt: p.created_at, updatedAt: p.updated_at,
     trackCount: uniqueRecordings(songs).length,
@@ -39,12 +38,8 @@ export function createPlaylist(userId: number, name: unknown, description?: unkn
 
 export function getPlaylist(userId: number, id: number) {
   const p = owned(userId, id);
-  const songs = all<{ meta: string; added_at: number }>('SELECT meta,added_at FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC,rowid ASC', id)
-    .flatMap(r => {
-      const song = visibleSong(userId, JSON.parse(r.meta));
-      return song ? [{ ...song, addedAt: r.added_at }] : [];
-    });
-  return { playlist: shape(p), songs: uniqueRecordings(songs) };
+  const content = playlistContent(userId, id);
+  return { playlist: shape(p, userId, content.songs), ...content };
 }
 
 export function updatePlaylist(userId: number, id: number, patch: { name?: unknown; description?: unknown; isPublic?: unknown }) {
@@ -79,9 +74,8 @@ export function sharedPlaylist(viewer: number, id: number) {
   const p = one<PRow>('SELECT * FROM playlists WHERE id=?', id);
   if (!p || !p.is_public) throw fail(404, '歌单未公开或已删除');
   const { person } = personProfile(viewer, p.user_id);
-  const songs = all<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC,rowid ASC', id)
-    .flatMap(row => { const song = visibleSong(viewer, JSON.parse(row.meta)); return song ? [song] : []; });
-  return { playlist: shape(p, viewer), songs: uniqueRecordings(songs), owner: person };
+  const content = playlistContent(viewer, id);
+  return { playlist: shape(p, viewer, content.songs), ...content, owner: person };
 }
 
 export function deletePlaylist(userId: number, id: number) {

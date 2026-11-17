@@ -1,6 +1,9 @@
 'use client';
 
 import Link from 'next/link';
+import { PlaylistImport } from './PlaylistImport';
+import { PlaylistFolders, SaveFolderToPlaylist } from './PlaylistFolders';
+import type { PlaylistFolder } from '@/lib/playlist-folders';
 import { useEffect, useRef, useState } from 'react';
 import { del, get, put } from '@/lib/api';
 import { useApp } from '@/lib/app';
@@ -14,7 +17,7 @@ import { Empty, Loading, SongList } from './SongList';
 
 type CollectionKind = 'album' | 'playlist' | 'shared' | 'mine';
 type Metadata = { name: string; cover: string | null; trackCount?: number };
-type CollectionPage = { album?: Metadata; playlist?: Metadata; songs: Song[] };
+type CollectionPage = { album?: Metadata; playlist?: Metadata; songs: Song[]; folders?: PlaylistFolder[]; directSongs?: Song[] };
 type ShelfData = { items: CollectionFavorite[]; order: string[] };
 type Card = { key: string; name: string; cover: string | null; sub: string; bookmark?: CollectionFavorite };
 
@@ -106,6 +109,7 @@ export function LibraryShelf({ selection, favorites }: { selection: string; favo
   }
 
   return <>
+    <div className="row library-import-action"><PlaylistImport /></div>
     {loadError && <p className="err" role="alert">{loadError}</p>}
     <SortableLibraryGrid order={order} disabled={saving} onReorder={next => void saveOrder(next)} name={key => byKey.get(key)?.name ?? key}>
       {key => {
@@ -137,7 +141,7 @@ function LikedSongs({ songs }: { songs: Song[] | null }) {
 
 function SavedCollection({ kind, id }: { kind: CollectionKind; id: string }) {
   const app = useApp();
-  const [detail, setDetail] = useState<{ meta: Metadata; songs: Song[] } | null>(null);
+  const [detail, setDetail] = useState<{ meta: Metadata; songs: Song[]; folders?: PlaylistFolder[]; directSongs?: Song[] } | null>(null);
   const [error, setError] = useState('');
   const [fetching, setFetching] = useState(false);
   const url = `/api/${routes[kind]}/${encodeURIComponent(id)}`;
@@ -147,14 +151,14 @@ function SavedCollection({ kind, id }: { kind: CollectionKind; id: string }) {
     get<CollectionPage>(kind === 'playlist' ? `${url}?limit=100` : url).then(result => {
       if (!active) return;
       const meta = result.album ?? result.playlist;
-      if (meta) setDetail({ meta, songs: result.songs });
+      if (meta) setDetail({ meta, songs: result.songs, folders: result.folders, directSongs: result.directSongs });
       else setError('无法读取收藏详情');
     }).catch(error => { if (active) setError(errorMessage(error)); });
     return () => { active = false; };
   }, [kind, url]);
 
   if (!detail) return error ? <p className="note" role="alert">{error}</p> : <Loading />;
-  const { meta, songs } = detail;
+  const { meta, songs, folders, directSongs } = detail;
   const total = meta.trackCount ?? songs.length;
 
   async function more(playAll: boolean) {
@@ -181,9 +185,10 @@ function SavedCollection({ kind, id }: { kind: CollectionKind; id: string }) {
   return <>
     <Hero cover={meta.cover ?? songs[0]?.cover} seed={id} title={meta.name} sub={`${total} 首`}>
       <button className="btn light" disabled={fetching || !songs.length} onClick={() => void more(true)}><Icon n="play" s={16} />播放全部</button>
+      <SaveFolderToPlaylist source={{ kind: kind === 'playlist' ? 'netease' : kind, id }} />
       {kind === 'mine' && <Link className="btn ghost" href={`/my/${id}`}>管理歌单</Link>}
     </Hero>
-    <div className="library-detail-songs">{songs.length ? <SongList songs={songs} /> : <Empty text="暂无歌曲。" />}</div>
+    <div className="library-detail-songs">{folders && <PlaylistFolders folders={folders} />}{(directSongs ?? songs).length ? <SongList songs={directSongs ?? songs} /> : !folders?.length && <Empty text="暂无歌曲。" />}</div>
     {error && <p className="err" role="alert">{error}</p>}
     {kind === 'playlist' && songs.length < total && <div className="center"><button className="btn ghost" disabled={fetching} onClick={() => void more(false)}>{fetching ? '加载中…' : '加载更多'}</button></div>}
   </>;

@@ -300,3 +300,11 @@ export async function available(id: string) {
     return { available: !!b.success, message: b.message || '' };
   } catch { return { available: false, message: '无法确认' }; }
 }
+
+/** Platform-supplied chorus markers. Missing markers are not inferred as exact choruses. */
+export async function chorus(id: string): Promise<{ start: number; end: number } | null> {
+  const body = await call('song_chorus', { id }, session().cookie || {});
+  const row = (body.chorus ?? body.data)?.find((item: any) => String(item.id) === id);
+  const start = Number(row?.startTime) / 1000, end = Number(row?.endTime) / 1000;
+  return Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start ? { start, end } : null;
+}

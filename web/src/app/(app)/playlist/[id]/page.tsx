@@ -6,6 +6,7 @@ import { useApp } from '@/lib/app';
 import type { Song } from '@/lib/types';
 import { fmtCount } from '@/lib/util';
 import { CollectionFavoriteButton } from '@/components/CollectionFavorite';
+import { SaveFolderToPlaylist } from '@/components/PlaylistFolders';
 import { Hero } from '@/components/Hero';
 import { Icon } from '@/components/Icon';
 import { Loading, SongList } from '@/components/SongList';
@@ -39,6 +40,7 @@ export default function PlaylistPage() {
         sub={<>{meta.creator && `${meta.creator} · `}{meta.trackCount} 首{meta.playCount ? ` · ${fmtCount(meta.playCount)} 次播放` : ''}</>}>
         <button className="btn light" onClick={() => app.play(songs)} disabled={!songs.length}><Icon n="play" s={16} />播放全部</button>
         <CollectionFavoriteButton kind="playlist" id={meta.id} />
+        <SaveFolderToPlaylist source={{ kind: 'netease', id: meta.id }} />
         <button className="btn ghost" onClick={() => app.play(songs, 0, 'shuffle')} disabled={!songs.length}><Icon n="shuffle" s={16} />随机播放</button>
       </Hero>
       {meta.description && <p className="sub" style={{ margin: '22px 0 0', maxWidth: 680, whiteSpace: 'pre-line' }}>{meta.description.slice(0, 300)}</p>}

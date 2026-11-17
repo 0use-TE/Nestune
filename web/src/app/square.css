@@ -135,3 +135,19 @@
   .nc-empty-player,.nc-receiver{left:10px;right:10px;bottom:calc(70px + env(safe-area-inset-bottom));height:62px;border-radius:18px}
   .nc-picker-mask{align-items:flex-end;padding:16px 10px calc(146px + env(safe-area-inset-bottom))}.nc-picker{width:100%;max-height:calc(100dvh - 190px)}
 }
+
+/* World coordinates remain independent from each user's viewport. */
+.nc-board{overflow:hidden;touch-action:none;cursor:grab;inset:0 0 118px}
+.nc-board.nc-panning{cursor:grabbing}
+.nc-world{position:absolute;inset:0;transform-origin:0 0;pointer-events:none}
+.nc-world>.nc-record{--object-size:164px;pointer-events:auto}
+.nc-camera{position:absolute;left:20px;bottom:130px;display:flex;align-items:center;gap:2px;padding:4px;border-radius:24px;z-index:7;font-size:11px;color:var(--sub)}
+.nc-camera>span{min-width:38px;text-align:center;font-variant-numeric:tabular-nums}
+.nc-audition-status{position:absolute;left:50%;bottom:130px;transform:translateX(-50%);display:flex;gap:8px;align-items:center;max-width:min(55%,360px);padding:9px 14px;border-radius:22px;z-index:7;font-size:12px}
+.nc-audition-status>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nc-auditioning>.nc-music-art{animation:nc-breathe 700ms ease-in-out infinite alternate}
+.nc-auditioning.nc-kind-album .nc-album-disc,.nc-auditioning.nc-kind-playlist .nc-folder-disc,.nc-auditioning.nc-kind-queue .nc-folder-disc{animation:nc-peek 850ms ease-in-out infinite alternate}
+@keyframes nc-breathe{from{transform:scale(1) translateY(0)}to{transform:scale(1.025) translateY(-3px)}}
+@keyframes nc-peek{to{transform:translate(7px,-5px) rotate(13deg)}}
+@media(max-width:600px){.nc-camera{left:12px;bottom:125px}.nc-audition-status{bottom:174px;max-width:85%;width:max-content}}
+@media(prefers-reduced-motion:reduce){.nc-auditioning>.nc-music-art,.nc-auditioning .nc-album-disc,.nc-auditioning .nc-folder-disc{animation:none}}
