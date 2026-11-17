@@ -224,6 +224,15 @@ export async function artist(id: string) {
   };
 }
 
+/** Artist's full catalog, not the separate 50-track hot-songs endpoint. */
+export async function artistSongs(id: string, limit: number, offset: number) {
+  // Public catalog first; do not include the bound account's private cloud files.
+  const body = await call('artist_songs', { id, limit, offset, order: 'hot' });
+  const list = await withAccess((body.songs || []).slice(0, limit).map((song: any) => songSummary(song)));
+  const total = Number.isSafeInteger(body.total) && body.total >= 0 ? body.total : null;
+  return { songs: list, total, more: typeof body.more === 'boolean' ? body.more : total !== null ? offset + list.length < total : list.length === limit, offset, limit };
+}
+
 export async function lyrics(id: string) {
   const b = await call('lyric', { id });
   const lyric = b.lrc?.lyric || '', tr = b.tlyric?.lyric || '', ro = b.romalrc?.lyric || '';

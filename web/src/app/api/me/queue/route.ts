@@ -4,7 +4,7 @@ import { catalogId } from '@/server/catalog';
 import { one, run } from '@/server/db';
 import { body, fail } from '@/server/http';
 import { userRoute } from '@/server/guard';
-import { songs } from '@/server/netease';
+import { onlineSongs as songs } from '@/server/catalog';
 import { visibleSong } from '@/server/uploads';
 
 type Saved = { ids: string[]; index: number; position: number };

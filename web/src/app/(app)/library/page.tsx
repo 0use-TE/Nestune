@@ -1,4 +1,5 @@
 'use client';
+import { sourceIds } from '@/lib/music-ids';
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -37,7 +38,7 @@ function Library() {
   }, [tab, category, app.toast]);
 
   const songs = result?.tab === tab ? result.songs : null;
-  const shown = tab === 'favorites' && songs ? songs.filter(s => app.favIds.has(s.id)) : songs;
+  const shown = tab === 'favorites' && songs ? songs.filter(s => sourceIds(s).some(id => app.favIds.has(id))) : songs;
 
   async function clearHistory() {
     if (!confirm('确定清空播放历史吗？')) return;

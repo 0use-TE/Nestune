@@ -1,4 +1,5 @@
 'use client';
+import { sourceIds } from '@/lib/music-ids';
 import { Loading } from './Loading';
 import { useEffect, useRef, useState } from 'react';
 import { get } from '@/lib/api';
@@ -17,6 +18,7 @@ import { PlayerTogether } from './PlayerTogether';
 import { Sheet } from './Sheet';
 import { VolumeControl } from './VolumeControl';
 import { useDesktopLyrics } from './DesktopLyrics';
+import { PlaybackSource } from './MusicSources';
 import { overlayLyrics } from '@/lib/overlay-lyrics';
 
 const PLAYBACK_ICONS = {
@@ -37,7 +39,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const s = app.current;
   const songId = s?.id;
   const deviceSong = !!songId && isDeviceSong(songId);
-  const [lyrics, setLyrics] = useState<{ id: string; lines: LyricLine[]; credits: string[]; plainText?: string } | null>(null);
+  const [lyrics, setLyrics] = useState<{ id: string; sourceId?: string; lines: LyricLine[]; credits: string[]; plainText?: string } | null>(null);
   const [inviting, setInviting] = useState(false);
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [mobileCover, setMobileCover] = useState(true);
@@ -100,19 +102,19 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
     if (!songId || !needsLyrics) return;
     let live = true;
     const request: Promise<{ lines: LyricLine[]; credits?: string[]; plainText?: string }> =
-      deviceSong ? getDeviceLyrics(songId) : get(`/api/songs/${songId}/lyrics`);
+      deviceSong ? getDeviceLyrics(songId) : get(`/api/songs/${songId}/lyrics${app.audioInfo?.sourceId ? `?sourceId=${encodeURIComponent(app.audioInfo.sourceId)}` : ''}`);
     request.then(({ lines, credits = [], plainText }) => {
       if (!live) return;
       let first = 0;
       let end = lines.length;
       while (first < end && CREDIT.test(lines[first].text)) first++;
       while (end > first && CREDIT.test(lines[end - 1].text)) end--;
-      setLyrics({ id: songId, lines: lines.slice(first, end), plainText, credits: [...credits, ...[...lines.slice(0, first), ...lines.slice(end)].map(line => line.text)] });
-    }).catch(() => { if (live) setLyrics({ id: songId, lines: [], credits: [] }); });
+      setLyrics({ id: songId, sourceId: app.audioInfo?.sourceId, lines: lines.slice(first, end), plainText, credits: [...credits, ...[...lines.slice(0, first), ...lines.slice(end)].map(line => line.text)] });
+    }).catch(() => { if (live) setLyrics({ id: songId, sourceId: app.audioInfo?.sourceId, lines: [], credits: [] }); });
     return () => { live = false; };
-  }, [songId, deviceSong, getDeviceLyrics, needsLyrics]);
+  }, [songId, deviceSong, getDeviceLyrics, needsLyrics, app.audioInfo?.sourceId]);
 
-  const currentLyrics = lyrics?.id === songId ? lyrics : null;
+  const currentLyrics = lyrics?.id === songId && lyrics?.sourceId === app.audioInfo?.sourceId ? lyrics : null;
   const lines = currentLyrics?.lines ?? [];
   let active = -1;
   for (let i = 0; i < lines.length && lines[i].t <= time; i++) active = i;
@@ -207,7 +209,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
             <div className="np-bottom">
               <div className="np-progress">
                 <div className="track" onClick={e => { const r = e.currentTarget.getBoundingClientRect(); app.seek(((e.clientX - r.left) / r.width) * (duration || s.duration)); }}><i style={{ width: `${pct}%` }} /></div>
-                <div className="times sub sm"><span>{mmss(time)}</span><span className="np-quality">{qualityText}</span><span>{mmss(duration || s.duration)}</span></div>
+                <div className="times sub sm"><span>{mmss(time)}</span><span className="np-quality"><PlaybackSource /></span><span>{mmss(duration || s.duration)}</span></div>
               </div>
               <div className="ctl">
                 <button className="ib" aria-label="上一首" onClick={app.prev}><Icon n="prev" s={22} /></button>
@@ -221,13 +223,13 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
               <div className="np-tools">
                 <VolumeControl />
                 {desktopLyrics.supported && <button type="button" className={`ib ${desktopLyrics.enabled ? 'act' : ''}`} aria-label="桌面歌词" aria-pressed={desktopLyrics.enabled} title="桌面歌词" disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(!desktopLyrics.enabled)}><Icon n="popout" s={18} /></button>}
-                {!deviceSong && <button className={`ib heartb ${app.favIds.has(s.id) ? 'on' : ''}`} aria-label="收藏" title="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" s={18} /></button>}
+                {!deviceSong && <button className={`ib heartb ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" title="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" s={18} /></button>}
                 {!deviceSong && <button type="button" className="ib" aria-label="下载到设备" title="下载到设备" onClick={() => app.openSave(s)}><Icon n="download" s={18} /></button>}
                 {lines.some(line => line.tr) && <button className={`ib ${app.showTr ? 'act' : ''}`} aria-label="歌词翻译" aria-pressed={app.showTr} title="歌词翻译" onClick={() => app.setShowTr(!app.showTr)}><Icon n="translation" s={18} /></button>}
                 <span className="np-desktop-queue">{queueButton}</span>
                 {!hasRoom && !deviceSong && <button className={`ib ${inviting ? 'act' : ''}`} aria-label="一起听" aria-pressed={inviting} title="一起听" onClick={() => setInviting(open => !open)}><Icon n="users" s={18} /></button>}
               </div>
-              <div className="np-audio sub sm">{qualityText}</div>
+              <div className="np-audio sub sm">{qualityText} <PlaybackSource /></div>
             </div>
             <div className="np-room">
               {showPlayerContents && <PlayerTogether inviting={inviting && !deviceSong} onClose={() => setInviting(false)} active={activeRoom} />}

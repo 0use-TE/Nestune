@@ -8,6 +8,7 @@ import { dir } from './config';
 import { all, db, now, one, run } from './db';
 import { fail, str } from './http';
 import { mimeOf } from './media';
+import { enrichSong } from './recordings';
 import { parseLrc } from './netease';
 
 type UploadRow = {
@@ -52,7 +53,7 @@ export function requireUpload(viewer: number, id: string) {
 export const uploadedSong = (viewer: number, id: string) => songShape(requireUpload(viewer, id));
 
 export function visibleSong(viewer: number, song: Song): Song | undefined {
-  if (!isUploadSong(song.id)) return song;
+  if (!isUploadSong(song.id)) return enrichSong(song);
   const row = visibleUpload(viewer, song.id);
   return row ? songShape(row) : undefined;
 }

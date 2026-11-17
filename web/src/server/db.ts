@@ -136,6 +136,16 @@ function open() {
       PRIMARY KEY (playlist_id, song_id)
     );
     CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS music_sources (
+      source_id TEXT PRIMARY KEY,
+      recording_id TEXT NOT NULL,
+      meta TEXT NOT NULL,
+      match_key TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL,
+      checked_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS music_sources_recording ON music_sources(recording_id);
+    CREATE INDEX IF NOT EXISTS music_sources_match ON music_sources(match_key);
     CREATE TABLE IF NOT EXISTS social_presence (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       visible INTEGER NOT NULL DEFAULT 1,

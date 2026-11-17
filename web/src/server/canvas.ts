@@ -6,9 +6,10 @@ import type { Song } from '@/lib/types';
 import { isUploadSong } from '@/lib/upload-types';
 import { db, kvGet, kvSet, one, all } from './db';
 import { catalogId, catalogSong } from './catalog';
-import { album, songs as lookupSongs } from './netease';
+import { catalogAlbum as album, onlineSongs as lookupSongs } from './catalog';
 import { getPlaylist } from './playlists';
 import { visibleSong } from './uploads';
+import { enrichSong } from './recordings';
 import { dir } from './config';
 import { sniffImage, avatarMime } from './avatar';
 import { fail, str } from './http';
@@ -27,7 +28,7 @@ export function readCanvas(): CanvasState {
       if (!publicSong(item.song)) return [];
       const tracks = (item.tracks ?? [item.song]).filter(publicSong);
       if (!tracks.length) return [];
-      return [{ ...item, tracks, ...poster(item.ownerId) }];
+      return [{ ...item, song: enrichSong(item.song), tracks: tracks.map(enrichSong), ...poster(item.ownerId) }];
     }
     return [{ ...item, ...poster(item.ownerId) }];
   });

@@ -7,7 +7,8 @@ import { isUploadSong } from '@/lib/upload-types';
 import { catalogId } from './catalog';
 import { db, now, one, run } from './db';
 import { fail } from './http';
-import { songs } from './netease';
+import { onlineSongs as songs } from './catalog';
+import { enrichSong } from './recordings';
 import { uploadedSong, visibleUpload } from './uploads';
 import { createPlaylist, getPlaylist } from './playlists';
 
@@ -28,7 +29,7 @@ export function readSharedQueue(room: Pick<Room, 'queue_data' | 'host_id' | 'gue
   const selected = queue.entries[queue.index]?.key;
   const entries = queue.entries.filter(({ song }) => !isUploadSong(song.id) ||
     !!visibleUpload(room.host_id, song.id) && !!visibleUpload(room.guest_id, song.id));
-  return { ...queue, entries, index: entries.findIndex(entry => entry.key === selected) };
+  return { ...queue, entries: entries.map(entry => ({ ...entry, song: enrichSong(entry.song) })), index: entries.findIndex(entry => entry.key === selected) };
 }
 
 function ids(value: unknown): string[] {

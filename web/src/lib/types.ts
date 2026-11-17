@@ -1,10 +1,14 @@
 export type Artist = { id: string; name: string };
+export type MusicProvider = 'netease' | 'qq';
+export type MusicPreference = 'auto' | MusicProvider;
+export type SongSource = { id: string; provider: MusicProvider; access?: Song['access']; qualities?: Song['qualities'] };
 export type Song = {
   id: string; name: string; duration: number; artists: Artist[];
   album: { id: string | null; name: string }; cover: string | null; fee?: number;
   qualities?: { level: string; bitrate?: number; size?: number }[];
   access?: { playable: boolean; max: string | null; reason?: string };
   uploader?: { id: number; name: string };
+  provider?: MusicProvider; canonicalId?: string; sources?: SongSource[];
 };
 export type Tier = { level: string; label: string; format: string; bitrate: number | null; size: number | null; state: 'ok' | 'over_cap' | 'no_access' | 'missing' };
 export type Me = {

@@ -1,3 +1,4 @@
+import { uniqueRecordings, recordingAliases } from '@/server/recordings';
 import { all } from '@/server/db';
 import { userRoute } from '@/server/guard';
 import { visibleSong } from '@/server/uploads';
@@ -8,5 +9,5 @@ export const GET = userRoute((_req, _ctx, u) => {
     const song = visibleSong(u.id, JSON.parse(r.meta));
     return song ? [{ ...song, favoritedAt: r.created_at }] : [];
   });
-  return { songs, ids: songs.map(s => s.id) };
+  return { songs: uniqueRecordings(songs), ids: [...new Set(songs.flatMap(s => recordingAliases(s.id)))] };
 });

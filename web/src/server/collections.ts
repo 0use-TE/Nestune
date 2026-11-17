@@ -1,12 +1,13 @@
 import { COLLECTION_KINDS, type CollectionFavorite, type CollectionKind } from '@/lib/collection-types';
 import { all, now, one, run } from './db';
 import { fail, numericId } from './http';
-import { collectionMetadata } from './netease';
+import { catalogCollectionMetadata as collectionMetadata } from './catalog';
+import { isQqId } from '@/lib/music-ids';
 import { sharedPlaylistSummary } from './playlists';
 
 export function collectionTarget(kind: unknown, value: unknown) {
   if (!COLLECTION_KINDS.includes(kind as CollectionKind)) throw fail(400, '收藏类型无效');
-  const id = numericId(value).replace(/^0+(?=\d)/, '');
+  const id = kind === 'album' && isQqId(value) ? value : numericId(value).replace(/^0+(?=\d)/, '');
   if (id === '0' || kind === 'shared' && !Number.isSafeInteger(Number(id))) throw fail(400, '收藏 ID 无效');
   return { kind: kind as CollectionKind, id };
 }

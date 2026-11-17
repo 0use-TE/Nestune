@@ -9,6 +9,7 @@ import { songMeta } from '@/server/netease';
 import { tiersFor } from '@/server/quality';
 import { takeSlot } from '@/server/ratelimit';
 import { requireUpload, uploadAudio } from '@/server/uploads';
+import { downloadSourceId } from '@/server/music-playback';
 
 export const POST = userRoute(async (req, ctx, user) => {
   if (!user.can_save) throw fail(403, '此账号没有下载权限');
@@ -20,7 +21,8 @@ export const POST = userRoute(async (req, ctx, user) => {
     return serveFile(req, audio.path, audio.mime, { 'Cache-Control': 'no-store', 'X-Audio-Format': audio.ext });
   }
   if (!QUALITIES.some(level => level === wanted)) throw fail(400, '不支持的音质');
-  const song = await songMeta(id);
+  const sourceId = downloadSourceId(id);
+  const song = await songMeta(sourceId);
   const plan = tiersFor(song.qualities, song.access, user.max_quality as Quality);
   const tier = plan.tiers.find(item => item.level === wanted);
   if (!tier) throw fail(400, '不支持的音质');
@@ -37,7 +39,7 @@ export const POST = userRoute(async (req, ctx, user) => {
   }
   signal.addEventListener('abort', done, { once: true });
   try {
-    const audio = await fetchSourceAudio(id, tier.level, signal, 'download');
+    const audio = await fetchSourceAudio(sourceId, tier.level, signal, 'download');
     if (!audio.mime.startsWith('audio/')) {
       await audio.body.cancel();
       throw fail(502, '音源返回了不支持的文件格式');

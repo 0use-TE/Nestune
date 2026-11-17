@@ -1,4 +1,5 @@
 'use client';
+import { QqSourceAdmin } from '@/components/QqSourceAdmin';
 import { Loading } from '@/components/Loading';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { del, get, patch, post } from '@/lib/api';
@@ -256,13 +257,14 @@ function Source({ guard, toast }: P) {
       <div className="box pad row" style={{ gap: 28, alignItems: 'flex-start' }}>
         {qr ? <div className="qr"><img src={qr.img} alt="登录二维码" /></div> : null}
         <div style={{ flex: 1, minWidth: 240 }}>
-          <h2>当前状态</h2>
+          <h2>网易云音乐</h2>
           <p style={{ margin: '8px 0 16px' }}>{!st ? <Loading inline label="正在读取音源账号" /> : st.loggedIn ? <Pill kind="ok">已登录</Pill> : <Pill kind="bad">{st.expired ? '登录已失效' : '未登录'}</Pill>}
             {st?.savedAt && <span className="muted sm" style={{ marginLeft: 10 }}>登录于 {fmtDateTime(Date.parse(st.savedAt))}</span>}</p>
           {qr && <p className="sub" style={{ marginBottom: 14 }}>{qr.msg}</p>}
           <div className="row"><button className="btn" onClick={start}>{qr ? '重新生成二维码' : st?.loggedIn ? '重新扫码登录' : '扫码登录'}</button>{st?.loggedIn && <button className="btn ghost danger" style={{ color: 'var(--danger)' }} onClick={logout}>退出登录</button>}</div>
         </div>
       </div>
+      <QqSourceAdmin guard={guard} toast={toast} />
       <div className="note">可播放的音质取决于该账号实际拥有的权限。多人共用同一个账号可能违反音源平台的服务条款，请自行评估风险，并用「系统设置」里的限流来避免短时间大量请求。</div>
     </>
   );

@@ -5,6 +5,8 @@ import { dir } from './config';
 import { all, now, one, run, settings } from './db';
 import { fail } from './http';
 import { assertMediaUrl, downloadUrl, mediaUrl, type MediaPurpose } from './netease';
+import { isQqId } from '@/lib/music-ids';
+import { assertQqMediaUrl, qqMediaUrl } from './qqmusic';
 
 const MIME: Record<string, string> = { mp3: 'audio/mpeg', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg' };
 export const mimeOf = (ext: string) => MIME[ext] || 'application/octet-stream';
@@ -43,12 +45,14 @@ export function serveFile(req: Request, file: string, mime: string, headers: Rec
 const cacheFile = (id: string, level: string, ext: string) => dir('cache', `${id}-${level}.${ext}`);
 
 export async function fetchSourceAudio(id: string, level: string, signal: AbortSignal, purpose: MediaPurpose = 'playback') {
-  const media = await (purpose === 'download' ? downloadUrl(id, level) : mediaUrl(id, level));
+  if (isQqId(id) && purpose === 'download') throw fail(403, 'QQ 音乐暂不提供下载，在线播放权限与下载权限分别验证', 'download_unsupported');
+  const qq = isQqId(id);
+  const media = await (qq ? qqMediaUrl(id, level) : purpose === 'download' ? downloadUrl(id, level) : mediaUrl(id, level));
   const ext = safeExt(media.type);
   let url = media.url;
   for (let hop = 0; hop < 5; hop++) {
-    assertMediaUrl(url);
-    const response = await fetch(url, { redirect: 'manual', signal });
+    (qq ? assertQqMediaUrl : assertMediaUrl)(url);
+    const response = await fetch(url, { redirect: 'manual', signal, ...(qq ? { headers: { Referer: 'https://y.qq.com/', 'User-Agent': 'Mozilla/5.0' } } : {}) });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       await response.body?.cancel();

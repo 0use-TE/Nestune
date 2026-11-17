@@ -4,9 +4,8 @@ import { QUALITIES } from '@/server/config';
 import { settings } from '@/server/db';
 import { fail } from '@/server/http';
 import { userRoute } from '@/server/guard';
-import { inLibrary } from '@/server/library';
-import { ensureAudio, serveFile } from '@/server/media';
-import { songMeta } from '@/server/netease';
+import { serveFile } from '@/server/media';
+import { playableAudio, playbackOptions } from '@/server/music-playback';
 import { clampLevel } from '@/server/quality';
 import { withSlot } from '@/server/ratelimit';
 import { requireUpload, uploadAudio } from '@/server/uploads';
@@ -27,11 +26,9 @@ export const GET = userRoute(async (req, ctx, u) => {
   }
   const asked = req.nextUrl.searchParams.get('level');
   if (asked && !QUALITIES.includes(asked as never)) throw fail(400, '不支持的音质参数');
-  if (!inLibrary(id)) {
-    const song = await songMeta(id);
-    if (!song.access.playable) throw fail(403, song.access.reason || '这首歌暂时无法播放', 'no_access');
-  }
   const level = clampLevel(asked, u.max_quality as Quality, 'standard');
-  const audio = await withSlot(`dl:${u.id}`, settings().maxStreams, () => ensureAudio(id, level), '同时加载的歌曲过多，请稍后再试');
-  return serveFile(req, audio.file, audio.mime, { 'X-Audio-Quality': audio.level, 'X-Audio-Source': audio.source });
+  const options = playbackOptions(req.nextUrl.searchParams);
+  const audio = await withSlot(`dl:${u.id}`, settings().maxStreams, () => playableAudio(id, level, options), '同时加载的歌曲过多，请稍后再试');
+  return serveFile(req, audio.file, audio.mime, { 'X-Audio-Quality': audio.level, 'X-Audio-Source': audio.source, 'X-Music-Provider': audio.provider, 'X-Music-Source-Id': audio.sourceId,
+    'X-Music-Sources': JSON.stringify(audio.song.sources?.map(s => ({ id: s.id, provider: s.provider })) || []), 'X-Recording-Id': audio.song.canonicalId || id });
 }, { bucket: 'stream', multiplier: 6 });
