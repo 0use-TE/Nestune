@@ -1,13 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { del, get, put } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import type { CollectionFavorite } from '@/lib/collection-types';
 import type { Song } from '@/lib/types';
 import { Cover } from './Cover';
 import { Hero } from './Hero';
+import { SortableLibraryGrid } from './SortableLibraryGrid';
 import { Icon } from './Icon';
 import { Empty, Loading, SongList } from './SongList';
 
@@ -16,7 +17,6 @@ type Metadata = { name: string; cover: string | null; trackCount?: number };
 type CollectionPage = { album?: Metadata; playlist?: Metadata; songs: Song[] };
 type ShelfData = { items: CollectionFavorite[]; order: string[] };
 type Card = { key: string; name: string; cover: string | null; sub: string; bookmark?: CollectionFavorite };
-type Drag = { key: string; pointer: number; startX: number; startY: number; target: string | null; moved: boolean };
 
 const routes: Record<CollectionKind, string> = { album: 'albums', playlist: 'playlists', shared: 'shared-playlists', mine: 'me/playlists' };
 const collectionLink = (key: string) => `/library?collection=${encodeURIComponent(key)}`;
@@ -29,8 +29,6 @@ export function LibraryShelf({ selection, favorites }: { selection: string; favo
   const [retry, setRetry] = useState(0);
   const [removing, setRemoving] = useState('');
   const [saving, setSaving] = useState(false);
-  const [dragging, setDragging] = useState<{ key: string; target: string | null } | null>(null);
-  const drag = useRef<Drag | null>(null);
   const savingOrder = useRef(false);
   const [, kind, id] = /^(album|playlist|shared|mine):([a-zA-Z0-9-]{1,80})$/.exec(selection) ?? [];
   const showingLikes = selection === 'likes';
@@ -78,13 +76,8 @@ export function LibraryShelf({ selection, favorites }: { selection: string; favo
   const byKey = new Map(defaults.map(card => [card.key, card]));
   const order = [...new Set([...shelf.order, ...byKey.keys()])].filter(key => byKey.has(key));
 
-  async function move(key: string, target: string) {
-    if (savingOrder.current || key === target) return;
-    const from = order.indexOf(key), to = order.indexOf(target);
-    if (from < 0 || to < 0) return;
-    const next = [...order];
-    next.splice(from, 1);
-    next.splice(to, 0, key);
+  async function saveOrder(next: string[]) {
+    if (savingOrder.current) return;
     const previous = shelf!.order;
     savingOrder.current = true;
     setSaving(true);
@@ -101,30 +94,6 @@ export function LibraryShelf({ selection, favorites }: { selection: string; favo
     }
   }
 
-  function startDrag(event: PointerEvent<HTMLButtonElement>, key: string) {
-    if (!event.isPrimary || event.button !== 0 || drag.current || savingOrder.current) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = { key, pointer: event.pointerId, startX: event.clientX, startY: event.clientY, target: null, moved: false };
-  }
-  function trackDrag(event: PointerEvent<HTMLButtonElement>) {
-    const current = drag.current;
-    if (!current || current.pointer !== event.pointerId) return;
-    if (!current.moved && Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < 6) return;
-    current.moved = true;
-    const main = document.getElementById('main');
-    const bounds = main?.getBoundingClientRect();
-    if (bounds && event.clientY > bounds.bottom - 48) main?.scrollBy(0, 16);
-    else if (bounds && event.clientY < bounds.top + 48) main?.scrollBy(0, -16);
-    current.target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-library-card]')?.dataset.libraryCard ?? null;
-    setDragging({ key: current.key, target: current.target });
-  }
-  function finishDrag(event: PointerEvent<HTMLButtonElement>, commit = false) {
-    const current = drag.current;
-    if (!current || current.pointer !== event.pointerId) return;
-    drag.current = null;
-    setDragging(null);
-    if (commit && current.moved && current.target) void move(current.key, current.target);
-  }
   async function removeBookmark(item: CollectionFavorite) {
     if (removing) return;
     setRemoving(`${item.kind}:${item.id}`);
@@ -138,34 +107,20 @@ export function LibraryShelf({ selection, favorites }: { selection: string; favo
 
   return <>
     {loadError && <p className="err" role="alert">{loadError}</p>}
-    <div className="grid collection-grid library-shelf">
-      {order.map((key, index) => {
+    <SortableLibraryGrid order={order} disabled={saving} onReorder={next => void saveOrder(next)} name={key => byKey.get(key)?.name ?? key}>
+      {key => {
         const card = byKey.get(key)!;
         const content = <>
           {key === 'likes' ? <span className="library-likes-cover"><Icon n="heart" s={44} /></span> : <Cover src={card.cover} seed={key} />}
           <b className="t1">{card.name}</b><span className="sub sm t1">{card.sub}</span>
         </>;
-        return <article key={key} data-library-card={key} className={`library-card-item${dragging?.key === key ? ' is-dragging' : dragging?.target === key ? ' is-target' : ''}`}>
+        return <>
           {card.bookmark?.available === false ? <div className="card">{content}</div> :
             <Link className="card" href={collectionLink(key)} draggable={false} scroll={false}>{content}</Link>}
-          <button type="button" className="library-grip" disabled={saving} aria-label={`拖动排序 ${card.name}，也可使用方向键`} title="拖动排序"
-            onPointerDown={event => startDrag(event, key)} onPointerMove={trackDrag} onPointerUp={event => finishDrag(event, true)}
-            onPointerCancel={finishDrag} onLostPointerCapture={finishDrag} onKeyDown={event => {
-              if (event.key === 'Escape' && drag.current) {
-                drag.current = null;
-                setDragging(null);
-                return;
-              }
-              const step = ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : 0;
-              if (step) {
-                event.preventDefault();
-                if (order[index + step]) void move(key, order[index + step]);
-              }
-            }}><Icon n="more" s={18} /></button>
           {card.bookmark && <button className="link sm" disabled={!!removing} aria-label={`取消收藏 ${card.name}`} onClick={() => void removeBookmark(card.bookmark!)}>{removing === key ? <Loading inline /> : '取消收藏'}</button>}
-        </article>;
-      })}
-    </div>
+        </>;
+      }}
+    </SortableLibraryGrid>
   </>;
 }
 

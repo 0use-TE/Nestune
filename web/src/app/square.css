@@ -71,7 +71,7 @@
 .nc-picker-mask{position:fixed;inset:0;z-index:30;background:#0002;display:flex;justify-content:flex-end;align-items:flex-start;padding:24px 28px}
 .nc-picker{width:340px;max-width:100%;max-height:calc(100dvh - 150px);padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow)}
 .nc-picker header{display:flex;align-items:center;justify-content:space-between;gap:12px}.nc-picker .chips{margin:0}
-.nc-picker select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:var(--soft)}
+
 .nc-picker .search{margin:0;width:100%}
 .nc-music-list{overflow:auto;min-height:0;padding:4px 2px 8px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--muted) transparent}
 .nc-music-list::-webkit-scrollbar{width:4px}.nc-music-list::-webkit-scrollbar-thumb{background:var(--muted);border-radius:99px}.nc-music-list::-webkit-scrollbar-button{display:none}

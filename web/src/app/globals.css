@@ -724,11 +724,15 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .library-back{margin:18px 0}
 .library-detail-songs{margin-top:24px}
 .library-card-item{position:relative;min-width:0;border-radius:14px}
-.library-grip{position:absolute;top:8px;right:8px;display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#17171ce0;color:#fff;cursor:grab;touch-action:none}
-.library-grip svg{transform:rotate(90deg)}
-.library-grip:active{cursor:grabbing}
-.library-card-item.is-dragging .card{opacity:.5}
-.library-card-item.is-target .card :is(.cv,.library-likes-cover){outline:3px solid var(--accent);outline-offset:3px}
+.library-shelf[role=list]{position:relative}
+.library-card-item>.card{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none;touch-action:pan-y}
+.library-card-item.is-dragging{opacity:.22}
+.library-card-item.is-dragging .card :is(.cv,.library-likes-cover){outline:2px dashed var(--muted);outline-offset:4px}
+.library-card-item.is-keyboard-sorting{outline:2px solid var(--text);outline-offset:7px}
+.library-sort-ghost{position:fixed;z-index:90;pointer-events:none;border-radius:16px;padding:0 0 10px;background:var(--surface);box-shadow:0 20px 50px #0005;transform-origin:center center;will-change:transform;opacity:.96}
+.library-sort-ghost .card>.sub{display:block}.library-sort-ghost button{visibility:hidden}
+.library-sort-ghost .card>.cv,.library-sort-ghost .library-likes-cover{box-shadow:none}
+.is-sorting-library,.is-sorting-library *{cursor:grabbing!important;user-select:none!important}
 .library-shelf-loading{position:relative}
 .library-shelf-loading>.loading-state{position:absolute;inset:0;pointer-events:none}
 .library-skeleton i,.library-skeleton span{display:block;background:var(--soft);animation:library-loading 1.3s ease-in-out infinite alternate}
@@ -748,3 +752,17 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .source-preference .row{justify-content:flex-end;flex-wrap:wrap;gap:6px}
 @media(max-width:860px){.music-sources-mobile{display:block;margin-top:2px}.music-sources-desktop{display:none}}
 @media(max-width:520px){.source-preference{align-items:flex-start;flex-wrap:wrap;gap:10px}.source-preference .row{justify-content:flex-start}}
+
+/* Shared themed selects, portaled above sheets, menus and clipped canvas panels. */
+.select-trigger{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;min-width:0;min-height:42px;padding:10px 13px;border:1px solid var(--line);border-radius:12px;background:var(--soft);text-align:left;font-size:13px;transition:background .15s,border-color .15s}
+.select-trigger>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-trigger>svg{color:var(--sub);transition:transform .18s}
+.select-trigger:hover:not(:disabled),.select-trigger[aria-expanded=true]{background:var(--surface);border-color:var(--muted)}
+.select-trigger[aria-expanded=true]>svg{transform:rotate(180deg)}.select-trigger:disabled{opacity:.45;cursor:default}
+.select-options{position:fixed;z-index:100;overflow-y:auto;overscroll-behavior:contain;padding:5px;border:1px solid var(--line);border-radius:14px;background:var(--surface);color:var(--text);box-shadow:var(--shadow);scrollbar-width:thin;animation:select-appear .14s ease-out}
+.select-option{display:flex;align-items:center;justify-content:space-between;gap:14px;min-height:40px;padding:9px 10px;border-radius:9px;font-size:13px;cursor:pointer;user-select:none}
+.select-option>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.select-option>svg{flex:none}
+.select-option.is-active{background:var(--soft)}.select-option[aria-selected=true]{font-weight:600}.select-option[aria-disabled=true]{opacity:.4;cursor:default}
+@keyframes select-appear{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.select-options{animation:none}.select-trigger,.select-trigger>svg{transition:none}}
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}

@@ -1,4 +1,5 @@
 'use client';
+import { Select } from '@/components/Select';
 import { QqSourceAdmin } from '@/components/QqSourceAdmin';
 import { Loading } from '@/components/Loading';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -170,7 +171,7 @@ function Users({ guard, toast }: P) {
                 <tr key={u.id}>
                   <td><b>{u.username}</b><div className="muted sm">{u.displayName !== u.username ? u.displayName : ''}</div></td>
                   <td><Pill kind={u.status === 'active' ? 'ok' : u.status === 'pending' ? 'wait' : ''}>{{ active: '正常', pending: '待激活', disabled: '已停用' }[u.status]}</Pill></td>
-                  <td><select value={u.maxQuality} onChange={e => act(() => patch(`/api/admin/users/${u.id}`, { maxQuality: e.target.value }), '已更新音质上限')}>{Object.entries(QUALITY_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></td>
+                  <td><Select value={u.maxQuality} aria-label={`${u.username} 的最高音质`} onChange={value => act(() => patch(`/api/admin/users/${u.id}`, { maxQuality: value }), '已更新音质上限')} options={Object.entries(QUALITY_LABEL).map(([value, label]) => ({ value, label }))} /></td>
                   <td className="hm sub">{u.favorites} / {u.plays}</td>
                   <td className="hm sub">{u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : '从未'}</td>
                   <td><div className="row" style={{ justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
@@ -202,7 +203,7 @@ function Users({ guard, toast }: P) {
           <form className="modal" onSubmit={create}>
             <h2>生成激活码</h2>
             <p className="sub" style={{ margin: '6px 0 18px' }}>一次性使用，有效期 48 小时。</p>
-            <div className="field"><label className="sm sub">最高音质</label><select autoFocus disabled={creating} value={form.maxQuality} onChange={e => setForm({ ...form, maxQuality: e.target.value })}>{Object.entries(QUALITY_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+            <div className="field"><label className="sm sub">最高音质</label><Select autoFocus disabled={creating} value={form.maxQuality} aria-label="激活码最高音质" onChange={value => setForm({ ...form, maxQuality: value })} options={Object.entries(QUALITY_LABEL).map(([value, label]) => ({ value, label }))} /></div>
             {err && <div className="err">{err}</div>}
             <div className="row" style={{ justifyContent: 'flex-end', marginTop: 8 }}><button type="button" className="btn ghost" disabled={creating} onClick={() => setForm(null)}>取消</button><button className="btn" disabled={creating}>{creating ? <Loading inline label="正在生成" /> : '生成'}</button></div>
           </form>
@@ -332,8 +333,8 @@ function Jobs({ guard, toast }: P) {
       {d?.ok && (
         <form className="box pad row" style={{ gap: 12, alignItems: 'flex-end' }} onSubmit={submit}>
           <div className="field" style={{ margin: 0, flex: 1, minWidth: 220 }}><label className="sm sub">输入文件（相对 incoming 目录）</label><input value={form.input} onChange={e => setForm({ ...form, input: e.target.value })} placeholder="album/song.ncm" required /></div>
-          <div className="field" style={{ margin: 0 }}><label className="sm sub">输出</label><select value={form.format} onChange={e => setForm({ ...form, format: e.target.value })}><option value="original">保持原格式</option><option value="mp3">转为 MP3</option></select></div>
-          {form.format === 'mp3' && <div className="field" style={{ margin: 0 }}><label className="sm sub">码率</label><select value={form.bitrate} onChange={e => setForm({ ...form, bitrate: Number(e.target.value) })}>{[128, 192, 256, 320].map(b => <option key={b} value={b}>{b} kbps</option>)}</select></div>}
+          <div className="field" style={{ margin: 0 }}><label className="sm sub">输出</label><Select value={form.format} aria-label="输出格式" onChange={value => setForm({ ...form, format: value })} options={[{ value: 'original', label: '保持原格式' }, { value: 'mp3', label: '转为 MP3' }]} /></div>
+          {form.format === 'mp3' && <div className="field" style={{ margin: 0 }}><label className="sm sub">码率</label><Select value={form.bitrate} aria-label="输出码率" onChange={value => setForm({ ...form, bitrate: Number(value) })} options={[128, 192, 256, 320].map(value => ({ value, label: `${value} kbps` }))} /></div>}
           <button className="btn">提交任务</button>
         </form>
       )}

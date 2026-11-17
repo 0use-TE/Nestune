@@ -1,4 +1,5 @@
 'use client';
+import { Select } from './Select';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, get, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
@@ -292,7 +293,7 @@ export function Square() {
     {picker && <div className={`nc-picker-mask ${ghost ? 'nc-picker-dragging' : ''}`} onPointerDown={event => { if (event.target === event.currentTarget) setPicker(false); }}>
       <section className="nc-picker panel" role="dialog" aria-modal="true" aria-label="从歌单添加唱片">
         <header><nav className="chips" aria-label="唱片类型">{(['song', 'album'] as const).map(value => <button key={value} className={`chip ${kind === value ? 'on' : ''}`} onClick={() => setKind(value)}>{value === 'song' ? '歌曲' : '专辑'}</button>)}</nav><button className="ib" aria-label="关闭音乐选择" onClick={() => setPicker(false)}><Icon n="x" s={19} /></button></header>
-        <select value={collection} onChange={event => setCollection(event.target.value)} aria-label="选择歌单"><option value="favorites">我喜欢的音乐</option>{app.playlists.map(p => <option key={p.id} value={String(p.id)}>{p.name}</option>)}</select>
+        <Select value={collection} onChange={setCollection} aria-label="选择歌单" options={[{ value: 'favorites', label: '我喜欢的音乐' }, ...app.playlists.map(p => ({ value: String(p.id), label: p.name }))]} />
         <div className="nc-bundle-source" onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) begin(event, sourceItem(collectionSource), collectionSource); }}><span><Icon n="list" s={17} />整张歌单</span><button className="ib" disabled={adding || busy || !songs.length} aria-label="贴上整张歌单" onClick={() => void add(collectionSource)}><Icon n="plus" s={18} /></button></div>
         <label className="search"><Icon n="search" s={17} /><input value={query} onChange={event => setQuery(event.target.value)} aria-label="搜索唱片" placeholder="搜索音乐" /></label>
         <div className="nc-music-list">{busy ? <Loading /> : sources.map(source => <div className="nc-music-row" key={source.kind + source.songId} onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) begin(event, sourceItem(source), source); }} onContextMenu={event => event.preventDefault()}><ItemArtwork item={sourceItem(source)} /><span><b className="t1">{source.name}</b><small className="sub t1">{source.previewSong!.artists.map(a => a.name).join(' / ')}</small></span><button className="ib" disabled={adding} aria-label={`贴上${source.name}`} onClick={() => void add(source)}><Icon n="plus" s={18} /></button></div>)}{!busy && !sources.length && <p className="center sub sm">暂无音乐</p>}</div>
