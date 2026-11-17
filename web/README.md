@@ -8,14 +8,14 @@ cd D:\Projects\Nestune\web
 npm install
 copy .env.example .env.local    # then set ADMIN_KEY
 npm run dev                     # http://localhost:3000   admin: /admin
-npm test                        # 27 tests
+npm test                        # 117 tests
 npm run build; npm start        # production
 ```
 
 ## Accounts
 
 - There is **no admin account**. `/admin` unlocks only with `ADMIN_KEY` from the server environment (8 tries/min/IP, 12 h session).
-- The admin generates **one-time activation codes** (`/admin` → 用户 → 生成激活码, valid for 48 h) without creating an account. Users choose 激活账号, verify their code, then set their own username, nickname and password. A successful registration consumes the code and signs them in; invalid fields or a username conflict leave it usable. Codes inherit the quality limit chosen by the admin and can be revoked before use. Existing accounts and password-reset codes continue to work.
+- Only the admin creates users (`/admin` → 用户). Creating one returns a **one-time activation code** (48 h). The user opens the login page → 收到激活码？首次登录 → username + code + their own new password. The admin never learns the password.
 - Forgot password: admin → 重置密码 issues a new code, clears the password and signs the user out.
 - Per user the admin sets: max audio quality, whether they may save to the local library, enable/disable, force sign-out.
 - Users edit their own nickname, bio, email, avatar (PNG/JPG/WebP ≤ 2 MB, magic-byte checked) and password (changing it signs out other devices).
@@ -48,7 +48,31 @@ Admin (admin cookie): `/api/admin/login|logout|session|overview|users|netease|ca
 
 Cross-site writes are rejected (Origin check). Audio is only fetched from the music CDN domains, redirects re-checked. Private playlists and the bound account's own playlists are refused. Song/album/playlist payloads are field-whitelisted. Per-user rate limit and concurrent-download cap are adjustable in 系统设置.
 
-## PWA
+## Canvas, player and client updates (1.1.0)
+
+All signed-in users share `/square`, the canvas page. Songs, albums and playlists
+can be dragged from music lists or the current player; mobile uses long-press.
+Music items are consumed when taken into playback. Batch additions append to the
+existing queue, preserve transport state and open the queue panel. Personal
+playlist cards and detail pages also support one-click queueing, including the
+owner's private playlists through the owner API. Notes and image stickers keep
+author labels, layer order and keyboard-safe controls.
+
+The web player provides persisted volume and mute controls. The native clients
+add an origin-checked desktop/system lyrics bridge; supported browsers can use
+Document Picture-in-Picture. Lyrics include translation, an independent playback
+clock and native close/lock state synchronization. Signing out closes system lyrics.
+
+The update announcement links to server-hosted Windows and Android packages.
+`/api/client-updates` validates release metadata against files under
+`data/client-releases`; the versioned package routes allow public Range requests.
+
+Streaming obtains the authenticated source account's player URL. Explicit song
+downloads use the separate download endpoint: permission to listen must not be
+inferred from download permission. Preview audio remains rejected. API errors
+carry request IDs; offline/gateway pages preserve diagnostic error codes.
+
+## PWA and together listening
 
 Together-listening invitations can be sent from a friend's chat. The invitation stays in chat history with its accepted, cancelled, declined, expired, or ended status; unanswered invitations expire after 10 minutes. The player fits the viewport, with scrolling confined to lyrics and messages. On phones, the **播放 / 聊天** tabs and horizontal swipes switch between playback and a full chat page; switching preserves the message draft.
 
