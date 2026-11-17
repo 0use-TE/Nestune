@@ -9,7 +9,7 @@ const get = id => {
   return elements.get(id);
 };
 const state = { enabled: true, locked: false, panel: false };
-const window = { __TAURI_INTERNALS__: { invoke: async (command, payload) => {
+const window = { NestuneKaraoke: { create: () => ({ clear(text) { get('line').textContent = text; }, render(line) { get('line').textContent = line.text; } }) }, __TAURI_INTERNALS__: { invoke: async (command, payload) => {
   calls.push({ command, payload });
   if (payload.data?.type === 'lyricsSnapshot') return { state: { ...state }, data: null, media: null };
   if (payload.data?.type === 'lyricsLock') state.locked = payload.data.locked;

@@ -1,0 +1,28 @@
+#np.preview-np{padding-top:80px}
+.preview-toolbar{position:fixed;z-index:25;top:22px;left:32px;right:32px;display:flex;align-items:center;gap:12px}
+.preview-label{font-size:13px;font-weight:600;flex:1;white-space:nowrap}
+.preview-label small{font-size:10px;font-weight:450;color:var(--sub);margin-left:10px}
+.preview-modes{display:flex;gap:3px;padding:4px;border:1px solid var(--line);border-radius:999px;background:var(--surface)}
+.preview-modes button{font-size:12px;padding:7px 14px;border-radius:999px;color:var(--sub)}
+.preview-modes button[aria-pressed=true]{background:var(--soft);color:var(--text)}
+.preview-help{margin-top:13px;color:var(--sub);text-align:center;font-size:11px}
+.preview-progress{width:100%;margin-top:24px;accent-color:var(--accent);height:4px;cursor:pointer}
+.lyrics-preview .pinned-lyrics{z-index:24;inset:auto 18px 32px;pointer-events:none}
+.lyrics-preview .pinned-lyrics-actions button[aria-label="移到桌面"]{display:none}
+@media(max-width:860px){
+  .preview-toolbar{top:14px;left:18px;right:14px;gap:6px;flex-wrap:wrap}
+  .preview-label{flex:none;font-size:12px}.preview-label small{margin-left:5px}
+  .preview-modes{order:3;width:100%;justify-content:center;margin-top:4px;border-color:#ffffff20;background:#ffffff0b}
+  .preview-modes button{flex:1;color:#bec3cd}.preview-modes button[aria-pressed=true]{background:#ffffff16;color:#f4f5f8}
+  .preview-toolbar>.ib{margin-left:auto}
+  #np.preview-np{padding-top:110px}
+  .lyrics-preview .np-art{display:none!important}
+  .lyrics-preview .np-tools{margin-top:8px}
+  .preview-help{margin-top:5px}
+  .lyrics-preview .pinned-lyrics{bottom:180px}
+}
+
+#np.preview-np .ctl{display:flex;justify-content:center;gap:24px}
+
+.lyrics-preview~.pwa-intro,body:has(.lyrics-preview) nextjs-portal{display:none}
+@media(max-width:860px){.preview-toolbar{color:#f4f5f8}.preview-label small{color:#bec3cd}}

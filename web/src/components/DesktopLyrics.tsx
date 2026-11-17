@@ -1,6 +1,8 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { overlayLine, type OverlayData, type OverlayMedia } from '@/lib/overlay-lyrics';
+import { overlayCurrent, overlayLine, type OverlayData, type OverlayMedia } from '@/lib/overlay-lyrics';
+import { createRoot } from 'react-dom/client';
+import { KaraokeText } from './KaraokeText';
 import { lyricsNativeBridge, lyricsOpenFailure, lyricsTransport } from '@/lib/lyrics-capability';
 
 type State = { supported: boolean; enabled: boolean; locked: boolean; permission: boolean; platform: 'desktop' | 'android' | 'browser' };
@@ -98,18 +100,22 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
         child.document.title = 'Nestune · 歌词';
         const style = child.document.createElement('style');
         style.textContent = ':root{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;padding:14px 22px;min-height:100vh;display:flex;flex-direction:column;justify-content:center;text-align:center;background:#fbfaf8;color:#141413;font-family:system-ui,"Microsoft YaHei",sans-serif}h1{font-size:clamp(18px,5vw,29px);line-height:1.35;margin:0;font-weight:650;overflow-wrap:anywhere}p{margin:7px 0 0;color:#6d6c66;font-size:15px}small{display:block;margin:10px 0 0;color:#a3a29b;font-size:10px}@media(prefers-color-scheme:dark){body{background:#0f0f0e;color:#f4f3ef}p{color:#a09f98}}';
+        for (const sheet of document.querySelectorAll('link[rel=stylesheet],style')) child.document.head.append(sheet.cloneNode(true));
         child.document.head.append(style);
         const text = child.document.createElement('h1'), translation = child.document.createElement('p'), title = child.document.createElement('small');
         child.document.body.replaceChildren(text, translation, title);
+        const lyricsRoot = createRoot(text);
         const update = () => {
           const current = media.current;
           const position = current.position + (current.playing ? (Date.now() - current.at) / 1000 : 0);
           const line = overlayLine(content.current, current.id, position);
-          text.textContent = line.text; translation.textContent = line.tr; title.textContent = content.current?.title || 'Nestune';
+          const vocal = overlayCurrent(content.current, current.id, position);
+          lyricsRoot.render(vocal ? <KaraokeText line={vocal.line} nextTime={vocal.nextTime} position={position} playing={current.playing} flowSeed={content.current?.flowSeed} duration={content.current?.duration} /> : line.text);
+          translation.textContent = line.tr; title.textContent = content.current?.title || 'Nestune';
           translation.hidden = !line.tr;
         };
         update(); const timer = child.setInterval(update, 120);
-        child.addEventListener('pagehide', () => { child.clearInterval(timer); if (pip.current === child) { pip.current = null; setState(previous => ({ ...previous, enabled: false })); } }, { once: true });
+        child.addEventListener('pagehide', () => { child.clearInterval(timer); lyricsRoot.unmount(); if (pip.current === child) { pip.current = null; setState(previous => ({ ...previous, enabled: false })); } }, { once: true });
         setState(previous => ({ ...previous, enabled: true }));
       } else {
         const next = await nativeRequest({ type: 'lyricsEnable', enabled }); accept(next);

@@ -32,3 +32,12 @@ describe('remembered playback volume', () => {
     expect(playbackVolume(Infinity, .4)).toBe(.4);
   });
 });
+
+it('keeps real word timing and a common color seed within the native message size bound', () => {
+  const line = { t: 2, d: 3, text: '你好', words: [{ t: 2, d: 1, text: '你' }, { t: 4, d: 1, text: '好' }] };
+  const data = overlayLyrics('a', 'title', [line], '', true, 123, 240);
+  expect(data).toMatchObject({ flowSeed: 123, duration: 240, lines: [line] });
+  expect(overlayLyrics('a', 'title', [{ ...line, words: [{ t: -1, d: 5, text: '你好' }] }]).lines[0].words).toBeUndefined();
+  const many = overlayLyrics('a', 'title', Array.from({ length: 1200 }, () => line));
+  expect(Buffer.byteLength(JSON.stringify(many), 'utf8')).toBeLessThan(300000);
+});

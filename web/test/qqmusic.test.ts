@@ -15,6 +15,15 @@ it('shapes public metadata without leaking media IDs or interpreting VIP flags a
   expect(JSON.stringify(song)).not.toContain('media456'); expect(song.qualities?.map(q => q.level)).toEqual(['standard', 'exhigh', 'lossless']);
   expect(qq.qqCover('../bad')).toBe(null); expect(qq.qqCover('album123')).toContain('y.gtimg.cn/music/photo_new/');
 });
+it('requests QQ word timing and keeps normal LRC responses usable', async () => {
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, data: { lyric: '[1000,2000]你(1000,800)好(1800,1200)', trans: '[00:01.00]hello' } })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ code: 0, data: { lyric: '[00:01.00]普通歌词' } })));
+  vi.stubGlobal('fetch', fetcher);
+  const timed = await qq.qqLyrics('qq-track123');
+  expect(timed.lines[0]).toMatchObject({ text: '你好', tr: 'hello', words: [{ t: 1, d: .8, text: '你' }, { t: 1.8, d: 1.2, text: '好' }] });
+  expect((fetcher.mock.calls[0][0] as URL).searchParams.get('qrc')).toBe('true');
+  expect((await qq.qqLyrics('qq-track123')).lines[0]).toMatchObject({ t: 1, text: '普通歌词' });
+});
 it('uses the distinct media MID and the documented format number with the bound account', async () => {
   const fetcher = vi.fn(async (url: URL | string) => new Response(JSON.stringify({ code: 0, data: String(url).includes('/detail') ? { track: raw } : { data: [{ result: 0, ekey: '', purl: 'M800media456.mp3?vkey=test-only' }] } })));
   vi.stubGlobal('fetch', fetcher);

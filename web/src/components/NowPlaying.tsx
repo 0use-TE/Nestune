@@ -1,7 +1,7 @@
 'use client';
 import { sourceIds } from '@/lib/music-ids';
 import { Loading } from './Loading';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { get } from '@/lib/api';
 import { useApp, useClock } from '@/lib/app';
 import { isDeviceSong } from '@/lib/device-music';
@@ -14,6 +14,7 @@ import { Conversation } from './Conversation';
 import { FloatingLyrics } from './FloatingLyrics';
 import { Icon } from './Icon';
 import { PlayerLyrics } from './PlayerLyrics';
+import { KaraokeText } from './KaraokeText';
 import { PlayerTogether } from './PlayerTogether';
 import { Sheet } from './Sheet';
 import { VolumeControl } from './VolumeControl';
@@ -38,6 +39,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const { time, duration } = useClock();
   const s = app.current;
   const songId = s?.id;
+  const lyricFlowSeed = useMemo(() => crypto.getRandomValues(new Uint32Array(1))[0], [songId, app.audioInfo?.sourceId]);
   const deviceSong = !!songId && isDeviceSong(songId);
   const [lyrics, setLyrics] = useState<{ id: string; sourceId?: string; lines: LyricLine[]; credits: string[]; plainText?: string } | null>(null);
   const [inviting, setInviting] = useState(false);
@@ -122,8 +124,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const lyricStatus = !currentLyrics ? <Loading inline label="正在加载歌词" /> : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
 
   useEffect(() => {
-    desktopLyrics.send(overlayLyrics(songId || '', s?.name || '', currentLyrics?.lines || [], currentLyrics?.plainText, app.showTr));
-  }, [songId, s?.name, currentLyrics, app.showTr, desktopLyrics.enabled, desktopLyrics.send]);
+    desktopLyrics.send(overlayLyrics(songId || '', s?.name || '', currentLyrics?.lines || [], currentLyrics?.plainText, app.showTr, lyricFlowSeed, duration));
+  }, [songId, s?.name, currentLyrics, app.showTr, desktopLyrics.enabled, desktopLyrics.send, lyricFlowSeed, duration]);
   useEffect(() => {
     desktopLyrics.send({ type: 'lyricsMedia', id: songId || '', position: time, playing: app.playing && !app.loading });
   }, [songId, time, app.playing, app.loading, desktopLyrics.enabled, desktopLyrics.send]);
@@ -238,7 +240,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           </div>
         </div>
         <div className="np-stage">
-          {showPlayerContents && <PlayerLyrics key={songId} lines={lines} active={active} status={lyricStatus} plainText={currentLyrics?.plainText} showTranslation={app.showTr} onSeek={app.seek}
+          {showPlayerContents && <PlayerLyrics key={songId} flowSeed={lyricFlowSeed} lines={lines} active={active} position={time} playing={app.playing && !app.loading} duration={duration} status={lyricStatus} plainText={currentLyrics?.plainText} showTranslation={app.showTr} onSeek={app.seek}
             onBackgroundClick={() => { if (window.matchMedia('(max-width: 860px)').matches) toggleMobileArt(); }} />}
           {showPlayerContents && activeRoom && (
             <div className="together-chat-dock">
@@ -252,7 +254,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
         </div>}
       </div>
       {creditsOpen && app.nowOpen && currentLyrics?.credits.length ? <Sheet title="制作信息" onClose={() => setCreditsOpen(false)}><ul className="credits-list">{currentLyrics.credits.map((credit, index) => <li key={index}>{credit}</li>)}</ul></Sheet> : null}
-      <FloatingLyrics visible={lyricsPinned && !app.nowOpen && !desktopLyrics.enabled} text={currentLine?.text || lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
+      <FloatingLyrics visible={lyricsPinned && !app.nowOpen && !desktopLyrics.enabled} text={currentLine ? <KaraokeText line={currentLine} flowSeed={lyricFlowSeed} position={time} playing={app.playing && !app.loading} nextTime={lines[active + 1]?.t} duration={duration} /> : lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
     </>
   );
 }

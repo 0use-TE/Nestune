@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import { parseLrc } from '@/lib/lyrics';
+import { parseWordLyrics } from '@/lib/karaoke';
+import type { LyricLine } from '@/lib/types';
 import { dir } from './config';
 import { fail, HttpError } from './http';
 import { accessFromPrivilege, type Access } from './quality';
@@ -127,14 +129,14 @@ export type Song = ReturnType<typeof songSummary>;
 
 /* ---------- lyrics ---------- */
 export { parseLrc };
-export function mergeLyrics(lyric: string, translation: string, romanization: string) {
-  const base = parseLrc(lyric), tr = parseLrc(translation), ro = parseLrc(romanization);
+export function mergeLyrics(lyric: string, translation: string, romanization: string, timed: LyricLine[] = []) {
+  const base = timed.length ? timed : parseLrc(lyric), tr = parseLrc(translation), ro = parseLrc(romanization);
   const near = (list: { t: number; text: string }[], t: number) => {
     let best: { t: number; text: string } | undefined;
     for (const x of list) if (Math.abs(x.t - t) <= 1 && (!best || Math.abs(x.t - t) < Math.abs(best.t - t))) best = x;
     return best?.text;
   };
-  return base.map(l => ({ t: Math.round(l.t * 100) / 100, text: l.text, tr: near(tr, l.t), roma: near(ro, l.t) }));
+  return base.map(l => ({ ...l, t: l.words?.length ? l.t : Math.round(l.t * 100) / 100, tr: near(tr, l.t), roma: near(ro, l.t) }));
 }
 
 /* ---------- catalog ---------- */
@@ -234,9 +236,11 @@ export async function artistSongs(id: string, limit: number, offset: number) {
 }
 
 export async function lyrics(id: string) {
-  const b = await call('lyric', { id });
-  const lyric = b.lrc?.lyric || '', tr = b.tlyric?.lyric || '', ro = b.romalrc?.lyric || '';
-  return { id, lines: mergeLyrics(lyric, tr, ro), hasTranslation: !!tr, instrumental: !!b.nolyric };
+  // New endpoint includes real syllable timing; ordinary LRC remains a fallback.
+  const b = await call('lyric_new', { id }).catch(() => call('lyric', { id }));
+  const lyric = b.lrc?.lyric || '', tr = b.ytlrc?.lyric || b.tlyric?.lyric || '', ro = b.yromalrc?.lyric || b.romalrc?.lyric || '';
+  const lines = mergeLyrics(lyric, tr, ro, parseWordLyrics(b.yrc?.lyric || '', 'yrc'));
+  return { id, lines, hasTranslation: !!tr, instrumental: !!b.nolyric };
 }
 
 export async function hotSearch() {

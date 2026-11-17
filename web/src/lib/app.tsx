@@ -232,6 +232,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
     const onPlaying = () => {
+      setClock(a.currentTime, dur());
       setPlaying(true); setLoading(false); failures.current = 0;
       if (!recorded.current) {
         recorded.current = true;
@@ -255,8 +256,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('playing', onPlaying);
-    a.addEventListener('pause', () => { if (!a.ended) setPlaying(false); });
-    a.addEventListener('waiting', () => setLoading(true));
+    a.addEventListener('pause', () => { setClock(a.currentTime, dur()); if (!a.ended) setPlaying(false); });
+    a.addEventListener('waiting', () => { setClock(a.currentTime, dur()); setLoading(true); });
     a.addEventListener('canplay', () => setLoading(false));
     a.addEventListener('loadedmetadata', onMeta);
     a.addEventListener('ended', () => {

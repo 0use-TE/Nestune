@@ -31,6 +31,7 @@ cpSync(path.join(root, 'android/MainActivity.kt'), path.join(android, 'app/src/m
 cpSync(path.join(root, 'android/NativeMediaService.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/NativeMediaService.kt'));
 cpSync(path.join(root, 'android/MusicDownloads.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/MusicDownloads.kt'));
 cpSync(path.join(root, 'android/LyricsOverlay.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/LyricsOverlay.kt'));
+cpSync(path.join(root, 'android/KaraokeLyricsText.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/KaraokeLyricsText.kt'));
 
 // The release APK stays unsigned in CI. The private release key remains on the owner's PC.
 const gradlePath = path.join(android, 'app/build.gradle.kts');

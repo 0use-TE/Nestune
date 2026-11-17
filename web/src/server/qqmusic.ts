@@ -1,3 +1,4 @@
+import { parseWordLyrics } from '@/lib/karaoke';
 import fs from 'node:fs';
 import { isQqId } from '@/lib/music-ids';
 import type { Song } from '@/lib/types';
@@ -90,8 +91,9 @@ async function rawSong(id: string) {
 }
 export const qqSongMeta = async (id: string) => qqSong(await rawSong(id));
 export async function qqLyrics(id: string) {
-  const data = await call(`/song/${mid(id)}/lyric`);
-  return { id, lines: mergeLyrics(data.lyric || '', data.trans || '', data.roma || ''), hasTranslation: !!data.trans, instrumental: !data.lyric };
+  const data = await call(`/song/${mid(id)}/lyric`, { qrc: true, trans: true, roma: true }).catch(() => call(`/song/${mid(id)}/lyric`));
+  const lines = mergeLyrics(data.lyric || '', data.trans || '', data.roma || '', parseWordLyrics(data.lyric || '', 'qrc'));
+  return { id, lines, hasTranslation: !!data.trans, instrumental: !data.lyric };
 }
 export function qqMediaData(data: any, level: string) {
   const items = data?.data;

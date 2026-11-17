@@ -16,5 +16,6 @@ export type Me = {
   status: string; maxQuality: string; createdAt: number; lastLoginAt: number; profilePublic: boolean;
 };
 export type PlaylistLite = { id: number; name: string; description: string; trackCount: number; cover: string | null; updatedAt: number; isPublic?: boolean };
-export type LyricLine = { t: number; text: string; tr?: string; roma?: string };
+export type LyricWord = { t: number; d: number; text: string };
+export type LyricLine = { t: number; text: string; tr?: string; roma?: string; d?: number; words?: LyricWord[] };
 export type Card = { id: string; name: string; cover: string | null; sub?: string };

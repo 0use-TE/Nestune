@@ -1,10 +1,10 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.1",
   "identifier": "net.ouse.nestune",
   "bundle": {
     "android": {
       "minSdkVersion": 24,
-      "versionCode": 6
+      "versionCode": 7
     }
   }
 }
