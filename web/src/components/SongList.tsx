@@ -9,6 +9,7 @@ import { Icon } from './Icon';
 import { Loading } from './Loading';
 import { sourceIds } from '@/lib/music-ids';
 import { MusicSources } from './MusicSources';
+import { PlayingIndicator } from './PlayingIndicator';
 export { Loading } from './Loading';
 
 export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?: boolean; onRemove?: (s: Song) => void }) {
@@ -21,11 +22,11 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
         const bad = s.access?.playable === false;
         const device = isDeviceSong(s.id);
         return (
-          <div key={`${s.id}-${i}`} className={`tr ${cur ? 'cur' : ''} ${bad ? 'dim' : ''}`} onClick={() => (bad ? app.toast(s.access?.reason || '这首歌暂时无法播放') : app.playNow(s))}>
-            <div className="no">{cur ? app.loading ? <Loading inline label="正在缓冲歌曲" /> : <span className={`eq ${app.playing ? '' : 'off'}`}><i /><i /><i /></span> : i + 1}</div>
+          <div key={`${s.id}-${i}`} className={`tr ${cur ? 'cur' : ''} ${bad ? 'dim' : ''}`} data-playing={cur ? app.playing && !app.loading : undefined} onClick={() => (bad ? app.toast(s.access?.reason || '这首歌暂时无法播放') : app.playNow(s))}>
+            <div className="no">{cur ? app.loading ? <Loading inline label="正在缓冲歌曲" /> : <PlayingIndicator playing={app.playing} /> : i + 1}</div>
             <Cover src={s.cover} seed={s.id} />
             <div className="t1">
-              <div className="nm t1">{device ? <button aria-label={`播放 ${s.name}`}>{s.name}</button> : s.name}
+              <div className="nm t1">{device ? <button className="song-name" aria-label={`播放 ${s.name}`}>{s.name}</button> : <span className="song-name">{s.name}</span>}
                 {bad && <span className="qtag bad">{unplayableText(s.access?.reason)}</span>}
               </div>
               <div className="sub sm t1">
