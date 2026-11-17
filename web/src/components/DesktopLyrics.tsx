@@ -1,7 +1,7 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { overlayLine, type OverlayData, type OverlayMedia } from '@/lib/overlay-lyrics';
-import { lyricsOpenFailure, lyricsTransport } from '@/lib/lyrics-capability';
+import { lyricsNativeBridge, lyricsOpenFailure, lyricsTransport } from '@/lib/lyrics-capability';
 
 type State = { supported: boolean; enabled: boolean; locked: boolean; permission: boolean; platform: 'desktop' | 'android' | 'browser' };
 type Command = { type: string; [key: string]: unknown } | OverlayData | OverlayMedia;
@@ -16,6 +16,9 @@ type Context = State & { busy: boolean; status: string; upgradeRequired: boolean
 const INITIAL: State = { supported: false, enabled: false, locked: false, permission: false, platform: 'browser' };
 const LyricsContext = createContext<Context>(null as never);
 export const useDesktopLyrics = () => useContext(LyricsContext);
+function nativeBridge(host: NativeWindow) {
+  return lyricsNativeBridge({ desktop: typeof host.NestuneDesktop?.request === 'function', android: typeof host.NestuneNative?.postMessage === 'function', tauri: typeof host.__TAURI_INTERNALS__?.invoke === 'function' });
+}
 function transport() {
   const host = window as NativeWindow;
   return lyricsTransport({ desktop: typeof host.NestuneDesktop?.request === 'function', android: typeof host.NestuneNative?.postMessage === 'function',
@@ -25,10 +28,11 @@ function transport() {
 
 async function nativeRequest(data: Command): Promise<State> {
   const host = window as NativeWindow;
-  if (host.NestuneDesktop) return host.NestuneDesktop.request(data);
-  if (host.__TAURI_INTERNALS__) return host.__TAURI_INTERNALS__.invoke('lyrics_command', { data });
-  if (!host.NestuneNative) throw Error('请更新客户端后使用桌面歌词');
-  const bridge = host.NestuneNative;
+  const kind = nativeBridge(host);
+  if (kind === 'desktop') return host.NestuneDesktop!.request(data);
+  if (kind === 'tauri') return host.__TAURI_INTERNALS__!.invoke('lyrics_command', { data });
+  if (kind !== 'android') throw Error('请更新客户端后使用桌面歌词');
+  const bridge = host.NestuneNative!;
   const requestId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const receive = (event: Event) => {
@@ -126,9 +130,10 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
     else media.current = { id: data.id, position: data.position, playing: data.playing, at: Date.now() };
     if (!stateRef.current.enabled || stateRef.current.platform === 'browser') return;
     const host = window as NativeWindow;
-    if (host.NestuneDesktop) void host.NestuneDesktop.request(data).catch(() => {});
-    else if (host.__TAURI_INTERNALS__) void host.__TAURI_INTERNALS__.invoke('lyrics_command', { data }).catch(() => {});
-    else host.NestuneNative?.postMessage(JSON.stringify(data));
+    const kind = nativeBridge(host);
+    if (kind === 'desktop') void host.NestuneDesktop!.request(data).catch(() => {});
+    else if (kind === 'android') host.NestuneNative!.postMessage(JSON.stringify(data));
+    else if (kind === 'tauri') void host.__TAURI_INTERNALS__!.invoke('lyrics_command', { data }).catch(() => {});
   }, []);
   const value = useMemo(() => ({ ...state, busy, status, upgradeRequired, setEnabled, setLocked, send }), [state, busy, status, upgradeRequired, setEnabled, setLocked, send]);
   return <LyricsContext.Provider value={value}>{children}

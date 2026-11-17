@@ -1,6 +1,10 @@
 export type LyricsEnvironment = { desktop: boolean; android: boolean; tauri: boolean; embedded: boolean; secure: boolean; pictureInPicture: boolean; userAgent: string };
+export function lyricsNativeBridge(environment: Pick<LyricsEnvironment, 'desktop' | 'android' | 'tauri'>) {
+  // Android Tauri also injects its raw IPC object, but lyrics use its Android bridge.
+  return environment.desktop ? 'desktop' : environment.android ? 'android' : environment.tauri ? 'tauri' : null;
+}
 export function lyricsTransport(environment: LyricsEnvironment): 'native' | 'upgrade' | 'pip' | 'unsupported' {
-  if (environment.desktop || environment.android || environment.tauri) return 'native';
+  if (lyricsNativeBridge(environment)) return 'native';
   if (environment.embedded || /NestuneDesktop\//.test(environment.userAgent)) return 'upgrade';
   return environment.secure && environment.pictureInPicture ? 'pip' : 'unsupported';
 }
