@@ -6,12 +6,12 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     version: VERSION,
     date: '2026 年 11 月 17 日',
     title: '长按排序，桌面托盘随时控制',
-    summary: '歌单长按交换排序，统一下拉框；桌面新增托盘，Windows 补齐 ARM64。',
+    summary: '歌单长按交换排序，统一下拉框；桌面新增托盘，Windows 和 Linux 支持 ARM64。',
     sections: [
       { title: '长按卡片，即可排序', paragraphs: ['音乐库不再显示排序图标。按住卡片后拖动，经过其他卡片时直接交换位置，并显示过渡动画；松开后保存顺序。手机上仍可正常滑动浏览。'] },
       { title: '下拉选择，风格统一', paragraphs: ['歌单选择和管理页面的下拉框统一适配深浅主题，支持键盘选择，弹层会根据屏幕空间调整位置。'] },
       { title: 'Windows、Linux、macOS 系统托盘', paragraphs: ['关闭主窗口后继续播放，从托盘打开窗口、播放或暂停、切换歌曲、开关桌面歌词，也可以选择退出应用。需要安装 1.2.2 桌面客户端；Linux 需要桌面环境提供托盘区域。'] },
-      { title: 'Windows ARM64 与清晰的下载选项', paragraphs: ['Windows x64 和 ARM64 均提供安装版和便携版。安装版包含快捷方式和卸载程序，便携版下载后直接运行；ARM64 客户端的更新链接会保持对应架构。'] },
+      { title: '桌面 ARM64 与清晰的下载选项', paragraphs: ['Windows x64 和 ARM64 均提供安装版和便携版。安装版包含快捷方式和卸载程序，便携版下载后直接运行；ARM64 客户端的更新链接会保持对应架构。', 'Linux 新增 ARM64 的 DEB 和 AppImage，支持 64 位 ARM 桌面系统。macOS Universal 包同时支持 Apple 芯片和 Intel。'] },
     ],
   },
   {

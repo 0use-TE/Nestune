@@ -2,7 +2,7 @@
 
 Current desktop installers, checksums and validation notes are listed in [V1.2.2](../docs/releases/v1.2.2.md). Android remains [V1.2.1](../docs/releases/v1.2.1.md). All four platforms are available on the [NAS download page](https://nestune.0use.net:8443/downloads).
 
-Desktop **1.2.2** is published on the NAS: Windows x64/ARM64 installers and portable executables, Linux x64 AppImage/DEB and macOS Universal DMG/App ZIP. Android remains **1.2.1 / code 7** with the original release certificate. All clients use the new HTTPS origin. See [desktop release validation](../docs/releases/v1.2.2.md).
+Desktop **1.2.2** is published on the NAS: Windows x64/ARM64 installers and portable executables, Linux x64/ARM64 AppImage/DEB and macOS Universal DMG/App ZIP. Android remains **1.2.1 / code 7** with the original release certificate. All clients use the new HTTPS origin. See [desktop release validation](../docs/releases/v1.2.2.md).
 
 The clients open `https://nestune.0use.net:8443/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
@@ -31,13 +31,13 @@ For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rus
 
 Windows 1.1.1 fixes locking in the transparent always-on-top lyrics window: locking fixes its position and keeps the unlock, background and close buttons interactive, including when restoring a lock saved by 1.1.0. Locked controls remain visible. The main player also offers unlock and close actions. Web volume and playlist queue controls use the live web release. Run `npm test` in `clients/desktop` for the renderer checks. A debug Windows build also supports `--lyrics-controls-qa`: it uses a hidden local window, exercises the actual native commands and checks that `WS_EX_TRANSPARENT` stays disabled, then writes `%TEMP%/Nestune-controls-qa-<pid>.json` and exits. It never sends desktop input or signs in.
 
-## Linux x64 and macOS universal — Tauri V1.2.2
+## Linux x64/ARM64 and macOS universal — Tauri V1.2.2
 
-The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Version 1.2.2 is published on the [NAS download page](https://nestune.0use.net:8443/downloads), including AppImage/DEB for Linux x64 and DMG/App ZIP for macOS Universal. CI artifacts are retained for 30 days. Older packages remain available in the NAS history and the [V1.0.0 GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
+The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 x64/ARM64 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux, Linux ARM64 or macOS. Version 1.2.2 is published on the [NAS download page](https://nestune.0use.net:8443/downloads), including AppImage/DEB for Linux x64/ARM64 and DMG/App ZIP for macOS Universal. CI artifacts are retained for 30 days. Older packages remain available in the NAS history and the [V1.0.0 GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
 
 | Platform | Packages | Checks |
 | --- | --- | --- |
-| Linux x86-64 | AppImage and deb | Debian package metadata, linked libraries and a bounded GTK/WebKit startup under Xvfb |
+| Linux x86-64 / ARM64 | AppImage and deb | Debian package metadata, linked libraries and a bounded GTK/WebKit startup under Xvfb |
 | macOS 11+ | Universal DMG and zipped app | Intel `x86_64` and Apple Silicon `arm64` slices, bundle metadata and DMG integrity |
 
 Each artifact includes `SHA256SUMS.txt`. These checks do not replace real-device music playback testing. The macOS build is not Developer ID signed or Apple notarized, so Gatekeeper may require allowing the app in System Settings before it can run.
@@ -123,3 +123,5 @@ Windows releases use `windows-N.exe` and `windows.json` in the same server relea
 Windows ARM64 updates use `windows-arm64-N.exe` and `windows-arm64.json`. The native bridge exposes its compiled architecture, and the web client requests `/api/client-updates?windows_arch=arm64`; the returned download includes `?arch=arm64`. Existing x64 URLs and metadata remain compatible.
 
 Web release notes are maintained in `web/src/lib/release-notes.ts`. Settings → About, the new-release announcement and the waiting-update prompt open the same history. `/api/release-notes` is uncached so an older open page can read new changes before activating its waiting worker.
+
+Linux ARM64 is built on `ubuntu-22.04-arm` using the same locked `npm run build:linux` command. Its DEB architecture is `arm64`, with `Nestune-1.2.2-Linux-arm64.deb` and `Nestune-1.2.2-Linux-arm64.AppImage` on the NAS. Select `linux-arm64` in the desktop workflow to build only that target. Run these graphical clients on a 64-bit ARM Linux desktop with the required platform webview.
