@@ -1,20 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
-import { get, post } from '@/lib/api';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { del, get, put } from '@/lib/api';
 import { useApp } from '@/lib/app';
+import type { CollectionFavorite } from '@/lib/collection-types';
 import type { Song } from '@/lib/types';
 import { Cover } from './Cover';
-import { FavoriteCollections } from './CollectionFavorite';
 import { Hero } from './Hero';
 import { Icon } from './Icon';
-import { Sheet } from './Sheet';
 import { Empty, Loading, SongList } from './SongList';
 
 type CollectionKind = 'album' | 'playlist' | 'shared' | 'mine';
 type Metadata = { name: string; cover: string | null; trackCount?: number };
 type CollectionPage = { album?: Metadata; playlist?: Metadata; songs: Song[] };
+type ShelfData = { items: CollectionFavorite[]; order: string[] };
+type Card = { key: string; name: string; cover: string | null; sub: string; bookmark?: CollectionFavorite };
+type Drag = { key: string; pointer: number; startX: number; startY: number; target: string | null; moved: boolean };
 
 const routes: Record<CollectionKind, string> = { album: 'albums', playlist: 'playlists', shared: 'shared-playlists', mine: 'me/playlists' };
 const collectionLink = (key: string) => `/library?collection=${encodeURIComponent(key)}`;
@@ -22,67 +24,159 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 
 export function LibraryShelf({ selection, favorites }: { selection: string; favorites: Song[] | null }) {
   const app = useApp();
+  const [shelf, setShelf] = useState<ShelfData | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [retry, setRetry] = useState(0);
+  const [removing, setRemoving] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [dragging, setDragging] = useState<{ key: string; target: string | null } | null>(null);
+  const drag = useRef<Drag | null>(null);
+  const savingOrder = useRef(false);
   const [, kind, id] = /^(album|playlist|shared|mine):([a-zA-Z0-9-]{1,80})$/.exec(selection) ?? [];
   const showingLikes = selection === 'likes';
 
+  useEffect(() => {
+    let active = true;
+    let generation = 0;
+    const load = () => {
+      const request = ++generation;
+      setLoadError('');
+      get<ShelfData>('/api/me/collections').then(data => {
+        if (!active || request !== generation) return;
+        setShelf(previous => savingOrder.current && previous ? { ...data, order: previous.order } : data);
+      }).catch(error => { if (active && request === generation) setLoadError(errorMessage(error)); });
+    };
+    load();
+    window.addEventListener('nt:collection-change', load);
+    return () => { active = false; window.removeEventListener('nt:collection-change', load); };
+  }, [retry, app.me?.id]);
+
+  useEffect(() => {
+    if (selection) document.getElementById('main')?.scrollTo({ top: 0 });
+  }, [selection]);
+
   if (showingLikes || kind) return <div className="library-detail">
     <Link className="btn ghost sm library-back" href="/library">返回音乐库</Link>
-    {showingLikes ? <LikedSongs songs={favorites} /> : <SavedCollection kind={kind as CollectionKind} id={id} />}
+    {showingLikes ? <LikedSongs songs={favorites} /> : <SavedCollection key={selection} kind={kind as CollectionKind} id={id} />}
   </div>;
 
-  return <div className="grid collection-grid library-shelf">
-    <Link className="card library-likes" href={collectionLink('likes')} scroll={false}>
-      <span className="library-likes-cover"><Icon n="heart" s={44} /></span>
-      <b>我的喜欢</b>
-      {favorites && <span className="sub sm">{favorites.length} 首</span>}
-    </Link>
-    <FavoriteCollections hrefFor={item => collectionLink(`${item.kind}:${item.id}`)} />
-    {app.playlists.map(item => <Link key={item.id} className="card" href={collectionLink(`mine:${item.id}`)} scroll={false}>
-      <Cover src={item.cover} seed={`pl${item.id}`} />
-      <b className="t1">{item.name}</b><span className="sub sm t1">我的歌单 · {item.trackCount} 首</span>
-    </Link>)}
-  </div>;
+  if (!shelf || !favorites || !app.ready) {
+    if (loadError) return <div className="center"><p className="sub" role="alert">{loadError}</p><button className="btn ghost sm" onClick={() => setRetry(value => value + 1)}>重试</button></div>;
+    return <div className="library-shelf-loading" aria-busy="true">
+      <div className="grid library-shelf" aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <div key={i} className="library-skeleton"><i /><span /></div>)}</div>
+      <Loading label="正在加载音乐库" />
+    </div>;
+  }
+
+  const bookmarks = [...shelf.items].sort((a, b) => Number(b.kind === 'album') - Number(a.kind === 'album'));
+  const defaults: Card[] = [
+    { key: 'likes', name: '我的喜欢', cover: null, sub: `${favorites.length} 首` },
+    ...app.playlists.map(item => ({ key: `mine:${item.id}`, name: item.name, cover: item.cover, sub: `我的歌单 · ${item.trackCount} 首` })),
+    ...bookmarks.map(item => ({ key: `${item.kind}:${item.id}`, name: item.name, cover: item.cover, bookmark: item,
+      sub: item.available ? [item.kind === 'album' ? '收藏的专辑' : '收藏的歌单', item.sub].filter(Boolean).join(' · ') : '已不可用' })),
+  ];
+  const byKey = new Map(defaults.map(card => [card.key, card]));
+  const order = [...new Set([...shelf.order, ...byKey.keys()])].filter(key => byKey.has(key));
+
+  async function move(key: string, target: string) {
+    if (savingOrder.current || key === target) return;
+    const from = order.indexOf(key), to = order.indexOf(target);
+    if (from < 0 || to < 0) return;
+    const next = [...order];
+    next.splice(from, 1);
+    next.splice(to, 0, key);
+    const previous = shelf!.order;
+    savingOrder.current = true;
+    setSaving(true);
+    setShelf(value => value && { ...value, order: next });
+    try {
+      const saved = await put<{ order: string[] }>('/api/me/collections', { order: next });
+      setShelf(value => value && { ...value, order: saved.order });
+    } catch (error) {
+      setShelf(value => value && { ...value, order: previous });
+      app.toast(errorMessage(error));
+    } finally {
+      savingOrder.current = false;
+      setSaving(false);
+    }
+  }
+
+  function startDrag(event: PointerEvent<HTMLButtonElement>, key: string) {
+    if (!event.isPrimary || event.button !== 0 || drag.current || savingOrder.current) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { key, pointer: event.pointerId, startX: event.clientX, startY: event.clientY, target: null, moved: false };
+  }
+  function trackDrag(event: PointerEvent<HTMLButtonElement>) {
+    const current = drag.current;
+    if (!current || current.pointer !== event.pointerId) return;
+    if (!current.moved && Math.hypot(event.clientX - current.startX, event.clientY - current.startY) < 6) return;
+    current.moved = true;
+    const main = document.getElementById('main');
+    const bounds = main?.getBoundingClientRect();
+    if (bounds && event.clientY > bounds.bottom - 48) main?.scrollBy(0, 16);
+    else if (bounds && event.clientY < bounds.top + 48) main?.scrollBy(0, -16);
+    current.target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>('[data-library-card]')?.dataset.libraryCard ?? null;
+    setDragging({ key: current.key, target: current.target });
+  }
+  function finishDrag(event: PointerEvent<HTMLButtonElement>, commit = false) {
+    const current = drag.current;
+    if (!current || current.pointer !== event.pointerId) return;
+    drag.current = null;
+    setDragging(null);
+    if (commit && current.moved && current.target) void move(current.key, current.target);
+  }
+  async function removeBookmark(item: CollectionFavorite) {
+    if (removing) return;
+    setRemoving(`${item.kind}:${item.id}`);
+    try {
+      await del(`/api/me/collections/${item.kind}/${item.id}`);
+      setShelf(value => value && { ...value, items: value.items.filter(bookmark => bookmark.kind !== item.kind || bookmark.id !== item.id) });
+      window.dispatchEvent(new Event('nt:collection-change'));
+    } catch (error) { app.toast(errorMessage(error)); }
+    finally { setRemoving(''); }
+  }
+
+  return <>
+    {loadError && <p className="err" role="alert">{loadError}</p>}
+    <div className="grid collection-grid library-shelf">
+      {order.map((key, index) => {
+        const card = byKey.get(key)!;
+        const content = <>
+          {key === 'likes' ? <span className="library-likes-cover"><Icon n="heart" s={44} /></span> : <Cover src={card.cover} seed={key} />}
+          <b className="t1">{card.name}</b><span className="sub sm t1">{card.sub}</span>
+        </>;
+        return <article key={key} data-library-card={key} className={`library-card-item${dragging?.key === key ? ' is-dragging' : dragging?.target === key ? ' is-target' : ''}`}>
+          {card.bookmark?.available === false ? <div className="card">{content}</div> :
+            <Link className="card" href={collectionLink(key)} draggable={false} scroll={false}>{content}</Link>}
+          <button type="button" className="library-grip" disabled={saving} aria-label={`拖动排序 ${card.name}，也可使用方向键`} title="拖动排序"
+            onPointerDown={event => startDrag(event, key)} onPointerMove={trackDrag} onPointerUp={event => finishDrag(event, true)}
+            onPointerCancel={finishDrag} onLostPointerCapture={finishDrag} onKeyDown={event => {
+              if (event.key === 'Escape' && drag.current) {
+                drag.current = null;
+                setDragging(null);
+                return;
+              }
+              const step = ['ArrowUp', 'ArrowLeft'].includes(event.key) ? -1 : ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : 0;
+              if (step) {
+                event.preventDefault();
+                if (order[index + step]) void move(key, order[index + step]);
+              }
+            }}><Icon n="more" s={18} /></button>
+          {card.bookmark && <button className="link sm" disabled={!!removing} aria-label={`取消收藏 ${card.name}`} onClick={() => void removeBookmark(card.bookmark!)}>{removing === key ? <Loading inline /> : '取消收藏'}</button>}
+        </article>;
+      })}
+    </div>
+  </>;
 }
 
 function LikedSongs({ songs }: { songs: Song[] | null }) {
   const app = useApp();
-  const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState<number | null>(null);
-  const [error, setError] = useState('');
-
-  async function addToPlaylist(id: number) {
-    if (target !== null) return;
-    setTarget(id);
-    setError('');
-    try {
-      const result = await post<{ added: number; skipped: number }>(`/api/me/playlists/${id}/songs`, { from: 'favorites' });
-      await app.reloadPlaylists();
-      setOpen(false);
-      app.toast(`已添加 ${result.added} 首${result.skipped ? `，跳过 ${result.skipped} 首已有歌曲` : ''}`);
-    } catch (error) { setError(errorMessage(error)); }
-    finally { setTarget(null); }
-  }
-
   if (!songs) return <Loading />;
   return <>
     <Hero seed="favorites" cover={songs[0]?.cover} title="我的喜欢" sub={`${songs.length} 首`}>
       <button className="btn light" disabled={!songs.length} onClick={() => app.play(songs)}><Icon n="play" s={16} />播放全部</button>
-      <button className="btn ghost" disabled={!songs.length} onClick={() => { setError(''); setOpen(true); }}><Icon n="plus" s={16} />全部添加到歌单…</button>
     </Hero>
     <div className="library-detail-songs">{songs.length ? <SongList songs={songs} /> : <Empty text="点歌曲旁的爱心，把它添加到我的喜欢。" />}</div>
-    {open && <Sheet title="添加到歌单" onClose={() => { if (target === null) setOpen(false); }}>
-      {error && <p className="err" role="alert">{error}</p>}
-      {app.playlists.length ? <div className="library-targets">
-        {app.playlists.map(playlist => <button key={playlist.id} type="button" className="library-target" disabled={target !== null} onClick={() => void addToPlaylist(playlist.id)}>
-          <Cover src={playlist.cover} seed={playlist.id} />
-          <span className="t1">{playlist.name}</span>
-          {target === playlist.id ? <Loading inline label="正在添加" /> : <span className="sub sm">{playlist.trackCount} 首</span>}
-        </button>)}
-      </div> : <button type="button" className="btn ghost" onClick={() => {
-        setOpen(false);
-        window.dispatchEvent(new CustomEvent('nt:new-playlist'));
-      }}><Icon n="plus" s={16} />新建歌单</button>}
-    </Sheet>}
   </>;
 }
 

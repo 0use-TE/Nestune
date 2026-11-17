@@ -55,6 +55,10 @@ function open() {
       created_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, song_id)
     );
+    CREATE TABLE IF NOT EXISTS library_card_order (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      card_order TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS collection_favorites (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       kind TEXT NOT NULL CHECK(kind IN ('album','playlist','shared')),

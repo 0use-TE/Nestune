@@ -56,3 +56,15 @@ it('does not save failed upstream lookups and rejects invalid targets', async ()
   expect(favorites.collectionTarget('album', '000123')).toEqual({ kind: 'album', id: '123' });
   for (const [kind, id] of [['song','1'],['album','../1'],['shared','9007199254740992'],['playlist','0'],['album','-1']]) expect(() => favorites.collectionTarget(kind, id)).toThrow();
 });
+
+it('saves library card order per account and ignores cards the account does not own', async () => {
+  const own = playlists.createPlaylist(1, 'My playlist');
+  const other = playlists.createPlaylist(2, 'Another user');
+  await favorites.collect(1, 'album', '101');
+  expect(favorites.libraryOrder(1)).toEqual([]);
+  const order = ['album:101', `mine:${other.id}`, `mine:${own.id}`, 'likes', 'likes'];
+  expect(favorites.saveLibraryOrder(1, order)).toEqual(['album:101', `mine:${own.id}`, 'likes']);
+  expect(favorites.libraryOrder(1)).toEqual(['album:101', `mine:${own.id}`, 'likes']);
+  expect(favorites.libraryOrder(2)).toEqual([]);
+  expect(() => favorites.saveLibraryOrder(1, ['invalid'])).toThrow();
+});

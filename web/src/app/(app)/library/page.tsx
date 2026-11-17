@@ -61,7 +61,7 @@ function Library() {
         </div>
       </div>
       {tab === 'history' && shown && shown.length > 0 && <div style={{ textAlign: 'right', marginBottom: 6 }}><button className="link" onClick={clearHistory}>清空历史</button></div>}
-      {tab === 'favorites' ? <LibraryShelf key={collection} selection={collection} favorites={shown} /> : tab === 'local' ? <DeviceLibrary /> : tab === 'uploads' ? <UploadLibrary /> : shown === null ? <Loading /> : shown.length === 0
+      {tab === 'favorites' ? <LibraryShelf selection={collection} favorites={shown} /> : tab === 'local' ? <DeviceLibrary /> : tab === 'uploads' ? <UploadLibrary /> : shown === null ? <Loading /> : shown.length === 0
         ? <Empty text="还没有播放记录。" />
         : <SongList songs={shown} />}
     </>

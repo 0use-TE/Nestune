@@ -8,7 +8,7 @@ function worker() {
   const cache = { addAll: vi.fn(async () => {}), match: vi.fn(async () => new Response('offline')), put: vi.fn(async () => {}), keys: vi.fn(async () => []), delete: vi.fn(async () => true) };
   const caches = { open: vi.fn(async () => cache), keys: vi.fn(async () => ['other-app', 'nestune-pwa-old', 'nestune-pwa-test']), delete: vi.fn(async () => true) };
   const fetch = vi.fn(async () => new Response('online'));
-  const self = { location: { origin: 'https://music.0use.net' }, clients: { claim: vi.fn(async () => {}) }, skipWaiting: vi.fn(), addEventListener: (name: string, fn: (event: any) => void) => { handlers[name] = fn; } };
+  const self = { location: { origin: 'https://nestune.0use.net:8443' }, clients: { claim: vi.fn(async () => {}) }, skipWaiting: vi.fn(), addEventListener: (name: string, fn: (event: any) => void) => { handlers[name] = fn; } };
   runInNewContext(workerSource('test'), { self, caches, fetch, URL, Response, AbortController, setTimeout, clearTimeout });
   function request(path: string, options: { method?: string; mode?: string; range?: boolean } = {}) {
     const respondWith = vi.fn();

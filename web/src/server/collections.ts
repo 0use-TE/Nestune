@@ -27,6 +27,21 @@ export async function collect(user: number, kind: CollectionKind, id: string) {
 export function uncollect(user: number, kind: CollectionKind, id: string) {
   run('DELETE FROM collection_favorites WHERE user_id=? AND kind=? AND target_id=?', user, kind, id);
 }
+export function libraryOrder(user: number): string[] {
+  const row = one<{ card_order: string }>('SELECT card_order FROM library_card_order WHERE user_id=?', user);
+  return row ? JSON.parse(row.card_order) : [];
+}
+export function saveLibraryOrder(user: number, order: unknown): string[] {
+  if (!Array.isArray(order) || order.length > 601 || order.some(key => typeof key !== 'string' ||
+    !/^(?:likes|(?:mine|album|playlist|shared):[a-zA-Z0-9-]{1,80})$/.test(key))) throw fail(400, '音乐库排序格式无效');
+  const playlists = all<{ id: number }>('SELECT id FROM playlists WHERE user_id=?', user);
+  const bookmarks = all<{ kind: CollectionKind; target_id: string }>('SELECT kind,target_id FROM collection_favorites WHERE user_id=?', user);
+  const allowed = new Set(['likes', ...playlists.map(row => `mine:${row.id}`), ...bookmarks.map(row => `${row.kind}:${row.target_id}`)]);
+  const saved = [...new Set(order)].filter(key => allowed.has(key));
+  run(`INSERT INTO library_card_order(user_id,card_order) VALUES(?,?)
+    ON CONFLICT(user_id) DO UPDATE SET card_order=excluded.card_order`, user, JSON.stringify(saved));
+  return saved;
+}
 export function collected(user: number): CollectionFavorite[] {
   return all<{ kind: CollectionKind; target_id: string; meta: string; created_at: number }>('SELECT * FROM collection_favorites WHERE user_id=? ORDER BY created_at DESC,rowid DESC', user).map(row => {
     let meta = JSON.parse(row.meta), available = true;

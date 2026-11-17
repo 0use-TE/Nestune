@@ -18,7 +18,7 @@ export function ReleaseNotes({ onClose }: { onClose: () => void }) {
       <h3>QQ 音乐与网易云，一起听</h3>
       <p>同一录音在搜索中显示一行，行尾列出网易云和 QQ 音乐来源。现场、翻唱、伴奏和重制等版本各自保留。</p>
       <p>播放器可以手动切换音源，在设置中也能选择优先平台。切源保留播放进度，歌词跟随当前来源；收藏、歌单和画布兼容原有歌曲。QQ 音乐本次支持在线播放，是否可播放取决于音源账号的实际权限。</p>
-      <p>音乐库新增收藏卡片，打开「我的喜欢」即可将全部歌曲添加到一张歌单。</p>
+      <p>音乐库的收藏卡片支持拖动排序。打开「我的喜欢」，可以从头播放整份列表。</p>
       <div className="release-downloads">
         {packages?.android && <a className="btn sm" href={packages.android.url} download>下载安卓 {packages.android.version}</a>}
         {packages?.windows && <a className="btn ghost sm" href={packages.windows.url} download>下载 Windows {packages.windows.version}</a>}
