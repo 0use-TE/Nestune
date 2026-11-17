@@ -1,10 +1,10 @@
 # Nestune installable clients
 
-Download the published clients from [V1.0.0](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
+Current Windows and Android installers, checksums and validation notes are listed in [V1.1.0](../docs/releases/v1.1.0.md). Linux and macOS currently use the V1.0.0 native packages linked below.
 
 The clients open `https://music.0use.net/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
-## Windows x64 — Tauri V1.0.0
+## Windows x64 — Tauri V1.1.0
 
 `desktop/` is the Tauri 2 client. Build on Windows with the x64 MSVC Rust toolchain, Microsoft C++ Build Tools and Node.js installed:
 
@@ -12,17 +12,19 @@ The clients open `https://music.0use.net/` and keep account and music data on th
 ./clients/build-tauri-windows.ps1
 ```
 
-The script uses the npm and Cargo lockfiles and writes these files to `releases/1.0.0-tauri/` (git-ignored):
+The script uses the npm and Cargo lockfiles and writes these files to `releases/1.1.0-tauri/` (git-ignored):
 
-- `Nestune-1.0.0-Windows-x64-Tauri-Setup.exe`: per-user NSIS installer with Simplified Chinese and English, shortcuts and uninstaller.
-- `Nestune-1.0.0-Windows-x64-Tauri.exe`: portable executable; requires the Microsoft Edge WebView2 runtime.
+- `Nestune-1.1.0-Windows-x64-Tauri-Setup.exe`: per-user NSIS installer with Simplified Chinese and English, shortcuts and uninstaller.
+- `Nestune-1.1.0-Windows-x64-Tauri.exe`: portable executable; requires the Microsoft Edge WebView2 runtime.
 - `SHA256SUMS.txt`: SHA-256 checksums for both executables.
 
 The installer downloads WebView2 only when it is missing. The browser engine and the NAS server are not bundled. The app has a native window and application icon, remembers the login in its own persistent WebView2 profile, and focuses the existing window when opened again. The older .NET client's login profile is not migrated; sign in once in the Tauri client. Web updates appear without rebuilding the client. An internet connection is required.
 
-The webview stays on the music HTTPS origin; external HTTPS links open in the system browser. Browser file access still requires the user's permission. No Tauri command capabilities are granted to remote web content. `--smoke-test` starts a hidden window with an isolated temporary browser profile for runtime checks; it runs until explicitly closed. The release is not signed with a public Windows code-signing certificate.
+The webview stays on the music HTTPS origin; external HTTPS links open in the system browser. Browser file access still requires the user's permission. Remote music pages receive only the bounded, origin-checked lyrics command. The local overlay alone receives window-dragging capability. `--smoke-test` starts a hidden window with an isolated temporary browser profile for runtime checks; it runs until explicitly closed. The release is not signed with a public Windows code-signing certificate.
 
-For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; the `frontendDist` URL in `src-tauri/tauri.conf.json` and the trusted origin in `src/lib.rs` must agree when changing domains.
+For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; `frontendDist` points to the bundled local lyrics page, while `HOME` and the trusted origin in `src/lib.rs` select the online music application.
+
+Windows 1.1.0 adds a separate transparent always-on-top lyrics window, drag positioning, translation, click-through locking, a background toggle, and position memory. Web volume and playlist queue controls use the live web release. Run `npm test` in `clients/desktop` for the renderer checks.
 
 ## Linux x64 and macOS universal — Tauri V1.0.0
 
@@ -62,19 +64,25 @@ Run `./build-windows.ps1` with the Inno Setup compiler available. Compiler and b
 
 The installer has no public Windows code-signing certificate; Windows may show an unknown-publisher notice. It is not an offline music client.
 
-## Android — Tauri V1.0.0
+## Android — Tauri V1.1.0
 
 The Android client uses the same Rust shell in `desktop/`, with `tauri.android.conf.json` setting the Android package to `net.ouse.nestune`. It requires Android 7.0+ and the system Android WebView; a TWA-compatible browser is no longer required. The app opens the live HTTPS music site and requires an internet connection. Web changes appear without reinstalling; native shell changes require a new APK. A native Android media playback foreground service publishes track metadata and play/pause/previous/next/seek controls to the system media panel. A main-frame-only WebMessage listener restricted to the music HTTPS origin connects it to the web player. Android back first dismisses the queue or player overlay before navigating the underlying page. These features still require physical-device playback testing across manufacturers.
 
 The [Android workflow](https://github.com/0use-TE/Nestune/actions/workflows/android.yml) is started manually with **Run workflow**. It builds one unsigned release APK with ARM64, ARMv7 and x86-64 native libraries. No signing key or keystore password is uploaded to GitHub. Download and extract its artifact, verify the included SHA-256 checksum, then sign locally:
 
 ```powershell
-./clients/sign-tauri-android.ps1 -UnsignedApk ./path/to/Nestune-1.0.0-Android-Tauri-unsigned.apk
+./clients/sign-tauri-android.ps1 -UnsignedApk ./path/to/Nestune-1.1.0-Android-Tauri-unsigned.apk
 ```
 
-The script uses the existing private credentials under `%USERPROFILE%/.nestune/signing/`, aligns and signs the APK, verifies its signature against the existing published Android certificate, checks the package/version, and writes `releases/1.0.0-tauri/android/Nestune-1.0.0-Android-Tauri.apk` and `SHA256SUMS.txt`. It requires JDK 21 and Android SDK Build Tools 36. The private release key must be backed up securely and must never be shared with APK recipients. Version name stays `1.0.0`; Android version code is `4`, allowing upgrades from both the earlier TWA (`1`) and first Tauri (`2`) packages using the same signing key. Android may require signing in again because the native WebView has its own cookie storage.
+The script uses the existing private credentials under `%USERPROFILE%/.nestune/signing/`, aligns and signs the APK, verifies its signature against the existing published Android certificate, checks the package/version, and writes `releases/1.1.0-tauri/android/Nestune-1.1.0-Android-Tauri.apk` and `SHA256SUMS.txt`. It requires JDK 21 and Android SDK Build Tools 36. The private release key must be backed up securely and must never be shared with APK recipients. Version name is `1.1.0`; Android version code is `6`, allowing upgrades from both the earlier TWA (`1`) and first Tauri (`2`) packages using the same signing key. Android may require signing in again because the native WebView has its own cookie storage.
 
-For a local build, install the [Tauri Android prerequisites](https://v2.tauri.app/start/prerequisites/#android), set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME`, and install the ARM64, ARMv7 and x86-64 Rust Android targets. From `clients/desktop/`, run `npm ci`, `npm run android:init`, and `npm run build:android`. The init script generates the Android project and Nestune launcher icons; generated Android files stay git-ignored. Sign the generated release APK using the script above. Remote web content receives no native Tauri command capabilities.
+For a local build, install the [Tauri Android prerequisites](https://v2.tauri.app/start/prerequisites/#android), set `JAVA_HOME`, `ANDROID_HOME` and `NDK_HOME`, and install the ARM64, ARMv7 and x86-64 Rust Android targets. From `clients/desktop/`, run `npm ci`, `npm run android:init`, and `npm run build:android`. The init script generates the Android project and Nestune launcher icons; generated Android files stay git-ignored. Sign the generated release APK using the script above. The Android WebMessage listener accepts only the main frame on the production HTTPS origin; child frames cannot control system lyrics or downloads.
+
+Android 1.1.0 includes cross-application lyrics. Enabling them explicitly opens the system overlay permission screen when needed; the native window keeps its own playback clock while the music webview is backgrounded. It supports drag, lock/unlock, translation, rotation and native close events. The origin-restricted download bridge also supports song downloads and selecting a storage directory.
+
+Use `-CredentialsPath /path/to/android-release.json` when the existing signing backup is outside the default directory. Keep that file and the keystore outside the repository. The signing script reads version/code from Tauri configuration and verifies the original public certificate before producing an update.
+
+The emulator-only overlay probe and its commands are described in [android/qa/README.md](desktop/android/qa/README.md).
 
 ## Android — previous TWA client
 
@@ -89,8 +97,10 @@ The manually dispatched `android-smoke.yml` workflow checks a selected Android b
 
 ## In-app updates
 
-Settings → 关于 provides a manual check for web and Android updates. Dismissing a web update hides its banner while keeping the waiting service worker available from Settings. Web updates require an explicit page reload. Android build 4 queries its installed package version through the origin-restricted native bridge and downloads release APKs through Android DownloadManager. The user opens the completion notification to install with Android's normal confirmation; no silent installation is attempted. Older Android shells provide a copyable download URL until upgraded once.
+Settings → 关于 provides a manual check for web and Android updates. Dismissing a web update hides its banner while keeping the waiting service worker available from Settings. Web updates require an explicit page reload. Android builds 4 and later query their installed package version through the origin-restricted native bridge and downloads release APKs through Android DownloadManager. The user opens the completion notification to install with Android's normal confirmation; no silent installation is attempted. Older Android shells provide a copyable download URL until upgraded once.
 
 The NAS release store is outside the Docker image at `data/client-releases/`. Publish the signed APK as `android-N.apk`, then atomically write `android.json` with `version`, `versionCode`, `size`, and the file's lowercase `sha256`. `/api/client-updates` advertises a package only when its metadata and file size are valid; `/api/client-updates/android/N` supports byte ranges for public installation downloads. Never publish signing credentials. The web service can be rebuilt without deleting these release files.
 
 Mobile overlays use the visual viewport for keyboard-safe sheets. Android 11+ additionally applies system-bar and IME insets to the native WebView; earlier Android versions use resize mode.
+
+Windows releases use `windows-N.exe` and `windows.json` in the same server release store. The Windows metadata has the same version, versionCode, size and sha256 fields; `/api/client-updates/windows/N` is a public Range-capable download. The update manifest points directly to these server endpoints.

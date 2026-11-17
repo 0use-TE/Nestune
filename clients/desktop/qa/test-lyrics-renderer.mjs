@@ -1,0 +1,32 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const file = new URL('../overlay/lyrics.html', import.meta.url);
+const script = fs.readFileSync(file, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
+const elements = new Map(), calls = [];
+const get = id => {
+  if (!elements.has(id)) elements.set(id, { textContent: '', hidden: false, listeners: {}, addEventListener(type, fn) { this.listeners[type] = fn; } });
+  return elements.get(id);
+};
+const state = { enabled: true, locked: false, panel: false };
+const window = { __TAURI_INTERNALS__: { invoke: async (command, payload) => {
+  calls.push({ command, payload });
+  if (payload.data?.type === 'lyricsSnapshot') return { state: { ...state }, data: null, media: null };
+  return { ...state };
+} } };
+vm.runInNewContext(script, { window, document: { getElementById: get, body: { classList: { toggle() {} } } }, performance: { now: () => 0 }, setInterval() {} });
+await Promise.resolve();
+calls.length = 0;
+get('drag').listeners.mousedown({ button: 0, target: { closest: () => null } });
+assert.equal(calls[0].command, 'plugin:window|start_dragging');
+assert.equal(calls[0].payload.label, 'lyrics');
+calls.length = 0;
+get('drag').listeners.mousedown({ button: 0, target: { closest: () => ({}) } });
+assert.equal(calls.length, 0, 'Toolbar buttons must not start dragging');
+window.nestuneLyricsData({ id: 'a', title: 'song', lines: [{ t: 0, text: 'first', tr: 'translation' }, { t: 3, text: 'second' }] });
+window.nestuneLyricsMedia({ id: 'a', position: 3.5, playing: false });
+assert.equal(get('line').textContent, 'second');
+window.nestuneLyricsMedia({ id: 'a', position: .5, playing: false });
+assert.equal(get('line').textContent, 'first');
+assert.equal(get('translation').textContent, 'translation');
+console.log('Desktop renderer passed: native drag wiring, toolbar exclusion, seek and translation');

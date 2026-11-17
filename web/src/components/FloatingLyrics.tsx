@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import { Icon } from './Icon';
+import { useDesktopLyrics } from './DesktopLyrics';
 
 type Position = { x: number; y: number };
 const INSET = 8;
@@ -17,6 +18,7 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
   visible: boolean; text: ReactNode; translation?: string; onClose: () => void;
 }) {
   const card = useRef<HTMLDivElement>(null);
+  const desktopLyrics = useDesktopLyrics();
   const drag = useRef<{ id: number; offset: Position } | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
   const [transparent, setTransparent] = useState(false);
@@ -74,10 +76,12 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
           {translation && <small>{translation}</small>}
         </div>
         <div className="pinned-lyrics-actions">
+          {desktopLyrics.supported && <button type="button" className="ib" aria-label="移到桌面" title="移到桌面" disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(true)}><Icon n="popout" s={16} /></button>}
           <button className={`ib ${transparent ? 'act' : ''}`} aria-label="透明背景" aria-pressed={transparent} title={transparent ? '显示歌词背景' : '透明背景'} onClick={toggleBackground}><Icon n="opacity" s={16} /></button>
           <button className="ib" aria-label="关闭歌词" title="关闭歌词" onClick={onClose}><Icon n="x" s={16} /></button>
         </div>
       </div>
+      {desktopLyrics.status && <span className="pinned-lyrics-status" role="status">{desktopLyrics.status}</span>}
     </div>
   );
 }

@@ -189,10 +189,10 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
     setFollowingRoom(activeRoom.guestId === userId);
     setRoomQueueHandler(command => {
       const current = latest.current?.rooms.find(room => room.active && room.onThisDevice);
-      if (!current?.queue) { player.current.toast('共同列表正在准备中'); return; }
+      if (!current?.queue) { if (command.type === 'appendCanvas' || command.type === 'appendMany') throw new Error('共同列表正在准备中'); player.current.toast('共同列表正在准备中'); return; }
       if (command.type === 'next' && command.automatic && current.hostId !== userId) return;
-      action({ action: 'roomQueue', roomId: current.id, command: command.type === 'next' && command.automatic ? { ...command, version: current.transportVersion } : command })
-        .catch(e => player.current.toast(e instanceof Error ? e.message : '无法更新共同列表'));
+      return action({ action: 'roomQueue', roomId: current.id, command: command.type === 'next' && command.automatic ? { ...command, version: current.transportVersion } : command })
+        .then(() => {}).catch(e => { if (command.type === 'appendMany' || command.type === 'appendCanvas') throw e; player.current.toast(e instanceof Error ? e.message : '无法更新共同列表'); });
     });
     if (!activeRoom.queue) { if (activeRoom.guestId === userId) player.current.followPlayback(null, 0, false); return; }
     const playback = activeRoom.playback;

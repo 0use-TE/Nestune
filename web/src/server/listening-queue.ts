@@ -1,3 +1,5 @@
+import { isCanvasMusic } from '@/lib/canvas-types';
+import { takeCanvasItem } from './canvas';
 import { randomUUID } from 'node:crypto';
 import { changeQueue, PLAYBACK_MODES, type PlaybackMode, type QueueCommand, type SharedQueue } from '@/lib/shared-queue';
 import type { Song } from '@/lib/types';
@@ -110,6 +112,13 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
   let requested: string[] = [];
   switch (raw.type) {
     case 'append': case 'insertNext': case 'playNow': requested = [catalogId(raw.songId)]; command = { type: raw.type, songId: requested[0] }; break;
+    case 'appendMany':
+      requested = ids(raw.songIds);
+      if (!requested.length) throw fail(400, '请选择歌曲');
+      command = { type: 'appendMany', songIds: requested }; break;
+    case 'appendCanvas':
+      if (typeof raw.id !== 'string' || raw.id.length > 64) throw fail(400, '画布物件无效');
+      command = { type: 'appendCanvas', id: raw.id }; break;
     case 'replace':
       requested = ids(raw.songIds);
       if (!integer(raw.index)) throw fail(400, '歌曲位置无效');
@@ -124,14 +133,13 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
     case 'seek': command = { type: 'seek', position: position(raw.position) }; break;
     default: throw fail(400, '未知列表操作');
   }
-  const additions = await resolve(room, listener.userId, requested, true);
-  atomic(() => {
+  const commit = (additions: SharedQueue['entries']) => {
     const current = participating(listener, id);
     if (additions.some(({ song }) => isUploadSong(song.id) && (!visibleUpload(current.host_id, song.id) || !visibleUpload(current.guest_id, song.id)))) throw fail(403, '歌曲的分享权限已改变');
     if (command.type === 'next' && command.automatic &&
       (current.host_id !== listener.userId || current.transport_version !== command.version)) return;
     const queue = readSharedQueue(current)!;
-    if ((command.type === 'append' || command.type === 'insertNext' || command.type === 'playNow' && !queue.entries.some(entry => entry.song.id === command.songId)) && queue.entries.length + additions.length > 500) throw fail(400, '共同列表最多 500 首歌曲');
+    if ((command.type === 'append' || command.type === 'appendMany' || command.type === 'appendCanvas' || command.type === 'insertNext' || command.type === 'playNow' && !queue.entries.some(entry => entry.song.id === command.songId)) && queue.entries.length + additions.length > 500) throw fail(400, '共同列表最多 500 首歌曲');
     const elapsed = current.playing ? Math.max(0, now() - current.updated_at) / 1000 : 0;
     let changed;
     try { changed = changeQueue(queue, command, Math.min(86400, current.position + elapsed), !!current.playing, additions); }
@@ -139,5 +147,16 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
     run(`UPDATE listening_rooms SET queue_data=?,song_id=?,position=?,playing=?,updated_at=?,transport_version=transport_version+1 WHERE id=?`,
       JSON.stringify(changed.queue), changed.queue.entries[changed.queue.index]?.song.id ?? null,
       changed.position, Number(changed.playing), now(), id);
-  });
+  };
+  if (command.type === 'appendCanvas') {
+    await takeCanvasItem(listener.userId, command.id, item => {
+      if (!isCanvasMusic(item)) throw fail(400, '这个物件不能播放');
+      const tracks = (item.tracks ?? [item.song]).filter(song => song.access?.playable !== false);
+      if (!tracks.length) throw fail(400, '这些歌曲暂时无法播放');
+      commit(tracks.map(song => ({ key: randomUUID(), song })));
+    });
+  } else {
+    const additions = await resolve(room, listener.userId, requested, true);
+    atomic(() => commit(additions));
+  }
 }

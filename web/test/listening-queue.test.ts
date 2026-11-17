@@ -21,6 +21,7 @@ beforeAll(async () => {
   database = await import('@/server/db'); social = await import('@/server/social'); queues = await import('@/server/listening-queue');
 });
 beforeEach(() => {
+  database.run("DELETE FROM kv WHERE key LIKE 'canvas:%'");
   database.run('DELETE FROM users');
   database.run('DELETE FROM sessions');
   for (const id of [1, 2, 3]) {
@@ -150,4 +151,50 @@ it('omits a known room queue until its revision changes and never reuses another
   const changed = social.socialUpdate(listener(2), { queues: { [roomId]: revision } });
   expect(changed.rooms[0].queueUnchanged).toBeUndefined();
   expect(changed.rooms[0].queue!.entries.at(-1)!.song.id).toBe('105');
+});
+
+it('appends a whole batch after every existing entry, preserving duplicates, paused state, mode and position', async () => {
+  await queues.initializeListeningQueue(listener(1), roomId, { ...seed, playing: false });
+  const before = room().queue!;
+  await queues.editListeningQueue(listener(2), roomId, { type: 'appendMany', songIds: ['105','104','105'] });
+  expect(room().queue!.entries.slice(0, before.entries.length)).toEqual(before.entries);
+  expect(room().queue!.entries.map(e => e.song.id)).toEqual([...seed.ids,'105','104','105']);
+  expect(room()).toMatchObject({ queue: { index: 2, mode: 'all' }, playback: { songId: '101', position: 41, playing: false } });
+});
+it('starts a batch only when the shared queue is empty and preserves concurrent batches', async () => {
+  await queues.initializeListeningQueue(listener(1), roomId, { ...seed, ids: [], index: 0, position: 0, playing: false });
+  await Promise.all([
+    queues.editListeningQueue(listener(1), roomId, { type: 'appendMany', songIds: ['104','105'] }),
+    queues.editListeningQueue(listener(2), roomId, { type: 'appendMany', songIds: ['106','107'] }),
+  ]);
+  expect(room().queue!.entries.map(e => e.song.id)).toEqual(['104','105','106','107']);
+  expect(room()).toMatchObject({ queue: { index: 0 }, playback: { songId: '104', playing: true } });
+});
+it('rejects oversized batches without changing playback or any existing entries', async () => {
+  await queues.initializeListeningQueue(listener(1), roomId, { ...seed, playing: false });
+  const before = room();
+  await expect(queues.editListeningQueue(listener(2), roomId, { type: 'appendMany', songIds: Array(497).fill('104') })).rejects.toThrow('500');
+  expect(room().queue).toEqual(before.queue); expect(room().playback).toEqual(before.playback);
+});
+it('claims a canvas bundle exactly once and appends it in order without changing current playback', async () => {
+  const canvas = await import('@/server/canvas');
+  await queues.initializeListeningQueue(listener(1), roomId, { ...seed, playing: false });
+  const board = await canvas.addRecord(1, { kind: 'queue', songIds: ['105','104','105'], x: 200, y: 200 });
+  const id = board.records[0].id;
+  const results = await Promise.allSettled([
+    queues.editListeningQueue(listener(1), roomId, { type: 'appendCanvas', id }),
+    queues.editListeningQueue(listener(2), roomId, { type: 'appendCanvas', id }),
+  ]);
+  expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+  expect(canvas.readCanvas().records).toHaveLength(0);
+  expect(room().queue!.entries.map(e => e.song.id)).toEqual([...seed.ids,'105','104','105']);
+  expect(room().playback).toMatchObject({ songId: '101', position: 41, playing: false });
+});
+it('keeps canvas music on the board when a full shared queue cannot accept it', async () => {
+  const canvas = await import('@/server/canvas');
+  await queues.initializeListeningQueue(listener(1), roomId, { ...seed, ids: Array(500).fill('101'), playing: false });
+  const board = await canvas.addRecord(1, { kind: 'queue', songIds: ['105','104'], x: 200, y: 200 });
+  const before = room().queue;
+  await expect(queues.editListeningQueue(listener(2), roomId, { type: 'appendCanvas', id: board.records[0].id })).rejects.toThrow('500');
+  expect(canvas.readCanvas()).toEqual(board); expect(room().queue).toEqual(before);
 });

@@ -2,6 +2,7 @@
 import { Loading } from './Loading';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { ReleaseNotes } from './ReleaseNotice';
 import type { AndroidRelease } from '@/server/client-updates';
 
 type NativeClient = { platform: 'android'; version: string; versionCode: number; canDownload: boolean };
@@ -57,6 +58,7 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       if (native) native.onmessage = event => {
         try {
           const data = JSON.parse(event.data);
+          window.dispatchEvent(new CustomEvent('nt:native-message', { detail: data }));
           if (data.type === 'clientInfo' && Number.isSafeInteger(data.versionCode)) { versionReceived = true; setClient({ ...data, platform: 'android' }); }
           if (data.type === 'downloadStarted') setStatus('正在下载，完成后点系统通知安装');
           if (data.type === 'downloadError') setStatus('无法启动下载，请稍后重试');
@@ -246,10 +248,15 @@ export function PwaInstall() {
 
 export function AboutNestune() {
   const pwa = useContext(PwaContext);
+  const [notes, setNotes] = useState(false);
+  const [clientVersion, setClientVersion] = useState('1.1.0');
+  useEffect(() => { setClientVersion(/NestuneDesktop\/([\d.]+)/.exec(navigator.userAgent)?.[1] || '1.1.0'); }, []);
   if (!pwa) return null;
   const clientUpdate = pwa.android && pwa.client && pwa.android.versionCode > pwa.client.versionCode;
   return <section className="panel" aria-label="关于 Nestune">
-    <div className="set"><div><b>Nestune</b><div className="sub sm">V{pwa.client?.version || '1.0.0'}</div></div>
+    <div className="set"><div><b>更新公告</b><p className="sub sm">桌面歌词与播放音量 · 1.1.0</p></div><button type="button" className="btn ghost sm" onClick={() => setNotes(true)}>查看</button></div>
+    {notes && <ReleaseNotes onClose={() => setNotes(false)} />}
+    <div className="set"><div><b>Nestune</b><div className="sub sm">V{pwa.client?.version || clientVersion}</div></div>
       <button type="button" className="btn ghost sm" disabled={pwa.checking} onClick={() => void pwa.checkUpdate()}>{pwa.checking ? <Loading inline label="正在检查更新" /> : '检查更新'}</button>
     </div>
     {pwa.available && <div className="set"><b>网页更新</b><button type="button" className="btn sm" disabled={pwa.updating} onClick={pwa.update}>{pwa.updating ? <Loading inline label="正在更新" /> : '立即更新'}</button></div>}

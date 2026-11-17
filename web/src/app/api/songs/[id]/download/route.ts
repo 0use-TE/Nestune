@@ -37,7 +37,7 @@ export const POST = userRoute(async (req, ctx, user) => {
   }
   signal.addEventListener('abort', done, { once: true });
   try {
-    const audio = await fetchSourceAudio(id, tier.level, signal);
+    const audio = await fetchSourceAudio(id, tier.level, signal, 'download');
     if (!audio.mime.startsWith('audio/')) {
       await audio.body.cancel();
       throw fail(502, '音源返回了不支持的文件格式');

@@ -6,6 +6,8 @@ import { isDeviceSong } from '@/lib/device-music';
 import { mmss } from '@/lib/util';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
+import { CanvasSource } from './CanvasSource';
+import { VolumeControl } from './VolumeControl';
 
 export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQueue, onDetails }: {
   lyricsPinned: boolean; onToggleLyrics: () => void; queueOpen: boolean; onToggleQueue: () => void; onDetails: () => void;
@@ -18,6 +20,7 @@ export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQue
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
   return (
     <div id="bar">
+      <CanvasSource className="bar-canvas-source" source={{ kind: 'song', songId: s.id, name: s.name, cover: s.cover, previewSong: s }}>
       <button className="info" data-pressed={infoPressed || undefined} onClick={onDetails}
         onPointerDown={event => { if (event.isPrimary && event.button === 0) setInfoPressed(true); }}
         onPointerUp={() => setInfoPressed(false)} onPointerCancel={() => setInfoPressed(false)} onPointerLeave={() => setInfoPressed(false)}
@@ -25,12 +28,14 @@ export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQue
         <Cover src={s.cover} seed={s.id} />
         <span><b className="t1">{s.name}</b><span className="sub sm t1">{app.error || s.artists.map(a => a.name).join(' / ')}</span></span>
       </button>
+      </CanvasSource>
       <div className="ctl">
         <button className="ib prev" aria-label="上一首" onClick={app.prev}><Icon n="prev" /></button>
         <button className="ib play" aria-busy={app.loading} aria-label={app.playing ? '暂停' : '播放'} onClick={app.toggle}>{app.loading ? <Loading inline label="正在缓冲歌曲" /> : <Icon n={app.playing ? 'pause' : 'play'} s={20} />}</button>
         <button className="ib next" aria-label="下一首" onClick={app.next}><Icon n="next" /></button>
       </div>
       <div className="right">
+        <VolumeControl />
         <span className="sub sm">{mmss(time)} / {mmss(duration || s.duration)}</span>
         {!isDeviceSong(s.id) && <button className={`ib heartb ${app.favIds.has(s.id) ? 'on' : ''}`} aria-label="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" /></button>}
         <button className={`ib bar-lyrics ${lyricsPinned ? 'act' : ''}`} aria-label="歌词" aria-pressed={lyricsPinned} title="歌词" onClick={onToggleLyrics}><Icon n={lyricsPinned ? 'lyricsOn' : 'lyrics'} /></button>

@@ -15,6 +15,9 @@ import { Icon } from './Icon';
 import { PlayerLyrics } from './PlayerLyrics';
 import { PlayerTogether } from './PlayerTogether';
 import { Sheet } from './Sheet';
+import { VolumeControl } from './VolumeControl';
+import { useDesktopLyrics } from './DesktopLyrics';
+import { overlayLyrics } from '@/lib/overlay-lyrics';
 
 const PLAYBACK_ICONS = {
   off: ['repeatOff', '不循环'],
@@ -28,6 +31,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   lyricsPinned: boolean; onToggleLyrics: () => void; queueOpen: boolean; onToggleQueue: () => void;
 }) {
   const app = useApp();
+  const desktopLyrics = useDesktopLyrics();
   const social = useSocial();
   const { time, duration } = useClock();
   const s = app.current;
@@ -75,7 +79,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
     query.addEventListener('change', reset);
     return () => query.removeEventListener('change', reset);
   }, []);
-  const needsLyrics = app.nowOpen || lyricsPinned;
+  const needsLyrics = app.nowOpen || lyricsPinned || desktopLyrics.enabled;
   const getDeviceLyrics = app.deviceMusic.getLyrics;
 
   useEffect(() => {
@@ -114,6 +118,16 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   for (let i = 0; i < lines.length && lines[i].t <= time; i++) active = i;
   const currentLine = lines[active];
   const lyricStatus = !currentLyrics ? <Loading inline label="正在加载歌词" /> : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
+
+  useEffect(() => {
+    desktopLyrics.send(overlayLyrics(songId || '', s?.name || '', currentLyrics?.lines || [], currentLyrics?.plainText, app.showTr));
+  }, [songId, s?.name, currentLyrics, app.showTr, desktopLyrics.enabled, desktopLyrics.send]);
+  useEffect(() => {
+    desktopLyrics.send({ type: 'lyricsMedia', id: songId || '', position: time, playing: app.playing && !app.loading });
+  }, [songId, time, app.playing, app.loading, desktopLyrics.enabled, desktopLyrics.send]);
+  useEffect(() => {
+    if (app.ready && !songId && desktopLyrics.enabled) void desktopLyrics.setEnabled(false);
+  }, [app.ready, songId, desktopLyrics.enabled]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && !e.defaultPrevented) app.setNowOpen(false); };
@@ -205,6 +219,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
                 <span className="np-mobile-queue">{queueButton}</span>
               </div>
               <div className="np-tools">
+                <VolumeControl />
+                {desktopLyrics.supported && <button type="button" className={`ib ${desktopLyrics.enabled ? 'act' : ''}`} aria-label="桌面歌词" aria-pressed={desktopLyrics.enabled} title="桌面歌词" disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(!desktopLyrics.enabled)}><Icon n="popout" s={18} /></button>}
                 {!deviceSong && <button className={`ib heartb ${app.favIds.has(s.id) ? 'on' : ''}`} aria-label="收藏" title="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" s={18} /></button>}
                 {!deviceSong && <button type="button" className="ib" aria-label="下载到设备" title="下载到设备" onClick={() => app.openSave(s)}><Icon n="download" s={18} /></button>}
                 {lines.some(line => line.tr) && <button className={`ib ${app.showTr ? 'act' : ''}`} aria-label="歌词翻译" aria-pressed={app.showTr} title="歌词翻译" onClick={() => app.setShowTr(!app.showTr)}><Icon n="translation" s={18} /></button>}
@@ -234,7 +250,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
         </div>}
       </div>
       {creditsOpen && app.nowOpen && currentLyrics?.credits.length ? <Sheet title="制作信息" onClose={() => setCreditsOpen(false)}><ul className="credits-list">{currentLyrics.credits.map((credit, index) => <li key={index}>{credit}</li>)}</ul></Sheet> : null}
-      <FloatingLyrics visible={lyricsPinned && !app.nowOpen} text={currentLine?.text || lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
+      <FloatingLyrics visible={lyricsPinned && !app.nowOpen && !desktopLyrics.enabled} text={currentLine?.text || lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
     </>
   );
 }

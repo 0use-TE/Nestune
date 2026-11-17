@@ -5,6 +5,8 @@ export type PlaybackMode = typeof PLAYBACK_MODES[number];
 export type SharedQueue = { entries: { key: string; song: Song }[]; index: number; mode: PlaybackMode };
 export type QueueCommand =
   | { type: 'append' | 'insertNext' | 'playNow'; songId: string }
+  | { type: 'appendMany'; songIds: string[] }
+  | { type: 'appendCanvas'; id: string }
   | { type: 'replace'; songIds: string[]; index: number; mode?: PlaybackMode }
   | { type: 'remove' | 'jump'; key: string }
   | { type: 'clear' | 'prev' | 'mode' }
@@ -31,9 +33,9 @@ export function changeQueue(queue: SharedQueue, command: QueueCommand, position:
     case 'replace':
       next.entries = additions; next.index = Math.max(0, Math.min(command.index, additions.length - 1));
       next.mode = command.mode ?? next.mode; playing = true; restart = true; break;
-    case 'append': case 'insertNext':
-      next.entries.splice(command.type === 'append' ? next.entries.length : Math.max(0, next.index + 1), 0, ...additions);
-      if (next.index < 0) { next.index = 0; playing = command.type === 'insertNext'; restart = true; }
+    case 'append': case 'insertNext': case 'appendMany': case 'appendCanvas':
+      next.entries.splice(command.type === 'insertNext' ? Math.max(0, next.index + 1) : next.entries.length, 0, ...additions);
+      if (next.index < 0) { next.index = 0; playing = command.type !== 'append'; restart = true; }
       break;
     case 'remove': {
       const at = next.entries.findIndex(entry => entry.key === command.key);

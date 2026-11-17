@@ -7,6 +7,7 @@ import { mmss } from '@/lib/util';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
 import { Loading } from './Loading';
+import { CanvasSource } from './CanvasSource';
 
 export function PlaybackQueue() {
   const app = useApp();
@@ -16,7 +17,7 @@ export function PlaybackQueue() {
   return (
     <div className="qlist">
       {app.queue.map((song, index) => (
-        <div ref={index === app.index ? selected : undefined} key={`${song.id}-${index}`} className={`tr ${index === app.index ? 'cur' : ''}`}>
+        <CanvasSource key={`${song.id}-${index}`} source={{ kind: 'song', songId: song.id, name: song.name, cover: song.cover, previewSong: song }}><div ref={index === app.index ? selected : undefined} className={`tr ${index === app.index ? 'cur' : ''}`}>
           <button className="queue-song" aria-current={index === app.index ? true : undefined} onClick={() => app.jumpTo(index)}>
             <span className="queue-number" aria-hidden="true">{index === app.index ? app.loading ? <Loading inline /> : <Icon n={app.playing ? 'vol' : 'pause'} s={14} /> : String(index + 1).padStart(2, '0')}</span>
             <Cover src={song.cover} seed={song.id} />
@@ -24,7 +25,7 @@ export function PlaybackQueue() {
           </button>
           <span className="queue-duration sub sm">{mmss(song.duration)}</span>
           <button className="ib queue-remove" aria-label={`移出队列，${song.name}`} onClick={() => app.removeFromQueue(index)}><Icon n="x" s={16} /></button>
-        </div>
+        </div></CanvasSource>
       ))}
       {!app.queue.length && <div className="queue-empty"><Icon n="note" s={28} /><p>列表为空</p></div>}
     </div>
@@ -64,7 +65,7 @@ export function QueuePopover({ inPlayer, onClose }: { inPlayer: boolean; onClose
 
   return (
     <section className={`queue-popover ${inPlayer ? 'in-player' : ''}`} ref={panel} id="player-queue" aria-label="播放列表">
-      <header><h2>{app.sharedQueue ? '共同播放列表' : '播放列表'} <small>{queue.length} 首</small></h2>
+      <header><CanvasSource source={{ kind: 'queue', name: app.sharedQueue ? '共同播放列表' : '播放列表', cover: queue[0]?.cover, previewSong: queue[0], songIds: queue.map(s => s.id) }}><h2 title="拖到画布分享整个播放列表">{app.sharedQueue ? '共同播放列表' : '播放列表'} <small>{queue.length} 首</small></h2></CanvasSource>
         <div className="queue-header-actions">
           <button type="button" className="link queue-clear" disabled={!queue.length} onClick={app.clearQueue}><Icon n="trash" s={14} />清空</button>
           <button className="ib" aria-label="关闭播放列表" onClick={onClose}><Icon n="x" s={20} /></button>

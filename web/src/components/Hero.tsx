@@ -21,7 +21,7 @@ export function Hero({ cover, seed, tag, title, sub, children, round }: {
         {tag && <span className="tag">{tag}</span>}
         <h1>{title}</h1>
         {sub && <div style={{ opacity: .85 }}>{sub}</div>}
-        {children && <div className="row" style={{ marginTop: 22 }}>{children}</div>}
+        {children && <div className="row" data-no-music-drag style={{ marginTop: 22 }}>{children}</div>}
       </div>
     </div>
   );

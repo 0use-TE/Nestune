@@ -19,6 +19,7 @@ import org.json.JSONObject
 import java.lang.ref.WeakReference
 
 class MainActivity : TauriActivity() {
+    private val musicDownloads by lazy { MusicDownloads(this) }
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
         if (Build.VERSION.SDK_INT >= 30) {
@@ -43,13 +44,26 @@ class MainActivity : TauriActivity() {
                 if (!mainFrame || origin.scheme != "https" || origin.host != "music.0use.net" || origin.port !in listOf(-1, 443)) return@addWebMessageListener
                 if (message.type != WebMessageCompat.TYPE_STRING) return@addWebMessageListener
                 val raw = message.data ?: return@addWebMessageListener
-                if (raw.length > 8192) return@addWebMessageListener
+                if (raw.length > 300000) return@addWebMessageListener
                 try {
                     val data = JSONObject(raw)
+                    if (data.optString("type") in setOf("lyricsInfo", "lyricsEnable", "lyricsLock", "lyricsData", "lyricsMedia")) {
+                        val result = LyricsOverlay.get(this).request(data)
+                        if (data.optString("type") == "lyricsEnable" && data.optBoolean("enabled") && !result.optBoolean("permission")) {
+                            startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                        }
+                        if (data.has("requestId")) reply.postMessage(result.put("requestId", data.optString("requestId").take(80)).toString())
+                        return@addWebMessageListener
+                    }
+                    if (raw.length > 8192) return@addWebMessageListener
                     if (data.optString("type") == "clientInfo") {
                         val info = packageManager.getPackageInfo(packageName, 0)
                         val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()
-                        reply.postMessage(JSONObject().put("type", "clientInfo").put("platform", "android").put("version", info.versionName).put("versionCode", code).put("canDownload", true).toString())
+                        reply.postMessage(JSONObject().put("type", "clientInfo").put("platform", "android").put("version", info.versionName).put("versionCode", code).put("canDownload", true).put("canDownloadMusic", true).toString())
+                        return@addWebMessageListener
+                    }
+                    if (data.optString("type") == "downloadSong") {
+                        musicDownloads.start(data) { result -> reply.postMessage(result.toString()) }
                         return@addWebMessageListener
                     }
                     if (data.optString("type") == "downloadUpdate") {
@@ -84,8 +98,19 @@ class MainActivity : TauriActivity() {
         })
     }
 
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!musicDownloads.onActivityResult(requestCode, resultCode, data)) super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        LyricsOverlay.resume()
+    }
+
     override fun onDestroy() {
+        musicDownloads.close()
         if (!isChangingConfigurations) {
+            LyricsOverlay.dispose()
             stopService(Intent(this, NativeMediaService::class.java))
             NativeMediaService.webView = null
         }

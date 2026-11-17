@@ -1,21 +1,24 @@
 param(
     [Parameter(Mandatory = $true)][string]$UnsignedApk,
     [string]$JavaPath = 'C:/Program Files/Android/openjdk/jdk-21.0.8',
-    [string]$BuildTools = "$env:LOCALAPPDATA/Android/Sdk/build-tools/36.0.0"
+    [string]$BuildTools = "$env:LOCALAPPDATA/Android/Sdk/build-tools/36.0.0",
+    [string]$CredentialsPath = (Join-Path $env:USERPROFILE '.nestune/signing/android-release.json')
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
-$credentialsPath = Join-Path $env:USERPROFILE '.nestune/signing/android-release.json'
-if (!(Test-Path -LiteralPath $credentialsPath)) {
+if (!(Test-Path -LiteralPath $CredentialsPath)) {
     throw 'Existing Android release credentials are required. Do not replace the release key.'
 }
-$credentials = Get-Content -LiteralPath $credentialsPath -Raw | ConvertFrom-Json
+$credentials = Get-Content -LiteralPath $CredentialsPath -Raw | ConvertFrom-Json
 if (!(Test-Path -LiteralPath $credentials.keystore)) { throw 'Release keystore is missing.' }
 $inputApk = (Resolve-Path -LiteralPath $UnsignedApk).Path
-$outputDirectory = Join-Path $repo 'releases/1.0.0-tauri/android'
+$version = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'desktop/src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json).version
+$versionCode = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'desktop/src-tauri/tauri.android.conf.json') -Raw | ConvertFrom-Json).bundle.android.versionCode
+if ($version -notmatch '^\d+\.\d+\.\d+$' -or $versionCode -lt 1) { throw 'Invalid Android release version.' }
+$outputDirectory = Join-Path $repo "releases/$version-tauri/android"
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
-$aligned = Join-Path $outputDirectory 'Nestune-1.0.0-Android-Tauri-aligned.apk'
-$output = Join-Path $outputDirectory 'Nestune-1.0.0-Android-Tauri.apk'
+$aligned = Join-Path $outputDirectory "Nestune-$version-Android-Tauri-aligned.apk"
+$output = Join-Path $outputDirectory "Nestune-$version-Android-Tauri.apk"
 $oldJava = $env:JAVA_HOME
 try {
     $env:JAVA_HOME = $JavaPath
@@ -35,7 +38,8 @@ try {
     }
     $badging = & (Join-Path $BuildTools 'aapt.exe') dump badging $output
     if ($LASTEXITCODE -ne 0) { throw 'APK metadata verification failed.' }
-    if (!(($badging -join "`n") -match "package: name='net.ouse.nestune' versionCode='4' versionName='1.0.0'")) {
+    $expectedPackage = "package: name='net.ouse.nestune' versionCode='$versionCode' versionName='$version'"
+    if (!(($badging -join "`n").Contains($expectedPackage))) {
         throw 'Unexpected APK package or version.'
     }
     $badging | Select-String 'package:|sdkVersion:|targetSdkVersion:|native-code:|application-label:' | Write-Output

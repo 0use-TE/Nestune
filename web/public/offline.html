@@ -11,15 +11,85 @@
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:28px;background:var(--bg);color:var(--text);font:15px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
     main{width:min(100%,380px);text-align:center;padding:36px 24px;border:1px solid var(--line);border-radius:28px;background:var(--surface)}
-    img{width:68px;height:68px}h1{font-size:25px;letter-spacing:-.03em;margin:24px 0 10px}p{color:var(--sub);margin:0 0 28px}
+    img{width:68px;height:68px}h1{font-size:25px;letter-spacing:-.03em;margin:24px 0 10px}p{color:var(--sub);margin:0 0 18px}
     button{font:inherit;font-weight:600;border:0;border-radius:999px;padding:12px 28px;background:var(--text);color:var(--bg);cursor:pointer}
-    button:active{opacity:.72}button:focus-visible{outline:2px solid var(--text);outline-offset:4px}
+    .details{display:block;color:var(--sub);font-size:11px;overflow-wrap:anywhere;margin:0 0 22px}.actions{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}.secondary{background:transparent;color:var(--sub);border:1px solid var(--line);font-size:12px;padding:9px 16px}button:disabled{opacity:.6}button:active{opacity:.72}button:focus-visible{outline:2px solid var(--text);outline-offset:4px}
   </style>
 </head>
-<body><main>
+<body data-request-id="{http.request.uuid}"><main>
   <img src="/pwa/icon-192.png" alt="Nestune">
   <h1>暂时无法连接</h1>
-  <p>请检查网络连接，或稍后再回来听歌。</p>
-  <button type="button" onclick="location.reload()">重新连接</button>
-</main></body>
+  <p id="message" role="status" aria-live="polite">正在检查连接，请稍候…</p>
+  <small class="details" id="details"></small>
+  <div class="actions"><button id="retry" type="button">重新连接</button><button id="copy" class="secondary" type="button">复制诊断信息</button></div>
+</main><script>
+(() => {
+  const message = document.getElementById('message'), details = document.getElementById('details');
+  const retry = document.getElementById('retry'), copy = document.getElementById('copy');
+  const validId = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{8,64}$/.test(value) ? value : '';
+  let checking = false;
+  let report = { code: 'connection_checking', httpStatus: 0, requestId: validId(document.body.dataset.requestId), checkedAt: new Date().toISOString() };
+  function show(text, code, status, id) {
+    message.textContent = text;
+    report = { code, httpStatus: status || 0, requestId: validId(id) || report.requestId, checkedAt: new Date().toISOString() };
+    details.textContent = '错误码：' + code + (report.requestId ? ' · 编号：' + report.requestId : '');
+  }
+  async function read(path, timeout) {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const response = await fetch(path, { cache: 'no-store', signal: controller.signal });
+      const data = await response.json().catch(() => null);
+      return { status: response.status, data, id: validId(response.headers.get('x-request-id')) };
+    } finally { clearTimeout(timer); }
+  }
+  async function reconnect() {
+    if (checking || document.hidden) return;
+    if (navigator.onLine === false) { show('设备当前没有网络连接，请检查 Wi-Fi 或移动网络。', 'client_offline'); return; }
+    checking = true; retry.disabled = true;
+    try {
+      const diagnostic = read('/api/connection-status', 5000).then(result => {
+        if (result.data && result.data.ok === false && typeof result.data.code === 'string' && typeof result.data.message === 'string') show(result.data.message, result.data.code, result.status, result.id);
+        return result;
+      }).catch(() => null);
+      const health = await read('/api/health', 12000).catch(() => null);
+      const status = await diagnostic;
+      if (health && health.status === 200 && health.data && health.data.ok === true && health.data.service === 'nestune') {
+        message.textContent = '连接已恢复，正在重新打开…';
+        let last = 0;
+        try { last = Number(sessionStorage.getItem('nt-reconnect-attempt')) || 0; } catch {}
+        if (Date.now() - last >= 10000) {
+          try { sessionStorage.setItem('nt-reconnect-attempt', String(Date.now())); } catch {}
+          if (location.pathname === '/offline.html') location.replace('/'); else location.reload();
+        }
+        return;
+      }
+      if (status && status.data && status.data.ok === false && typeof status.data.code === 'string') {
+        show(status.data.message || '服务连接暂时异常，请稍后重试。', status.data.code, health && health.status || 0, health && health.id || status.id);
+      } else if (health && health.data && typeof health.data.error === 'string') {
+        show(health.data.error, health.data.code || 'service_unavailable', health.status, health.id || health.data.requestId);
+      } else if (health) {
+        show('音乐服务暂时不可用，请稍后重试。', 'http_' + health.status, health.status, health.id);
+      } else {
+        show('暂时无法连接网站入口，请检查网络或稍后重试。', 'network_unreachable');
+      }
+    } finally { checking = false; retry.disabled = false; }
+  }
+  retry.addEventListener('click', reconnect);
+  copy.addEventListener('click', async () => {
+    const text = JSON.stringify({ ...report, client: navigator.userAgent.slice(0, 160) }, null, 2);
+    try {
+      if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+      else {
+        const area = document.createElement('textarea'); area.value = text; area.readOnly = true; area.style.position = 'fixed'; area.style.opacity = '0';
+        document.body.appendChild(area); area.select(); const ok = document.execCommand('copy'); area.remove(); if (!ok) throw new Error('copy failed');
+      }
+      copy.textContent = '已复制';
+    } catch { copy.textContent = '请记录上方错误码和编号'; }
+  });
+  window.addEventListener('online', reconnect);
+  document.addEventListener('visibilitychange', reconnect);
+  setInterval(reconnect, 10000);
+  reconnect();
+})();
+</script></body>
 </html>

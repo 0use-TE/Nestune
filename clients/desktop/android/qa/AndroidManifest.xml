@@ -2,4 +2,5 @@
   <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35" />
   <application android:label="Nestune native checks" android:debuggable="true" />
   <instrumentation android:name="net.ouse.nestune.probe.Probe" android:targetPackage="net.ouse.nestune" android:label="Nestune native checks" />
+  <instrumentation android:name="net.ouse.nestune.probe.LyricsProbe" android:targetPackage="net.ouse.nestune" android:label="Nestune overlay checks" />
 </manifest>
