@@ -27,7 +27,7 @@ fn open_external(url: &Url) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(desktop)]
-    let smoke_test = std::env::args().any(|arg| arg == "--smoke-test" || arg == "--lyrics-qa");
+    let smoke_test = std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa"));
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
     let builder = builder.invoke_handler(tauri::generate_handler![lyrics::lyrics_command]);
@@ -41,6 +41,11 @@ pub fn run() {
     })) };
     builder
         .setup(move |app| {
+            #[cfg(all(desktop, debug_assertions))]
+            if std::env::args().any(|arg| arg == "--lyrics-controls-qa") {
+                lyrics::setup(app.handle(), true)?;
+                return Ok(());
+            }
             let builder =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::External(HOME.parse()?))
                     .title("Nestune")
