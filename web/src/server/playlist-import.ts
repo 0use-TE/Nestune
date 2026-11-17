@@ -7,7 +7,7 @@ import { uniqueRecordings, rememberSongs } from './recordings';
 import { createPlaylist } from './playlists';
 import { db, run, now } from './db';
 
-const shortHosts = new Set(['163cn.tv', '163cn.com', 'c6.y.qq.com', 'c.y.qq.com', 'y.qq.com', 'music.163.com', 'y.music.163.com']);
+const shortHosts = new Set(['163cn.tv', '163cn.com', 'c6.y.qq.com', 'c.y.qq.com', 'y.qq.com', 'i2.y.qq.com', 'music.163.com', 'y.music.163.com']);
 export async function resolvePlaylistLink(text: string): Promise<ExternalPlaylist> {
   let raw = shareUrl(text);
   for (let count = 0; count < 4; count++) {

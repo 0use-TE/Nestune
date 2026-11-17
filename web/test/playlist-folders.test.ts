@@ -58,6 +58,14 @@ it('deduplicates repeated QQ tracks before importing them in source order', asyn
   expect(result.imported).toBe(2);
   expect(playlists.getPlaylist(1, result.playlist.id).songs.map(s => s.id)).toEqual(['qq-first', 'qq-second']);
 });
+it('recognizes the new QQ mobile share URL without fetching the share page', async () => {
+  const request = vi.fn(() => { throw new Error('A complete share URL must be parsed locally'); });
+  vi.stubGlobal('fetch', request);
+  try {
+    await expect(imports.resolvePlaylistLink('https://i2.y.qq.com/n3/other/pages/details/playlist.html?id=2386882413')).resolves.toEqual({ provider: 'qq', id: '2386882413' });
+    expect(request).not.toHaveBeenCalled();
+  } finally { vi.unstubAllGlobals(); }
+});
 it('keeps a parent readable and removable when a live child grows beyond the addition limit', async () => {
   const parent = playlists.createPlaylist(1, 'Parent'), child = playlists.createPlaylist(1, 'Child');
   await folders.addFolder(1, parent.id, { kind: 'mine', id: String(child.id) });

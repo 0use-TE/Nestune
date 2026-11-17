@@ -11,7 +11,7 @@ export function playlistLink(input: string): ExternalPlaylist | null {
       const id = query.get('id') ?? /\/playlist\/(\d+)/.exec(path)?.[1];
       if (/\/(?:m\/)?playlist(?:\/|$)/.test(path) && id && /^[1-9]\d{0,19}$/.test(id)) return { provider: 'netease', id };
     }
-    if (['y.qq.com', 'i.y.qq.com', 'c.y.qq.com', 'c6.y.qq.com'].includes(url.hostname)) {
+    if (['y.qq.com', 'i.y.qq.com', 'i2.y.qq.com', 'c.y.qq.com', 'c6.y.qq.com'].includes(url.hostname)) {
       const id = query.get('disstid') ?? query.get('id') ?? /\/(?:playlist|taoge)\/([1-9]\d*)/.exec(path)?.[1];
       if (/(?:playlist|taoge|songlist)/.test(path) && id && /^[1-9]\d{0,19}$/.test(id)) return { provider: 'qq', id };
     }
