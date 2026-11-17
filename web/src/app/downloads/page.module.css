@@ -53,6 +53,20 @@
 }
 .migrateButton:hover { background: #3b66c6; }
 .webButton:hover, .download:hover { background: var(--soft); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.downloadHelp {
+  margin-bottom: 22px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.downloadHelp p { color: var(--sub); }
+.downloadHelp .actions { margin-top: 10px; }
+.downloadHelp button { color: var(--text); font: inherit; cursor: pointer; }
+.downloadHelp .helpHint { margin-top: 10px; font-size: 12px; }
+.downloadHelp p[role='status']:not(:empty) { margin-top: 8px; }
+.copyUrl { width: 100%; margin-top: 8px; padding: 8px; color: var(--text); background: var(--soft); border: 1px solid var(--line); border-radius: 6px; }
 .platforms {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

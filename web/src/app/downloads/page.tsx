@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { Icon } from '@/components/Icon';
 import { clientDownloads, clientDownloadUrl, clientPackageLabel, DOWNLOAD_PLATFORMS, groupClientDownloads, type ClientDownload, type DownloadPlatform } from '@/server/client-downloads';
 import styles from './page.module.css';
+import { DownloadHelp } from './DownloadHelp';
 
 export const metadata: Metadata = { title: 'Nestune 客户端下载' };
 export const dynamic = 'force-dynamic';
@@ -64,6 +65,7 @@ export default async function DownloadsPage({ searchParams }: { searchParams: Pr
           <div><dt>Windows、Linux、macOS 和 Android 客户端</dt><dd>下载下面适配新地址的安装包，关闭旧客户端后安装。安装完成后重新打开客户端并登录。</dd></div>
         </dl>
       </section>}
+      <DownloadHelp href={migration ? '/downloads?from=music' : '/downloads'} />
       <div className={styles.platforms}>
         {platforms.map(platform => {
           const info = platformInfo[platform];

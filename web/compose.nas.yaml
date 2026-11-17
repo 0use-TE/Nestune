@@ -11,15 +11,56 @@ services:
       ADMIN_KEY: "${ADMIN_KEY:?Set ADMIN_KEY in .env}"
       WORKER_URL: http://audio-worker:4191
       WORKER_KEY: "${WORKER_KEY:?Set WORKER_KEY in .env}"
+      QQMUSIC_URL: http://qqmusic:8080
       BUILD_ID: nas
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/version').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "Promise.all(['/api/version','/downloads'].map(path=>fetch('http://127.0.0.1:3000'+path))).then(results=>process.exit(results.every(response=>response.ok)?0:1)).catch(()=>process.exit(1))"]
       interval: 20s
       timeout: 4s
       start_period: 15s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "3"
+  qqmusic:
+    image: "${QQMUSIC_IMAGE:-nestune-qq-api-test:0.9.0}"
+    pull_policy: never
+    init: true
+    restart: unless-stopped
+    environment:
+      QQMUSIC_SERVER_HOST: "0.0.0.0"
+      QQMUSIC_LOGGING_LEVEL: WARNING
+    mem_limit: 512m
+    cpus: 0.75
+    pids_limit: 192
+    volumes:
+      - type: bind
+        source: "${QQMUSIC_ROOT:-../../nestune-qq-test}/data"
+        target: /app/web/data
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${QQMUSIC_ROOT:-../../nestune-qq-test}/config.toml"
+        target: /app/web/config.toml
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: "${QQMUSIC_ROOT:-../../nestune-qq-test}/accounts.toml"
+        target: /app/web/accounts.toml
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/openapi.json', timeout=8).read(1)"]
+      interval: 20s
+      timeout: 10s
+      retries: 4
+      start_period: 15s
     logging:
       driver: json-file
       options:
