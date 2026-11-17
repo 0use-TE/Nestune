@@ -10,6 +10,10 @@ state/
 storage/
 __pycache__/
 releases/
+# Versioned release notes are source; generated installation packages stay ignored.
+!docs/releases/
+docs/releases/*
+!docs/releases/*.md
 clients/**/bin/
 clients/**/obj/
 clients/desktop/src-tauri/target/
