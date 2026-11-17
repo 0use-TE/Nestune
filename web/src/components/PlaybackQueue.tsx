@@ -8,6 +8,7 @@ import { Cover } from './Cover';
 import { Icon } from './Icon';
 import { Loading } from './Loading';
 import { CanvasSource } from './CanvasSource';
+import { PlayingIndicator } from './PlayingIndicator';
 
 export function PlaybackQueue() {
   const app = useApp();
@@ -17,11 +18,11 @@ export function PlaybackQueue() {
   return (
     <div className="qlist">
       {app.queue.map((song, index) => (
-        <CanvasSource key={`${song.id}-${index}`} source={{ kind: 'song', songId: song.id, name: song.name, cover: song.cover, previewSong: song }}><div ref={index === app.index ? selected : undefined} className={`tr ${index === app.index ? 'cur' : ''}`}>
+        <CanvasSource key={`${song.id}-${index}`} source={{ kind: 'song', songId: song.id, name: song.name, cover: song.cover, previewSong: song }}><div ref={index === app.index ? selected : undefined} className={`tr ${index === app.index ? 'cur' : ''}`} data-playing={index === app.index ? app.playing && !app.loading : undefined}>
           <button className="queue-song" aria-current={index === app.index ? true : undefined} onClick={() => app.jumpTo(index)}>
-            <span className="queue-number" aria-hidden="true">{index === app.index ? app.loading ? <Loading inline /> : <Icon n={app.playing ? 'vol' : 'pause'} s={14} /> : String(index + 1).padStart(2, '0')}</span>
+            <span className="queue-number" aria-hidden="true">{index === app.index ? app.loading ? <Loading inline /> : <PlayingIndicator playing={app.playing} /> : String(index + 1).padStart(2, '0')}</span>
             <Cover src={song.cover} seed={song.id} />
-            <span className="t1"><span className="nm t1">{song.name}</span><span className="sub sm t1">{song.artists.map(a => a.name).join(' / ')}</span></span>
+            <span className="t1"><span className="nm t1"><span className="song-name">{song.name}</span></span><span className="sub sm t1">{song.artists.map(a => a.name).join(' / ')}</span></span>
           </button>
           <span className="queue-duration sub sm">{mmss(song.duration)}</span>
           <button className="ib queue-remove" aria-label={`移出队列，${song.name}`} onClick={() => app.removeFromQueue(index)}><Icon n="x" s={16} /></button>
