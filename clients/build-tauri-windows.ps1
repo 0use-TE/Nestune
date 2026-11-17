@@ -1,4 +1,7 @@
-param([switch]$SkipInstall)
+param(
+  [switch]$SkipInstall,
+  [ValidateSet('x64', 'arm64', 'both')][string]$Architecture = 'x64'
+)
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'desktop'
 $version = (Get-Content -LiteralPath (Join-Path $project 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json).version
@@ -15,21 +18,36 @@ try {
     & npm.cmd ci --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'Installing the Tauri CLI failed.' }
   }
-  & npm.cmd run build
-  if ($LASTEXITCODE -ne 0) { throw 'The Tauri build failed.' }
-  $binary = Join-Path $project 'src-tauri/target/release/Nestune.exe'
-  $installer = Join-Path $project "src-tauri/target/release/bundle/nsis/Nestune_${version}_x64-setup.exe"
-  if (!(Test-Path -LiteralPath $binary) -or !(Test-Path -LiteralPath $installer)) {
-    throw 'The executable or installer was not generated.'
-  }
+  $architectures = if ($Architecture -eq 'both') { @('x64', 'arm64') } else { @($Architecture) }
   New-Item -ItemType Directory -Force -Path $output | Out-Null
-  $portable = Join-Path $output "Nestune-$version-Windows-x64-Tauri.exe"
-  $setup = Join-Path $output "Nestune-$version-Windows-x64-Tauri-Setup.exe"
-  Copy-Item -LiteralPath $binary -Destination $portable -Force
-  Copy-Item -LiteralPath $installer -Destination $setup -Force
-  @($portable, $setup) | ForEach-Object {
-    $hash = (Get-FileHash -LiteralPath $_ -Algorithm SHA256).Hash.ToLowerInvariant()
-    '{0}  {1}' -f $hash, [IO.Path]::GetFileName($_)
+  foreach ($arch in $architectures) {
+    if ($arch -eq 'arm64') {
+      & npm.cmd run tauri -- build --target aarch64-pc-windows-msvc --bundles nsis -- --locked
+      $targetDirectory = Join-Path $project 'src-tauri/target/aarch64-pc-windows-msvc/release'
+    } else {
+      & npm.cmd run build
+      $targetDirectory = Join-Path $project 'src-tauri/target/release'
+    }
+    if ($LASTEXITCODE -ne 0) { throw "The $arch Tauri build failed." }
+    $binary = Join-Path $targetDirectory 'Nestune.exe'
+    $installer = Join-Path $targetDirectory "bundle/nsis/Nestune_${version}_${arch}-setup.exe"
+    if (!(Test-Path -LiteralPath $binary) -or !(Test-Path -LiteralPath $installer)) {
+      throw "The $arch executable or installer was not generated."
+    }
+    $bytes = [IO.File]::ReadAllBytes($binary)
+    $peOffset = [BitConverter]::ToInt32($bytes, 0x3c)
+    $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+    $expected = if ($arch -eq 'arm64') { 0xaa64 } else { 0x8664 }
+    if ($machine -ne $expected) { throw "Unexpected PE architecture in $binary" }
+    if ((Get-Item -LiteralPath $binary).VersionInfo.ProductVersion -ne $version) { throw 'Unexpected executable version.' }
+    $portable = Join-Path $output "Nestune-$version-Windows-$arch-Tauri.exe"
+    $setup = Join-Path $output "Nestune-$version-Windows-$arch-Tauri-Setup.exe"
+    Copy-Item -LiteralPath $binary -Destination $portable -Force
+    Copy-Item -LiteralPath $installer -Destination $setup -Force
+  }
+  Get-ChildItem -LiteralPath $output -File -Filter '*.exe' | ForEach-Object {
+    $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+    '{0}  {1}' -f $hash, $_.Name
   } | Set-Content -LiteralPath (Join-Path $output 'SHA256SUMS.txt') -Encoding ascii
   Get-ChildItem -LiteralPath $output -File | Select-Object Name, Length
 } finally { Pop-Location }

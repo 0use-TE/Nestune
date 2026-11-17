@@ -8,6 +8,8 @@ use tauri::{
 const HOME: &str = "https://nestune.0use.net:8443/";
 #[cfg(desktop)]
 mod lyrics;
+#[cfg(desktop)]
+mod tray;
 
 fn trusted(url: &Url) -> bool {
     url.scheme() == "https"
@@ -47,17 +49,13 @@ fn open_external(url: &Url) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(desktop)]
-    let smoke_test = std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa"));
+    let smoke_test = std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa")) || tray::qa_mode();
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
     let builder = builder.invoke_handler(tauri::generate_handler![lyrics::lyrics_command]);
     #[cfg(desktop)]
     let builder = if smoke_test { builder } else { builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
-        if let Some(window) = app.get_webview_window("main") {
-            let _ = window.unminimize();
-            let _ = window.show();
-            let _ = window.set_focus();
-        }
+        tray::show_main(app);
     })) };
     builder
         .setup(move |app| {
@@ -66,8 +64,11 @@ pub fn run() {
                 lyrics::setup(app.handle(), true)?;
                 return Ok(());
             }
+            let home = WebviewUrl::External(HOME.parse()?);
+            #[cfg(desktop)]
+            let home = if tray::qa_mode() { WebviewUrl::App("lyrics.html".into()) } else { home };
             let builder =
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::External(HOME.parse()?))
+                WebviewWindowBuilder::new(app, "main", home)
                     .title("Nestune")
                     .background_color(tauri::window::Color(15, 15, 14, 255))
                     .initialization_script(concat!(
@@ -103,7 +104,6 @@ pub fn run() {
                 let mut builder = builder
                     .inner_size(1180.0, 800.0)
                     .min_inner_size(390.0, 600.0)
-                    .center()
                     .visible(!smoke_test)
                     .disable_drag_drop_handler()
                     .on_new_window(move |url, _| {
@@ -116,6 +116,7 @@ pub fn run() {
                         }
                         NewWindowResponse::Deny
                     });
+                builder = if tray::qa_mode() { builder.position(-32000.0, -32000.0).focused(false).focusable(false) } else { builder.center() };
                 if smoke_test {
                     builder = builder.data_directory(
                         std::env::temp_dir()
@@ -146,9 +147,16 @@ pub fn run() {
             {
                 let handle = app.handle().clone();
                 main.on_window_event(move |event| {
-                    if matches!(event, tauri::WindowEvent::CloseRequested { .. }) { lyrics::persist(&handle); handle.exit(0); }
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        lyrics::persist(&handle);
+                        if tray::hide_main(&handle) { api.prevent_close(); }
+                        else { handle.exit(0); }
+                    }
                 });
                 lyrics::setup(app.handle(), smoke_test)?;
+                if !smoke_test || tray::qa_mode() {
+                    if let Err(error) = tray::setup(app.handle()) { eprintln!("Tray unavailable; closing the window will exit: {error}"); }
+                }
             }
             #[cfg(mobile)]
             let _ = main;
@@ -159,6 +167,10 @@ pub fn run() {
         .run(|app, event| {
             #[cfg(desktop)]
             if matches!(event, tauri::RunEvent::Exit) { lyrics::persist(app); }
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::RunEvent::Reopen { .. }) { tray::show_main(app); }
+            #[cfg(all(desktop, debug_assertions))]
+            if matches!(event, tauri::RunEvent::Ready) && tray::qa_mode() { tray::run_qa(app); }
             #[cfg(mobile)]
             let _ = (app, event);
         });

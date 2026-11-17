@@ -89,22 +89,34 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/Info.plist"
           hdiutil verify src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-      - name: Collect packages
+      - name: Check native tray lifecycle
         run: |
+          cargo test --locked --lib --manifest-path src-tauri/Cargo.toml
+          cargo build --locked --manifest-path src-tauri/Cargo.toml
+          if [[ '${{ runner.os }}' == 'Linux' ]]; then
+            dbus-run-session -- xvfb-run -a timeout 30s src-tauri/target/debug/Nestune --tray-qa
+          else
+            python3 -c 'import subprocess; subprocess.run(["src-tauri/target/debug/Nestune", "--tray-qa"], check=True, timeout=30)'
+          fi
+      - name: Collect packages
+        id: packages
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
           mkdir -p packages
           if [[ '${{ runner.os }}' == 'Linux' ]]; then
-            cp src-tauri/target/release/bundle/appimage/*.AppImage packages/Nestune-1.1.0-Linux-x64.AppImage
-            cp src-tauri/target/release/bundle/deb/*.deb packages/Nestune-1.1.0-Linux-amd64.deb
+            cp src-tauri/target/release/bundle/appimage/*.AppImage "packages/Nestune-$version-Linux-x64.AppImage"
+            cp src-tauri/target/release/bundle/deb/*.deb "packages/Nestune-$version-Linux-amd64.deb"
             (cd packages && sha256sum * > SHA256SUMS.txt)
           else
             bundle=src-tauri/target/universal-apple-darwin/release/bundle
-            cp "$bundle"/dmg/*.dmg packages/Nestune-1.1.0-macOS-universal.dmg
-            ditto -c -k --sequesterRsrc --keepParent "$bundle/macos/Nestune.app" packages/Nestune-1.1.0-macOS-universal.app.zip
+            cp "$bundle"/dmg/*.dmg "packages/Nestune-$version-macOS-universal.dmg"
+            ditto -c -k --sequesterRsrc --keepParent "$bundle/macos/Nestune.app" "packages/Nestune-$version-macOS-universal.app.zip"
             (cd packages && shasum -a 256 * > SHA256SUMS.txt)
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os == 'macOS' && 'Nestune-1.1.0-macOS-universal' || 'Nestune-1.1.0-Linux-x64' }}
+          name: Nestune-${{ steps.packages.outputs.version }}-${{ runner.os == 'macOS' && 'macOS-universal' || 'Linux-x64' }}
           path: clients/desktop/packages/
           if-no-files-found: error
           retention-days: 30

@@ -36,7 +36,7 @@ fn notify(app: &AppHandle, preferences: &Preferences) {
 pub fn persist(app: &AppHandle) {
     let Some(state) = app.try_state::<Mutex<Runtime>>() else { return };
     let Ok(runtime) = state.lock() else { return };
-    let folder = if std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa")) {
+    let folder = if std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa" | "--tray-qa")) {
         Ok(std::env::temp_dir().join(format!("nestune-lyrics-check-{}", std::process::id())))
     } else { app.path().app_config_dir() };
     if let Ok(folder) = folder {
@@ -163,6 +163,28 @@ fn bounded_data(data: &Value) -> bool {
     }
 }
 
+fn set_enabled(app: &AppHandle, runtime: &mut Runtime, enabled: bool) -> Result<(), String> {
+    let overlay = app.get_webview_window("lyrics").ok_or("歌词窗口不可用")?;
+    if enabled {
+        overlay.eval(format!("window.nestuneLyricsData && window.nestuneLyricsData({});window.nestuneLyricsMedia && window.nestuneLyricsMedia({})", runtime.data, runtime.media)).map_err(|_| "无法更新歌词")?;
+        overlay.set_ignore_cursor_events(false).map_err(|_| "无法恢复歌词按钮")?;
+        overlay.show().map_err(|_| "无法显示歌词窗口")?;
+    } else { overlay.hide().map_err(|_| "无法关闭歌词窗口")?; }
+    runtime.preferences.enabled = enabled;
+    Ok(())
+}
+
+pub fn toggle(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<Mutex<Runtime>>();
+    let mut runtime = state.lock().map_err(|_| "歌词窗口繁忙")?;
+    let enabled = !runtime.preferences.enabled;
+    set_enabled(app, &mut runtime, enabled)?;
+    notify(app, &runtime.preferences);
+    drop(runtime);
+    persist(app);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) -> Result<Value, String> {
     let url = window.url().map_err(|_| "无法读取窗口来源")?;
@@ -201,12 +223,7 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
         "lyricsEnable" => {
             let enabled = data.get("enabled").and_then(Value::as_bool).ok_or("缺少开关状态")?;
             if local && enabled { return Err("请从播放器打开桌面歌词".into()) }
-            runtime.preferences.enabled = enabled;
-            if enabled {
-                overlay.eval(format!("window.nestuneLyricsData && window.nestuneLyricsData({});window.nestuneLyricsMedia && window.nestuneLyricsMedia({})", runtime.data, runtime.media)).map_err(|_| "无法更新歌词")?;
-                overlay.set_ignore_cursor_events(false).map_err(|_| "无法恢复歌词按钮")?;
-                overlay.show().map_err(|_| "无法显示歌词窗口")?;
-            } else { overlay.hide().map_err(|_| "无法关闭歌词窗口")?; }
+            set_enabled(&app, &mut runtime, enabled)?;
         },
         "lyricsLock" => {
             runtime.preferences.locked = data.get("locked").and_then(Value::as_bool).ok_or("缺少锁定状态")?;

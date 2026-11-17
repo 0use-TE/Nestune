@@ -427,6 +427,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go(i > 0 ? i - 1 : q.length - 1);
   }, [go]);
   const prevRef = useRef(prev); prevRef.current = prev;
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const command = (event as CustomEvent<unknown>).detail;
+      if (command === 'toggle') toggle();
+      else if (command === 'previous') prevRef.current();
+      else if (command === 'next') next();
+    };
+    window.addEventListener('nt:desktop-control', receive);
+    return () => window.removeEventListener('nt:desktop-control', receive);
+  }, [toggle, next]);
+
   const seek = useCallback((t: number) => { if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'seek', position: t }); return; } const a = audio.current; if (a) { a.currentTime = Math.max(0, t); setClock(a.currentTime, clock.duration); } }, []);
   const playbackPosition = useCallback(() => audio.current?.currentTime || 0, []);
   const playbackRunning = useCallback(() => !!audio.current && !audio.current.paused && !audio.current.ended && audio.current.readyState >= 2, []);
