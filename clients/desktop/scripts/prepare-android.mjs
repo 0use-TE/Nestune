@@ -26,7 +26,9 @@ if (!manifest.includes('android:usesCleartextTraffic="')) {
 manifest = manifest.replace('</manifest>', '  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />\n</manifest>');
 manifest = manifest.replace('</application>', '  <service android:name=".NativeMediaService" android:exported="false" android:foregroundServiceType="mediaPlayback" />\n</application>');
 if (!manifest.includes('android.permission.SYSTEM_ALERT_WINDOW')) manifest = manifest.replace('</manifest>', '  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />\n</manifest>');
+if (!manifest.includes('android.permission.REQUEST_INSTALL_PACKAGES')) manifest = manifest.replace('</manifest>', '  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n</manifest>');
 writeFileSync(manifestPath, manifest);
+cpSync(path.join(root, 'android/ClientUpdates.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/ClientUpdates.kt'));
 cpSync(path.join(root, 'android/MainActivity.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/MainActivity.kt'));
 cpSync(path.join(root, 'android/NativeMediaService.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/NativeMediaService.kt'));
 cpSync(path.join(root, 'android/MusicDownloads.kt'), path.join(android, 'app/src/main/java/net/ouse/nestune/MusicDownloads.kt'));

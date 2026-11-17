@@ -205,6 +205,11 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
     let local = window.label() == "lyrics" && local_lyrics_url(&url);
     if !main && !local { return Err("不允许此来源操作歌词窗口".into()) }
     let kind = data.get("type").and_then(Value::as_str).ok_or("无效操作")?;
+    if kind.starts_with("update") {
+        if !main { return Err("仅主窗口可更新客户端".into()); }
+        return super::updates::request(&app, kind);
+    }
+
     let state = app.state::<Mutex<Runtime>>();
     let mut runtime = state.lock().map_err(|_| "歌词窗口繁忙")?;
     let overlay = app.get_webview_window("lyrics").ok_or("歌词窗口不可用")?;

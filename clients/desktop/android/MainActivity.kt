@@ -28,6 +28,7 @@ internal object NestuneOrigin {
 }
 
 class MainActivity : TauriActivity() {
+    private val clientUpdates by lazy { ClientUpdates(this) }
     private val musicDownloads by lazy { MusicDownloads(this) }
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
@@ -56,6 +57,12 @@ class MainActivity : TauriActivity() {
                 if (raw.length > 300000) return@addWebMessageListener
                 try {
                     val data = JSONObject(raw)
+                    if (data.optString("type") in setOf("updateInfo", "updateStatus", "updateStart", "updateInstall")) {
+                        val result = try { clientUpdates.request(data.getString("type")) }
+                        catch (error: Exception) { JSONObject().put("phase", "error").put("error", error.message ?: "客户端更新失败") }
+                        reply.postMessage(result.put("requestId", data.optString("requestId").take(80)).toString())
+                        return@addWebMessageListener
+                    }
                     if (data.optString("type") in setOf("lyricsInfo", "lyricsEnable", "lyricsLock", "lyricsData", "lyricsMedia")) {
                         val result = LyricsOverlay.get(this).request(data)
                         if (data.optString("type") == "lyricsEnable" && data.optBoolean("enabled") && !result.optBoolean("permission")) {
@@ -91,7 +98,9 @@ class MainActivity : TauriActivity() {
                     if (!data.optBoolean("playing") && !NativeMediaService.running) return@addWebMessageListener
                     val intent = Intent(this, NativeMediaService::class.java).putExtra("state", raw)
                     if (Build.VERSION.SDK_INT >= 26 && !NativeMediaService.running) startForegroundService(intent) else startService(intent)
-                } catch (_: Exception) { /* Ignore malformed or stale page messages. */ }
+                } catch (error: Exception) {
+                    reply.postMessage(JSONObject().put("type", "downloadError").put("error", error.message ?: "原生操作失败").toString())
+                }
             }
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
