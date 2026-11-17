@@ -21,7 +21,7 @@ function worker() {
 describe('PWA cache boundaries', () => {
   it('does not intercept account APIs, audio, admin, external requests or writes', () => {
     const w = worker();
-    for (const path of ['/api/me', '/api/auth/login', '/api/songs/1/stream', '/api/uploads', '/admin', '/admin/users', 'https://other.example/_next/static/a.js']) {
+    for (const path of ['/api/me', '/api/release-notes', '/api/auth/login', '/api/songs/1/stream', '/api/uploads', '/admin', '/admin/users', 'https://other.example/_next/static/a.js']) {
       expect(w.request(path)).not.toHaveBeenCalled();
     }
     expect(w.request('/_next/static/a.js', { method: 'POST' })).not.toHaveBeenCalled();

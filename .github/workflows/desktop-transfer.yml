@@ -1,0 +1,59 @@
+name: Prepare desktop release transfer
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful desktop build run ID
+        required: true
+      version:
+        description: Desktop version
+        required: true
+      base_version:
+        description: Previous AppImage version available on NAS
+        required: true
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  delta:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Validate release inputs
+        env:
+          VERSION: ${{ inputs.version }}
+          BASE_VERSION: ${{ inputs.base_version }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$BASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+      - uses: actions/download-artifact@v4
+        with:
+          name: Nestune-${{ inputs.version }}-Linux-x64
+          run-id: ${{ inputs.source_run }}
+          github-token: ${{ github.token }}
+          path: packages
+      - name: Prepare verified binary delta
+        env:
+          VERSION: ${{ inputs.version }}
+          BASE_VERSION: ${{ inputs.base_version }}
+        run: |
+          (cd packages && sha256sum --check SHA256SUMS.txt)
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xdelta3
+          curl --fail --retry 2 --max-time 180 "https://nestune.0use.net:8443/downloads/files/Nestune-$BASE_VERSION-Linux-x64.AppImage" -o base.AppImage
+          mkdir transfer
+          xdelta3 -e -s base.AppImage "packages/Nestune-$VERSION-Linux-x64.AppImage" "transfer/Nestune-$VERSION-Linux-x64.xdelta"
+          cp packages/*.deb packages/SHA256SUMS.txt transfer/
+          sha256sum base.AppImage > transfer/BASE-SHA256SUMS.txt
+          (cd transfer && sha256sum *.xdelta > DELTA-SHA256SUMS.txt)
+          ls -lh transfer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nestune-${{ inputs.version }}-Linux-transfer
+          path: transfer/
+          retention-days: 7
