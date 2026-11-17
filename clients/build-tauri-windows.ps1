@@ -1,7 +1,9 @@
 param([switch]$SkipInstall)
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'desktop'
-$output = Join-Path $PSScriptRoot '../releases/1.0.0-tauri'
+$version = (Get-Content -LiteralPath (Join-Path $project 'src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json).version
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid client version.' }
+$output = Join-Path $PSScriptRoot "../releases/$version-tauri"
 if ($env:OS -ne 'Windows_NT') { throw 'Build the Windows installer on Windows.' }
 $toolchain = & rustc -vV
 if ($LASTEXITCODE -ne 0 -or !($toolchain -match 'host: x86_64-pc-windows-msvc')) {
@@ -16,13 +18,13 @@ try {
   & npm.cmd run build
   if ($LASTEXITCODE -ne 0) { throw 'The Tauri build failed.' }
   $binary = Join-Path $project 'src-tauri/target/release/Nestune.exe'
-  $installer = Join-Path $project 'src-tauri/target/release/bundle/nsis/Nestune_1.0.0_x64-setup.exe'
+  $installer = Join-Path $project "src-tauri/target/release/bundle/nsis/Nestune_${version}_x64-setup.exe"
   if (!(Test-Path -LiteralPath $binary) -or !(Test-Path -LiteralPath $installer)) {
     throw 'The executable or installer was not generated.'
   }
   New-Item -ItemType Directory -Force -Path $output | Out-Null
-  $portable = Join-Path $output 'Nestune-1.0.0-Windows-x64-Tauri.exe'
-  $setup = Join-Path $output 'Nestune-1.0.0-Windows-x64-Tauri-Setup.exe'
+  $portable = Join-Path $output "Nestune-$version-Windows-x64-Tauri.exe"
+  $setup = Join-Path $output "Nestune-$version-Windows-x64-Tauri-Setup.exe"
   Copy-Item -LiteralPath $binary -Destination $portable -Force
   Copy-Item -LiteralPath $installer -Destination $setup -Force
   @($portable, $setup) | ForEach-Object {

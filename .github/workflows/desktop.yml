@@ -93,18 +93,18 @@ jobs:
         run: |
           mkdir -p packages
           if [[ '${{ runner.os }}' == 'Linux' ]]; then
-            cp src-tauri/target/release/bundle/appimage/*.AppImage packages/Nestune-1.0.0-Linux-x64.AppImage
-            cp src-tauri/target/release/bundle/deb/*.deb packages/Nestune-1.0.0-Linux-amd64.deb
+            cp src-tauri/target/release/bundle/appimage/*.AppImage packages/Nestune-1.1.0-Linux-x64.AppImage
+            cp src-tauri/target/release/bundle/deb/*.deb packages/Nestune-1.1.0-Linux-amd64.deb
             (cd packages && sha256sum * > SHA256SUMS.txt)
           else
             bundle=src-tauri/target/universal-apple-darwin/release/bundle
-            cp "$bundle"/dmg/*.dmg packages/Nestune-1.0.0-macOS-universal.dmg
-            ditto -c -k --sequesterRsrc --keepParent "$bundle/macos/Nestune.app" packages/Nestune-1.0.0-macOS-universal.app.zip
+            cp "$bundle"/dmg/*.dmg packages/Nestune-1.1.0-macOS-universal.dmg
+            ditto -c -k --sequesterRsrc --keepParent "$bundle/macos/Nestune.app" packages/Nestune-1.1.0-macOS-universal.app.zip
             (cd packages && shasum -a 256 * > SHA256SUMS.txt)
           fi
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ runner.os == 'macOS' && 'Nestune-1.0.0-macOS-universal' || 'Nestune-1.0.0-Linux-x64' }}
+          name: ${{ runner.os == 'macOS' && 'Nestune-1.1.0-macOS-universal' || 'Nestune-1.1.0-Linux-x64' }}
           path: clients/desktop/packages/
           if-no-files-found: error
           retention-days: 30

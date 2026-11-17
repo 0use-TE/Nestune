@@ -1,0 +1,11 @@
+{
+  "identifier": "lyrics-local",
+  "description": "The bundled lyrics view may move, lock or close its own window.",
+  "windows": [
+    "lyrics"
+  ],
+  "permissions": [
+    "allow-lyrics-command",
+    "core:window:allow-start-dragging"
+  ]
+}

@@ -59,11 +59,11 @@ jobs:
           mapfile -t apks < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*release-unsigned.apk')
           printf '%s\n' "${apks[@]}"
           test "${#apks[@]}" -eq 1
-          cp "${apks[0]}" packages/Nestune-1.0.0-Android-Tauri-unsigned.apk
+          cp "${apks[0]}" packages/Nestune-1.1.0-Android-Tauri-unsigned.apk
           (cd packages && sha256sum *.apk > SHA256SUMS.txt)
       - uses: actions/upload-artifact@v4
         with:
-          name: Nestune-1.0.0-Android-Tauri-unsigned
+          name: Nestune-1.1.0-Android-Tauri-unsigned
           path: clients/desktop/packages/
           if-no-files-found: error
           retention-days: 30

@@ -6,7 +6,7 @@ output="$RUNNER_TEMP/nestune-native-check"
 mkdir -p "$output/classes" "$output/dex"
 tools="$ANDROID_HOME/build-tools/35.0.0"
 platform="$ANDROID_HOME/platforms/android-35/android.jar"
-javac -source 8 -target 8 -classpath "$platform" -d "$output/classes" "$source_dir/Probe.java"
+javac -source 8 -target 8 -classpath "$platform" -d "$output/classes" "$source_dir/"*.java
 "$tools/d8" --lib "$platform" --output "$output/dex" "$output/classes/net/ouse/nestune/probe/"*.class
 "$tools/aapt" package -f -M "$source_dir/AndroidManifest.xml" -A "$source_dir/assets" -I "$platform" -F "$output/probe.apk"
 (cd "$output/dex" && zip -j "$output/probe.apk" classes.dex)

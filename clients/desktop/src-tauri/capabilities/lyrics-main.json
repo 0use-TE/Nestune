@@ -1,0 +1,1 @@
+{"identifier":"lyrics-main","description":"Only the production music origin can synchronize its desktop lyrics window.","windows":["main"],"remote":{"urls":["https://music.0use.net/*"]},"permissions":["allow-lyrics-command"]}
