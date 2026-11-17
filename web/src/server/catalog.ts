@@ -1,6 +1,7 @@
 import { isUploadSong } from '@/lib/upload-types';
 import type { Song } from '@/lib/types';
 import { isQqId, sameRecording } from '@/lib/music-ids';
+import { rankSearchSongs } from '@/lib/search-ranking';
 import { numericId, fail } from './http';
 import * as netease from './netease';
 import { qqConfigured, qqSongMeta, qqSearch, qqAlbum, qqArtist, qqArtistSongs } from './qqmusic';
@@ -41,13 +42,13 @@ export async function discoverSources(id: string): Promise<Song> {
   discoveries.set(id, task); return task;
 }
 export const catalogSong = (viewer: number, id: string) => isUploadSong(id) ? uploadedSong(viewer, id) : onlineSong(id);
-export async function searchSongs(query: string, limit: number, offset: number) {
+export async function searchSongs(query: string, limit: number, offset: number, uploads: Song[] = []) {
   const enabled = qqConfigured();
   const [ne, qq] = await Promise.allSettled([netease.search(query, 'song', limit, offset), enabled ? qqSearch(query, limit, offset) : Promise.resolve({ items: [], total: 0 })]);
   const results = [ne, qq].flatMap(r => r.status === 'fulfilled' ? [r.value] : []);
   if (ne.status === 'rejected' && (!enabled || qq.status === 'rejected')) throw fail(502, '音乐搜索暂时不可用，请稍后重试');
   const songs = results.flatMap(r => r.items) as Song[]; rememberSongs(songs);
-  return { type: 'song', items: mergedSongs(songs), total: results.reduce((n, r) => n + r.total, 0),
+  return { type: 'song', items: rankSearchSongs(query, [...mergedSongs(songs), ...uploads], results.map(r => r.items as Song[]), offset), total: results.reduce((n, r) => n + r.total, 0),
     nextOffset: offset + limit, hasMore: results.some(r => offset + limit < r.total),
     warnings: [ne.status === 'rejected' ? '网易云暂时无法连接，已显示其他来源' : '', enabled && qq.status === 'rejected' ? 'QQ 音乐暂时无法连接，已显示其他来源' : ''].filter(Boolean) };
 }

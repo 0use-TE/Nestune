@@ -18,6 +18,16 @@ it('returns results and a partial-failure notice when one search provider is una
   const result = await catalog.searchSongs('Song', 30, 0);
   expect(result.items[0].id).toBe('qq-a'); expect(result.warnings).toHaveLength(1); expect(result.hasMore).toBe(true); expect(result.nextOffset).toBe(30);
 });
+it('reranks merged providers together with uploads instead of concatenating the providers', async () => {
+  const cover = { ...song, id: '2', name: '青花瓷 (DJ版)', artists: [{ id: '2', name: 'Cover' }] };
+  const original = { ...song, id: 'qq-jay', name: '青花瓷', artists: [{ id: 'qq-jay', name: '周杰伦' }] };
+  const uploaded = { ...cover, id: 'up-a' };
+  mocks.search.mockResolvedValue({ items: [cover], total: 50 });
+  mocks.qqSearch.mockResolvedValue({ items: [original], total: 80 });
+  const result = await catalog.searchSongs('青花瓷', 30, 0, [uploaded]);
+  expect(result.items.map(s => s.id)).toEqual(['qq-jay', '2', 'up-a']);
+  expect(result).toMatchObject({ total: 130, nextOffset: 30, hasMore: true });
+});
 it('preserves original queue IDs and cached metadata during a provider outage', async () => {
   const { rememberSongs } = await import('@/server/recordings'); rememberSongs([song, { ...song, id: 'qq-a' }]);
   mocks.songs.mockRejectedValue(Error('offline')); mocks.qqMeta.mockResolvedValue({ ...song, id: 'qq-a' });

@@ -3,6 +3,7 @@ import { userRoute } from '@/server/guard';
 import { search } from '@/server/netease';
 import { searchUploads } from '@/server/uploads';
 import { searchSongs } from '@/server/catalog';
+import { rankSearchSongs } from '@/lib/search-ranking';
 
 export const GET = userRoute(async (req, _ctx, user) => {
   const p = req.nextUrl.searchParams;
@@ -13,10 +14,10 @@ export const GET = userRoute(async (req, _ctx, user) => {
   if (type !== 'song') { const r = await search(query, type, limit, offset); return { ...r, nextOffset: offset + limit, hasMore: offset + r.items.length < r.total }; }
   const local = searchUploads(user.id, query, limit, offset);
   try {
-    const online = await searchSongs(query, limit, offset);
-    return { ...online, items: [...local.items, ...online.items], total: local.total + online.total, hasMore: online.hasMore || offset + limit < local.total };
+    const online = await searchSongs(query, limit, offset, local.items);
+    return { ...online, total: local.total + online.total, hasMore: online.hasMore || offset + limit < local.total };
   } catch (error) {
     if (!local.total) throw error;
-    return { type, ...local, nextOffset: offset + limit, hasMore: offset + limit < local.total, warnings: ['在线搜索暂时不可用，已显示上传的歌曲'] };
+    return { type, ...local, items: rankSearchSongs(query, local.items), nextOffset: offset + limit, hasMore: offset + limit < local.total, warnings: ['在线搜索暂时不可用，已显示上传的歌曲'] };
   }
 });
