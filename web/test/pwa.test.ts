@@ -9,7 +9,7 @@ function worker() {
   const caches = { open: vi.fn(async () => cache), keys: vi.fn(async () => ['other-app', 'nestune-pwa-old', 'nestune-pwa-test']), delete: vi.fn(async () => true) };
   const fetch = vi.fn(async () => new Response('online'));
   const self = { location: { origin: 'https://music.0use.net' }, clients: { claim: vi.fn(async () => {}) }, skipWaiting: vi.fn(), addEventListener: (name: string, fn: (event: any) => void) => { handlers[name] = fn; } };
-  runInNewContext(workerSource('test'), { self, caches, fetch, URL, Response });
+  runInNewContext(workerSource('test'), { self, caches, fetch, URL, Response, AbortController, setTimeout, clearTimeout });
   function request(path: string, options: { method?: string; mode?: string; range?: boolean } = {}) {
     const respondWith = vi.fn();
     handlers.fetch({ request: { url: new URL(path, self.location.origin).href, method: options.method ?? 'GET', mode: options.mode ?? 'cors', headers: new Headers(options.range ? { range: 'bytes=0-10' } : {}) }, respondWith });

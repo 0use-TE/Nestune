@@ -1,6 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import { PwaProvider } from '@/components/Pwa';
+import { DesktopLyricsProvider } from '@/components/DesktopLyrics';
 import './globals.css';
+import './square.css';
+import './client-features.css';
+import './playlist-queue.css';
 
 export const metadata: Metadata = {
   title: 'Nestune', description: '私人音乐库', applicationName: 'Nestune',
@@ -23,7 +27,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" suppressHydrationWarning>
-      <body><PwaProvider>{children}</PwaProvider></body>
+      <body><PwaProvider><DesktopLyricsProvider>{children}</DesktopLyricsProvider></PwaProvider></body>
     </html>
   );
 }

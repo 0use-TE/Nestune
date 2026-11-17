@@ -10,6 +10,8 @@ import { Icon } from '@/components/Icon';
 import { AvatarCrop } from '@/components/AvatarCrop';
 import { ManageUploads } from '@/components/ManageUploads';
 import { PwaInstall, AboutNestune } from '@/components/Pwa';
+import { VolumeControl } from '@/components/VolumeControl';
+import { DesktopLyricsSettings } from '@/components/DesktopLyrics';
 
 const SECTIONS = ['资料', '我的上传', '偏好', '账号与安全', '关于'] as const;
 
@@ -106,6 +108,8 @@ export default function SettingsPage() {
         <section className="panel" aria-label="偏好">
           <div className="set"><b>公开个人主页</b><button className={`switch ${me.profilePublic ? 'on' : ''}`} role="switch" aria-label="公开个人主页" aria-checked={!!me.profilePublic} disabled={busy} onClick={async () => { setBusy(true); try { const r = await patch('/api/me', { profilePublic: !me.profilePublic }); app.setMe(r.user); } catch (e) { app.toast(e instanceof Error ? e.message : '保存失败'); } finally { setBusy(false); } }} /></div>
           <PwaInstall />
+          <DesktopLyricsSettings />
+          <div className="set"><div><b>播放音量</b><p className="sub sm">只调节 Nestune 的声音</p></div><VolumeControl inline /></div>
           <div className="set">
             <b>外观</b>
             <div className="row" role="group" aria-label="外观">{([['auto', '自动'], ['light', '浅色'], ['dark', '深色']] as const).map(([k, l]) => <button key={k} className={`chip ${app.theme === k ? 'on' : ''}`} aria-pressed={app.theme === k} onClick={() => app.setTheme(k)}>{l}</button>)}</div>

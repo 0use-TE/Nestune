@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extraOrigins } from './config';
+import { randomUUID } from 'node:crypto';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
@@ -29,14 +30,25 @@ type Handler = (req: NextRequest, ctx: Ctx) => Promise<Response | unknown> | Res
 
 export function route(handler: Handler) {
   return async (req: NextRequest, ctx: Ctx) => {
+    const supplied = req.headers.get('x-request-id');
+    const requestId = supplied && /^[a-zA-Z0-9_-]{8,64}$/.test(supplied) ? supplied : randomUUID();
+    const identify = (response: Response) => {
+      try { response.headers.set('X-Request-ID', requestId); return response; }
+      catch { const headers = new Headers(response.headers); headers.set('X-Request-ID', requestId); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); }
+    };
+    const report = (error: unknown, status: number, code: string) => console.error(JSON.stringify({ event: 'api_error', time: new Date().toISOString(), requestId, method: req.method, path: req.nextUrl.pathname, status, code,
+      errorType: error instanceof Error ? error.name : 'UnknownError', frames: error instanceof Error ? error.stack?.split('\n').slice(1, 6).map(line => line.trim()) : undefined }));
     try {
       checkOrigin(req);
       const out = await handler(req, ctx);
-      return out instanceof Response ? out : json(out ?? { ok: true });
+      return identify(out instanceof Response ? out : json(out ?? { ok: true }));
     } catch (e) {
-      if (e instanceof HttpError) return json({ error: e.message, code: e.code }, e.status);
-      console.error('[api]', req.method, req.nextUrl.pathname, e);
-      return json({ error: '服务内部错误' }, 500);
+      if (e instanceof HttpError) {
+        if (e.status >= 500) report(e, e.status, e.code || `http_${e.status}`);
+        return identify(json({ error: e.message, code: e.code, requestId }, e.status));
+      }
+      report(e, 500, 'internal_error');
+      return identify(json({ error: '服务内部错误', code: 'internal_error', requestId }, 500));
     }
   };
 }

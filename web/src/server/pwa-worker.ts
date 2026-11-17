@@ -30,12 +30,21 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      let requestId = '';
       try {
-        const response = await fetch(request);
-        if (response.status < 500) return response;
-      } catch {}
+        const response = await fetch(request, { signal: controller.signal });
+        if (response.status < 500 || response.headers.has('x-nestune-error-code')) return response;
+        const id = response.headers.get('x-request-id') || '';
+        if (/^[a-zA-Z0-9_-]{8,64}$/.test(id)) requestId = id;
+      } catch {} finally { clearTimeout(timer); }
       const fallback = await (await caches.open(CACHE)).match(OFFLINE);
-      return fallback || new Response('暂时无法连接，请检查网络后重试。', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+      if (fallback) {
+        const html = (await fallback.text()).replace('data-request-id="{http.request.uuid}"', 'data-request-id="' + requestId + '"');
+        return new Response(html, { status: 503, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...(requestId ? { 'X-Request-ID': requestId } : {}) } });
+      }
+      return new Response('暂时无法连接，请检查网络后重试。', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
     })());
     return;
   }

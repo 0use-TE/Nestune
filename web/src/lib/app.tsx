@@ -3,7 +3,9 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { del, get, post, put } from './api';
 import { isDeviceSong, useDeviceMusic } from './device-music';
 import type { Me, PlaylistLite, Song } from './types';
+import { isCanvasMusic, type CanvasState, type CanvasTake } from './canvas-types';
 import { loadTint, seededTint } from './util';
+import { playbackVolume } from './volume';
 import { PLAYBACK_MODES, type PlaybackMode, type QueueCommand, type QueueSeed, type SharedQueue } from './shared-queue';
 
 /* ---------- playback clock (kept out of React context so ticks do not re-render the app) ---------- */
@@ -27,15 +29,16 @@ export type AppCtx = {
   playlists: PlaylistLite[]; reloadPlaylists: () => Promise<void>;
   queue: Song[]; index: number; current: Song | null; playing: boolean; loading: boolean; error: string | null;
   playbackMode: PlaybackMode; cyclePlaybackMode: () => void;
+  volume: number; setVolume: (value: number) => void; toggleMute: () => void;
   play: (songs: Song[], start?: number, mode?: PlaybackMode) => void; toggle: () => void; next: () => void; prev: () => void; seek: (t: number) => void;
   playbackPosition: () => number; followPlayback: (song: Song | null, position: number, playing: boolean) => void; setFollowingRoom: (following: boolean) => void;
   playbackRunning: () => boolean; setRoomTransport: (handler: ((playing?: boolean) => boolean) | null) => void;
-  playNow: (s: Song) => void; enqueue: (s: Song) => void; playNext: (s: Song) => void; removeFromQueue: (i: number) => void; jumpTo: (i: number) => void;
+  playNow: (s: Song) => void; enqueue: (s: Song) => void; appendMany: (songs: Song[], canvasId?: string) => Promise<CanvasState | null>; playNext: (s: Song) => void; removeFromQueue: (i: number) => void; jumpTo: (i: number) => void;
   clearQueue: () => void; sharedQueue: boolean;
   queueSeed: () => QueueSeed;
   beginSharedQueue: () => void; endSharedQueue: () => void;
   applyRoomQueue: (queue: SharedQueue, position: number, playing: boolean) => void;
-  setRoomQueueHandler: (handler: ((command: QueueCommand) => void) | null) => void;
+  setRoomQueueHandler: (handler: ((command: QueueCommand) => void | Promise<void>) | null) => void;
   nowOpen: boolean; setNowOpen: (v: boolean) => void;
   menu: { song: Song; x: number; y: number } | null; openMenu: (s: Song, e: { clientX: number; clientY: number }) => void; closeMenu: () => void;
   toast: (t: string, kind?: ToastKind) => void; toasts: Toast[];
@@ -66,13 +69,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [theme, setThemeState] = useState<Theme>('auto');
   const [showTr, setShowTrState] = useState(true);
+  const [volume, setVolumeState] = useState(1);
+  const volumeRef = useRef(1);
+  const audibleVolume = useRef(1);
   const [tint, setTint] = useState<[string, string]>(seededTint('0'));
   const [loadKey, setLoadKey] = useState(0);
   const [saveDialog, setSaveDialog] = useState<Song | null>(null);
   const [audioInfo, setAudioInfo] = useState<{ quality?: string; source?: string } | null>(null);
 
   const [sharedQueue, setSharedQueue] = useState(false);
-  const roomQueueHandler = useRef<((command: QueueCommand) => void) | null>(null);
+  const roomQueueHandler = useRef<((command: QueueCommand) => void | Promise<void>) | null>(null);
   const personalQueue = useRef<PersonalQueue | null>(null);
   const roomKeys = useRef<string[]>([]);
   const roomSignature = useRef('');
@@ -101,6 +107,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setThemeState(lsGet('nt-theme', 'auto') as Theme);
     setShowTrState(lsGet('nt-tr', '1') === '1');
+    const savedVolume = playbackVolume(lsGet('nt-volume', '1'));
+    volumeRef.current = savedVolume;
+    audibleVolume.current = playbackVolume(lsGet('nt-audible-volume', '1')) || 1;
+    setVolumeState(savedVolume);
+    if (audio.current) audio.current.volume = savedVolume;
   }, []);
   useEffect(() => {
     const r = document.documentElement;
@@ -108,6 +119,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [theme]);
   const setTheme = (t: Theme) => { setThemeState(t); lsSet('nt-theme', t); };
   const setShowTr = (v: boolean) => { setShowTrState(v); lsSet('nt-tr', v ? '1' : '0'); };
+  const setVolume = useCallback((value: number) => {
+    const nextVolume = playbackVolume(value, volumeRef.current);
+    volumeRef.current = nextVolume;
+    if (nextVolume > 0) { audibleVolume.current = nextVolume; lsSet('nt-audible-volume', String(nextVolume)); }
+    if (audio.current) audio.current.volume = nextVolume;
+    setVolumeState(nextVolume); lsSet('nt-volume', String(nextVolume));
+  }, []);
+  const toggleMute = useCallback(() => setVolume(volumeRef.current > 0 ? 0 : audibleVolume.current || 1), [setVolume]);
 
   /* ----- session ----- */
   const resetUserState = useCallback(() => {
@@ -175,6 +194,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const a = new Audio();
     a.preload = 'auto';
+    a.volume = volumeRef.current;
     audio.current = a;
     const dur = () => (Number.isFinite(a.duration) && a.duration > 0 ? a.duration : (live.current.queue[live.current.index]?.duration ?? 0));
     const onTime = () => {
@@ -413,6 +433,31 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     else setQueue(q => [...q, s]);
     toast('已加入播放队列');
   }, [toast]);
+  const appendMany = useCallback(async (all: Song[], canvasId?: string): Promise<CanvasState | null> => {
+    const songs = all.filter(song => song.access?.playable !== false);
+    if (!songs.length) throw new Error('这些歌曲暂时无法播放');
+    if (roomQueueHandler.current) {
+      if (songs.some(song => isDeviceSong(song.id))) throw new Error('本地歌曲需要先上传并分享');
+      await roomQueueHandler.current(canvasId ? { type: 'appendCanvas', id: canvasId } : { type: 'appendMany', songIds: songs.map(song => song.id) });
+      toast(`已接到播放列表末尾`);
+      return null;
+    }
+    if (live.current.queue.length + songs.length > 500) throw new Error('播放列表最多 500 首，请先移除一些歌曲');
+    let state: CanvasState | null = null, additions = songs;
+    if (canvasId) {
+      const result = await post<CanvasTake>('/api/canvas', { action: 'take', id: canvasId, capacity: 500 - live.current.queue.length });
+      if (!isCanvasMusic(result.item)) throw new Error('这个物件不能播放');
+      additions = (result.item.tracks ?? [result.item.song]).filter(song => song.access?.playable !== false);
+      state = result.state;
+    }
+    const existing = live.current.queue;
+    const combined = [...existing, ...additions];
+    live.current = { ...live.current, queue: combined, index: existing.length ? live.current.index : 0 };
+    setQueue(combined);
+    if (!existing.length) { autoplay.current = true; pendingSeek.current = 0; setIndex(0); setLoadKey(key => key + 1); }
+    toast('已接到播放列表末尾');
+    return state;
+  }, [toast]);
   const playNext = useCallback((s: Song) => {
     if (queueSong('insertNext', s)) return;
     if (s.access?.playable === false) { toast(s.access.reason || '这首歌暂时无法播放'); return; }
@@ -489,7 +534,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!saved.songs.length) { audio.current?.removeAttribute('src'); setNowOpen(false); setClock(0, 0); }
     toast('已恢复你的个人列表，播放已暂停');
   }, [me?.id, toast]);
-  const setRoomQueueHandler = useCallback((handler: ((command: QueueCommand) => void) | null) => { roomQueueHandler.current = handler; }, []);
+  const setRoomQueueHandler = useCallback((handler: ((command: QueueCommand) => void | Promise<void>) | null) => { roomQueueHandler.current = handler; }, []);
   const jumpTo = useCallback((index: number) => {
     if (roomQueueHandler.current) { if (roomKeys.current[index]) roomQueueHandler.current({ type: 'jump', key: roomKeys.current[index] }); return; }
     go(index);
@@ -514,14 +559,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value: AppCtx = useMemo(() => ({
     ready, me, setMe, loadSession, logout, favIds, toggleFav, deviceMusic, playlists, reloadPlaylists,
     saveDialog, openSave: (s: Song) => setSaveDialog(s), closeSave: () => setSaveDialog(null), audioInfo,
-    queue, index, current, playing, loading, error, playbackMode,
+    queue, index, current, playing, loading, error, playbackMode, volume, setVolume, toggleMute,
     play, toggle, next: () => next(), prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport,
     cyclePlaybackMode, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler,
-    playNow, enqueue, playNext, removeFromQueue, jumpTo,
+    playNow, enqueue, appendMany, playNext, removeFromQueue, jumpTo,
     nowOpen, setNowOpen, menu, openMenu: (song, e) => setMenu({ song, x: e.clientX, y: e.clientY }), closeMenu: () => setMenu(null),
     toast, toasts, theme, setTheme, showTr, setShowTr, tint,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
+  }), [volume, setVolume, toggleMute, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, appendMany, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -18,20 +18,29 @@ import { QueuePopover } from './PlaybackQueue';
 import { StartupLoading } from './StartupLoading';
 import { KeyboardViewport } from './KeyboardViewport';
 import { dismissTopOverlay } from '@/lib/overlays';
+import { CanvasSource } from './CanvasSource';
+import { useDesktopLyrics } from './DesktopLyrics';
+import { ReleaseNotice } from './ReleaseNotice';
+import { PlaylistQueueDrop } from './PlaylistQueueDrop';
 
-const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/chat', '聊天', 'lyrics']] as const;
+const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/square', '画布', 'dash']] as const;
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
+  const desktopLyrics = useDesktopLyrics();
   const unread = useOptionalSocial()?.state?.inbox?.reduce((total, thread) => total + thread.unread, 0) ?? 0;
   const path = usePathname();
   const main = useRef<HTMLElement>(null);
   const [newPl, setNewPl] = useState<{ song?: Song } | null>(null);
   const [lyricsPinned, setLyricsPinned] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
-  const closeQueue = useCallback(() => setQueueOpen(false), []);
+  const canvasQueueRequested = useRef(false);
+  const closeQueue = useCallback(() => { canvasQueueRequested.current = false; setQueueOpen(false); }, []);
   const toggleQueue = () => setQueueOpen(open => !open);
-  const toggleLyrics = () => setLyricsPinned(pinned => !pinned);
+  const toggleLyrics = () => {
+    if (desktopLyrics.enabled) { void desktopLyrics.setEnabled(false); setLyricsPinned(false); }
+    else setLyricsPinned(pinned => !pinned);
+  };
   const hasSong = !!app.current;
 
   useEffect(() => {
@@ -61,12 +70,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [path]);
   useEffect(() => { if (!app.me) setLyricsPinned(false); }, [app.me]);
-  useEffect(() => { closeQueue(); }, [app.nowOpen, hasSong, closeQueue]);
+  useEffect(() => {
+    if (app.ready && !app.me && desktopLyrics.enabled) void desktopLyrics.setEnabled(false);
+  }, [app.ready, app.me, desktopLyrics.enabled, desktopLyrics.setEnabled]);
+  useEffect(() => {
+    if (canvasQueueRequested.current && hasSong) { canvasQueueRequested.current = false; setQueueOpen(true); }
+    else closeQueue();
+  }, [app.nowOpen, hasSong, closeQueue]);
   useEffect(() => {
     const h = (e: Event) => setNewPl({ song: (e as CustomEvent).detail?.song });
     window.addEventListener('nt:new-playlist', h);
     return () => window.removeEventListener('nt:new-playlist', h);
   }, []);
+  useEffect(() => {
+    window.addEventListener('nt:canvas-source-dropped', closeQueue);
+    return () => window.removeEventListener('nt:canvas-source-dropped', closeQueue);
+  }, [closeQueue]);
+  useEffect(() => {
+    const open = () => { canvasQueueRequested.current = !hasSong; setQueueOpen(true); };
+    window.addEventListener('nt:canvas-open-queue', open);
+    return () => window.removeEventListener('nt:canvas-open-queue', open);
+  }, [hasSong]);
 
   if (!app.ready) return <StartupLoading fullscreen />;
   if (!app.me) return <><Login /><Toasts /></>;
@@ -74,22 +98,24 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      <ReleaseNotice userId={app.me.id} />
+      <PlaylistQueueDrop />
       <KeyboardViewport />
       <div id="app">
         <aside>
           <div className="brand"><span className="logo" />Nestune</div>
           {NAV.map(([href, label, icon]) => (
-            <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/chat' && unread ? `聊天，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/chat' && unread > 0 && <UnreadCount count={unread} />}</Link>
+            <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
           ))}
           <div className="lab">我的歌单<button aria-label="新建歌单" onClick={() => setNewPl({})}><Icon n="plus" s={16} /></button></div>
-          <Link href="/library" className="pl">
+          <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
             <span className="favorites-cover" aria-hidden="true"><Icon n="heart" s={16} /></span>
             <span className="t1">我喜欢的音乐</span>
-          </Link>
+          </Link></CanvasSource>
           {app.playlists.map(p => (
-            <Link key={p.id} href={`/my/${p.id}`} className={`pl ${path === `/my/${p.id}` ? 'on' : ''}`}>
+            <CanvasSource key={p.id} source={{ kind: 'playlist', playlistId: String(p.id), name: p.name, cover: p.cover }}><Link href={`/my/${p.id}`} className={`pl ${path === `/my/${p.id}` ? 'on' : ''}`} onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: String(p.id) })); } }}>
               <Cover src={p.cover} seed={`pl${p.id}`} /><span className="t1">{p.name}</span>
-            </Link>
+            </Link></CanvasSource>
           ))}
           <div className="sp" />
           <Link href="/settings" className={`me ${path === '/settings' ? 'on' : ''}`}>
@@ -101,10 +127,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </div>
       <nav id="tabbar">
         {[...NAV, ['/my', '我的', 'user'] as const].map(([href, label, icon]) => (
-          <Link key={href} href={href} className={on(href) ? 'on' : ''} aria-label={href === '/chat' && unread ? `聊天，${unread} 条未读` : undefined}><Icon n={icon} s={21} />{label}{href === '/chat' && unread > 0 && <UnreadCount count={unread} />}</Link>
+          <Link key={href} href={href} className={on(href) ? 'on' : ''} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={21} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
         ))}
       </nav>
-      <PlayerBar lyricsPinned={lyricsPinned} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && !app.nowOpen} onToggleQueue={toggleQueue} onDetails={() => { closeQueue(); app.setNowOpen(true); }} />
+      <PlayerBar lyricsPinned={lyricsPinned || desktopLyrics.enabled} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && !app.nowOpen} onToggleQueue={toggleQueue} onDetails={() => { closeQueue(); app.setNowOpen(true); }} />
       <NowPlaying lyricsPinned={lyricsPinned} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && app.nowOpen} onToggleQueue={toggleQueue} />
       {queueOpen && app.current && <QueuePopover inPlayer={app.nowOpen} onClose={closeQueue} />}
       <SongMenu onNewPlaylist={s => setNewPl({ song: s })} />

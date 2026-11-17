@@ -1,0 +1,16 @@
+.volume-popover{position:fixed;z-index:75;width:224px;padding:10px 12px;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--text);box-shadow:var(--shadow-s)}
+.volume-popover-heading{display:flex;align-items:center;justify-content:space-between;font-size:12px;padding-left:4px}
+.volume-popover-heading .ib{width:26px;height:26px}
+.volume-inline{display:flex;align-items:center;gap:8px;width:200px;max-width:100%;color:var(--text)}
+.volume-inline .ib{width:30px;height:34px;flex:none;color:var(--sub)}
+.volume-inline input{min-width:40px;flex:1;height:30px;accent-color:var(--text);cursor:pointer}
+.volume-inline output{font-size:11px;color:var(--sub);font-variant-numeric:tabular-nums;width:34px;text-align:right}
+.lyrics-native-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.lyrics-native-actions .btn{white-space:nowrap}
+.pinned-lyrics-status{position:absolute;bottom:calc(100% + 6px);max-width:min(440px,100%);padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;color:var(--sub);font-size:12px;pointer-events:auto}
+.release-notice{position:fixed;right:28px;bottom:110px;z-index:54;display:flex;gap:12px;width:min(400px,calc(100% - 32px));padding:22px;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);color:var(--text)}
+.release-notice h2{font-size:19px;margin:5px 0 7px;letter-spacing:-.02em}.release-notice p{margin:0 0 16px}.release-icon{display:grid;place-items:center;flex:none;width:40px;height:40px;border-radius:13px;background:var(--soft)}
+.release-dismiss{position:absolute;right:8px;top:8px;width:24px;height:24px;color:var(--sub)}
+.release-notes{overflow-y:auto;min-height:0;line-height:1.7;font-size:14px;padding:0 3px 4px}.release-notes>h3{font-size:16px;margin:22px 0 7px}.release-notes p{margin:0 0 12px}.release-downloads{display:flex;gap:10px;flex-wrap:wrap;margin:15px 0}.release-sheet{width:min(100%,520px)}
+@media(max-width:860px){.release-notice{right:16px;bottom:calc(148px + env(safe-area-inset-bottom));padding:18px;gap:10px}}
+@media(max-width:480px){.set:has(.volume-inline){flex-wrap:wrap;gap:10px}.set>.volume-inline{width:100%}.volume-inline input{min-height:40px}}

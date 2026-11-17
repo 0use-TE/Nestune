@@ -8,6 +8,7 @@ import type { PlaylistLite, Song } from '@/lib/types';
 import { Hero } from '@/components/Hero';
 import { Icon } from '@/components/Icon';
 import { Empty, Loading, SongList } from '@/components/SongList';
+import { CanvasSource } from '@/components/CanvasSource';
 
 export default function MyPlaylistPage() {
   const { id } = useParams<{ id: string }>();
@@ -20,6 +21,14 @@ export default function MyPlaylistPage() {
   const [sharing, setSharing] = useState(false);
   const [preparingShare, setPreparingShare] = useState(false);
   const [name, setName] = useState('');
+  const [addingQueue, setAddingQueue] = useState(false);
+  async function addToQueue() {
+    if (addingQueue) return;
+    setAddingQueue(true);
+    try { await app.appendMany(songs); window.dispatchEvent(new Event('nt:canvas-open-queue')); }
+    catch (error) { app.toast(error instanceof Error ? error.message : '添加歌单失败'); }
+    finally { setAddingQueue(false); }
+  }
 
   useEffect(() => {
     setPl(null); setErr('');
@@ -58,13 +67,16 @@ export default function MyPlaylistPage() {
   if (!pl) return <Loading />;
   return (
     <>
+      <CanvasSource queue source={{ kind: 'playlist', playlistId: String(pl.id), name: pl.name, cover: songs[0]?.cover }}>
       <Hero cover={songs[0]?.cover} seed={`pl${pl.id}`} tag="我的歌单" title={pl.name} sub={`${songs.length} 首歌曲`}>
         <button className="btn light" onClick={() => app.play(songs)} disabled={!songs.length}><Icon n="play" s={16} />播放全部</button>
+        <button className="btn ghost" onClick={() => void addToQueue()} disabled={!songs.length || addingQueue}>{addingQueue ? <Loading inline label="正在添加歌单" /> : <Icon n="plus" s={16} />}加入播放列表</button>
         <button className="btn ghost" onClick={() => setEditing(true)}>重命名</button>
         <button className="btn ghost" disabled={preparingShare} onClick={prepareShare}>{preparingShare ? <Loading inline label="正在准备分享" /> : '分享'}</button>
         <button className="btn ghost" aria-pressed={!!pl.isPublic} onClick={() => publish(!pl.isPublic).catch(e => app.toast(e.message))}>{pl.isPublic ? '公开' : '私密'}</button>
         <button className="btn ghost" onClick={remove}><Icon n="trash" s={16} />删除</button>
       </Hero>
+      </CanvasSource>
       {sharing && <SharePlaylist playlist={pl} onClose={() => setSharing(false)} />}
       {editing && (
         <form className="row" style={{ marginTop: 20 }} onSubmit={e => { e.preventDefault(); rename(); }}>
