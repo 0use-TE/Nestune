@@ -35,8 +35,8 @@
 | 平台 | 下载 |
 | --- | --- |
 | Windows x64 · 1.2.1 | [安装版](https://nestune.0use.net:8443/api/client-updates/windows/121) · [便携版](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-Windows-x64-Tauri.exe) |
-| macOS Universal · 原生 1.0.0 | [DMG](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-macOS-universal.dmg) · [App ZIP](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-macOS-universal.app.zip) |
-| Linux x86-64 · 原生 1.0.0 | [AppImage](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Linux-x64.AppImage) · [DEB](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Linux-amd64.deb) |
+| macOS Universal · 1.2.1 | [DMG](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-macOS-universal.dmg) · [App ZIP](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-macOS-universal.app.zip) |
+| Linux x86-64 · 1.2.1 | [AppImage](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-Linux-x64.AppImage) · [DEB](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-Linux-amd64.deb) |
 | Android 7+ · 1.2.1 | [通用 APK](https://nestune.0use.net:8443/api/client-updates/android/7) |
 
 客户端连接在线服务；网页功能更新无需重新打包，系统悬浮歌词需安装新版 Windows 或 Android 客户端。安装、系统依赖及签名说明见 [clients/README.md](clients/README.md)。[当前安装包校验](docs/releases/v1.2.1.md) · [下载与历史版本](https://nestune.0use.net:8443/downloads) · [更新记录](CHANGELOG.md)

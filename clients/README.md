@@ -1,6 +1,6 @@
 # Nestune installable clients
 
-Current Windows and Android installers, checksums and validation notes are listed in [V1.2.1](../docs/releases/v1.2.1.md). Linux and macOS currently use the V1.0.0 native packages linked below.
+Current Windows, Android, Linux and macOS installers, checksums and validation notes are listed in [V1.2.1](../docs/releases/v1.2.1.md). All four platforms are available on the [NAS download page](https://nestune.0use.net:8443/downloads).
 
 Windows and Android **1.2.1** are published on the NAS (Windows code **121**, Android code **7**). Both use the new HTTPS origin and support word timing and blue/yellow flow in their system lyrics windows. The Android APK uses the original release certificate. See [release validation](../docs/releases/v1.2.1.md).
 
@@ -30,9 +30,9 @@ For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rus
 
 Windows 1.1.1 fixes locking in the transparent always-on-top lyrics window: locking fixes its position and keeps the unlock, background and close buttons interactive, including when restoring a lock saved by 1.1.0. Locked controls remain visible. The main player also offers unlock and close actions. Web volume and playlist queue controls use the live web release. Run `npm test` in `clients/desktop` for the renderer checks. A debug Windows build also supports `--lyrics-controls-qa`: it uses a hidden local window, exercises the actual native commands and checks that `WS_EX_TRANSPARENT` stays disabled, then writes `%TEMP%/Nestune-controls-qa-<pid>.json` and exits. It never sends desktop input or signs in.
 
-## Linux x64 and macOS universal — Tauri V1.0.0
+## Linux x64 and macOS universal — Tauri V1.2.1
 
-The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Download the packages from a successful job's **Artifacts** section. Artifacts are retained for 30 days. Verified V1.0.0 packages are also published permanently in the [GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0), with a combined SHA-256 checksum file.
+The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Version 1.2.1 is published on the [NAS download page](https://nestune.0use.net:8443/downloads), including AppImage/DEB for Linux x64 and DMG/App ZIP for macOS Universal. CI artifacts are retained for 30 days. Older packages remain available in the NAS history and the [V1.0.0 GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
 
 | Platform | Packages | Checks |
 | --- | --- | --- |
@@ -41,7 +41,7 @@ The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desk
 
 Each artifact includes `SHA256SUMS.txt`. These checks do not replace real-device music playback testing. The macOS build is not Developer ID signed or Apple notarized, so Gatekeeper may require allowing the app in System Settings before it can run.
 
-On Arch Linux, use the AppImage. Enable its executable permission first, for example `chmod +x Nestune-1.0.0-Linux-x64.AppImage`. AppImage FUSE mounting requires the distribution's FUSE 2 compatibility library (`fuse2` on Arch); `--appimage-extract-and-run` is an alternative. The AppImage includes GStreamer media libraries for audio playback, which makes it larger than the Windows installer. The deb package declares additional GStreamer dependencies. The desktop uses the platform webview; features such as browser access to a local music folder depend on that webview's support.
+On Arch Linux, use the AppImage. Enable its executable permission first, for example `chmod +x Nestune-1.2.1-Linux-x64.AppImage`. AppImage FUSE mounting requires the distribution's FUSE 2 compatibility library (`fuse2` on Arch); `--appimage-extract-and-run` is an alternative. The AppImage includes GStreamer media libraries for audio playback, which makes it larger than the Windows installer. The deb package declares additional GStreamer dependencies. The desktop uses the platform webview; features such as browser access to a local music folder depend on that webview's support.
 
 To build on Linux, install Tauri's [Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux), GStreamer's base/good plugins and libav plugin. From `clients/desktop/`, run:
 
