@@ -4,7 +4,7 @@ import { pipeline } from 'node:stream/promises';
 import { dir } from './config';
 import { all, now, one, run, settings } from './db';
 import { fail } from './http';
-import { assertMediaUrl, mediaUrl } from './netease';
+import { assertMediaUrl, downloadUrl, mediaUrl, type MediaPurpose } from './netease';
 
 const MIME: Record<string, string> = { mp3: 'audio/mpeg', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav', ogg: 'audio/ogg' };
 export const mimeOf = (ext: string) => MIME[ext] || 'application/octet-stream';
@@ -42,8 +42,8 @@ export function serveFile(req: Request, file: string, mime: string, headers: Rec
 /* ---------- cache ---------- */
 const cacheFile = (id: string, level: string, ext: string) => dir('cache', `${id}-${level}.${ext}`);
 
-export async function fetchSourceAudio(id: string, level: string, signal: AbortSignal) {
-  const media = await mediaUrl(id, level);
+export async function fetchSourceAudio(id: string, level: string, signal: AbortSignal, purpose: MediaPurpose = 'playback') {
+  const media = await (purpose === 'download' ? downloadUrl(id, level) : mediaUrl(id, level));
   const ext = safeExt(media.type);
   let url = media.url;
   for (let hop = 0; hop < 5; hop++) {

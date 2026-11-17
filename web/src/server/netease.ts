@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { parseLrc } from '@/lib/lyrics';
 import { dir } from './config';
-import { fail } from './http';
+import { fail, HttpError } from './http';
 import { accessFromPrivilege, type Access } from './quality';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -39,13 +39,18 @@ async function call(name: string, params: Record<string, unknown> = {}, cookie: 
   try {
     const b = (await upstream()[name]({ ...params, cookie, timeout: 20000 })).body;
     if (!b || (b.code && b.code !== 200 && ![800, 801, 802, 803].includes(b.code))) {
-      throw fail(b?.code === 301 ? 401 : 502, b?.code === 301 ? '音源登录已失效，请管理员重新扫码' : '音源暂时不可用，请稍后重试');
+      throw sourceError(b?.code);
     }
     return b;
   } catch (e: any) {
-    if (e?.status) throw e;
-    throw fail(502, '音源请求失败，请稍后重试');
+    if (e instanceof HttpError) throw e;
+    throw sourceError(e?.body?.code);
   }
+}
+function sourceError(code: unknown) {
+  if (Number(code) === 301) return fail(401, '音源登录已失效，请管理员重新扫码', 'source_login_expired');
+  if (Number(code) === -460) return fail(503, '音源暂时触发网络风控，请稍后重试', 'source_risk_control');
+  return fail(502, '音源请求失败，请稍后重试', 'source_request_failed');
 }
 const withLogin = (name: string, params: Record<string, unknown>) => {
   const s = session();
@@ -255,16 +260,24 @@ export function assertMediaUrl(raw: string) {
       !MEDIA_HOSTS.some(h => url.hostname === h || url.hostname.endsWith('.' + h))) throw fail(502, '上游返回了未识别的音频域名');
   return url;
 }
-export function mediaData(body: any) {
+export type MediaPurpose = 'playback' | 'download';
+export function mediaData(body: any, purpose: MediaPurpose = 'playback') {
   const d = Array.isArray(body?.data) ? body.data[0] : body?.data;
+  if (!d || typeof d !== 'object') throw fail(502, '音源返回的音频信息无效，请稍后重试', 'source_invalid_response');
   if (!d?.url || d.freeTrialInfo || d.freeTrialPrivilege?.resConsumable || d.code < 0) {
+    if (purpose === 'download') throw fail(403, '当前音源账号没有这首歌的下载权限，可以尝试在线播放', 'download_no_access');
     throw fail(403, '当前音源账号没有这首歌的完整播放权限（会员、购买或版权限制）', 'no_access');
   }
   assertMediaUrl(d.url);
   return d as { url: string; level?: string; type?: string; size?: number; br?: number };
 }
 export async function mediaUrl(id: string, level: string) {
-  return mediaData(await withLogin('song_download_url_v1', { id, level }));
+  // Playback and download rights differ. Use the authenticated player endpoint;
+  // WEAPI works without the library's separately bootstrapped XEAPI public key.
+  return mediaData(await withLogin('song_url_v1', { id, level, crypto: 'weapi', unblock: false }));
+}
+export async function downloadUrl(id: string, level: string) {
+  return mediaData(await withLogin('song_download_url_v1', { id, level }), 'download');
 }
 export async function available(id: string) {
   try {
