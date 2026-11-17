@@ -1,26 +1,27 @@
 # Nestune installable clients
 
-Current Windows, Android, Linux and macOS installers, checksums and validation notes are listed in [V1.2.1](../docs/releases/v1.2.1.md). All four platforms are available on the [NAS download page](https://nestune.0use.net:8443/downloads).
+Current desktop installers, checksums and validation notes are listed in [V1.2.2](../docs/releases/v1.2.2.md). Android remains [V1.2.1](../docs/releases/v1.2.1.md). All four platforms are available on the [NAS download page](https://nestune.0use.net:8443/downloads).
 
-Windows and Android **1.2.1** are published on the NAS (Windows code **121**, Android code **7**). Both use the new HTTPS origin and support word timing and blue/yellow flow in their system lyrics windows. The Android APK uses the original release certificate. See [release validation](../docs/releases/v1.2.1.md).
+Desktop **1.2.2** is published on the NAS: Windows x64/ARM64 installers and portable executables, Linux x64 AppImage/DEB and macOS Universal DMG/App ZIP. Android remains **1.2.1 / code 7** with the original release certificate. All clients use the new HTTPS origin. See [desktop release validation](../docs/releases/v1.2.2.md).
 
 The clients open `https://nestune.0use.net:8443/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
 See the [NAS download archive](https://nestune.0use.net:8443/downloads) and [migration guide](https://nestune.0use.net:8443/downloads?from=music). Installers published before the move are listed as historical packages.
 
-## Windows x64 — Tauri V1.2.1
+## Windows x64 and ARM64 — Tauri V1.2.2
 
 `desktop/` is the Tauri 2 client. Build on Windows with the x64 MSVC Rust toolchain, Microsoft C++ Build Tools and Node.js installed:
 
 ```powershell
-./clients/build-tauri-windows.ps1
+./clients/build-tauri-windows.ps1 -Architecture both
 ```
 
-The script uses the npm and Cargo lockfiles and writes these files to `releases/1.2.1-tauri/` (git-ignored):
+The script uses the npm and Cargo lockfiles and writes these files to `releases/1.2.2-tauri/` (git-ignored):
 
-- `Nestune-1.2.1-Windows-x64-Tauri-Setup.exe`: per-user NSIS installer with Simplified Chinese and English, shortcuts and uninstaller.
-- `Nestune-1.2.1-Windows-x64-Tauri.exe`: portable executable; requires the Microsoft Edge WebView2 runtime.
-- `SHA256SUMS.txt`: SHA-256 checksums for both executables.
+- `Nestune-1.2.2-Windows-x64-Tauri-Setup.exe`: per-user NSIS installer with Simplified Chinese and English, shortcuts and uninstaller.
+- `Nestune-1.2.2-Windows-x64-Tauri.exe`: portable executable; requires the Microsoft Edge WebView2 runtime.
+- ARM64 uses the same filenames with `arm64` in place of `x64`. Install the `aarch64-pc-windows-msvc` Rust target and the Visual Studio MSVC ARM64 libraries first. Use `-Architecture x64` or `-Architecture arm64` to build one architecture.
+- `SHA256SUMS.txt`: SHA-256 checksums for all generated executables.
 
 The installer downloads WebView2 only when it is missing. The browser engine and the NAS server are not bundled. The app has a native window and application icon, remembers the login in its own persistent WebView2 profile, and focuses the existing window when opened again. The older .NET client's login profile is not migrated; sign in once in the Tauri client. Web updates appear without rebuilding the client. An internet connection is required.
 
@@ -30,9 +31,9 @@ For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rus
 
 Windows 1.1.1 fixes locking in the transparent always-on-top lyrics window: locking fixes its position and keeps the unlock, background and close buttons interactive, including when restoring a lock saved by 1.1.0. Locked controls remain visible. The main player also offers unlock and close actions. Web volume and playlist queue controls use the live web release. Run `npm test` in `clients/desktop` for the renderer checks. A debug Windows build also supports `--lyrics-controls-qa`: it uses a hidden local window, exercises the actual native commands and checks that `WS_EX_TRANSPARENT` stays disabled, then writes `%TEMP%/Nestune-controls-qa-<pid>.json` and exits. It never sends desktop input or signs in.
 
-## Linux x64 and macOS universal — Tauri V1.2.1
+## Linux x64 and macOS universal — Tauri V1.2.2
 
-The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Version 1.2.1 is published on the [NAS download page](https://nestune.0use.net:8443/downloads), including AppImage/DEB for Linux x64 and DMG/App ZIP for macOS Universal. CI artifacts are retained for 30 days. Older packages remain available in the NAS history and the [V1.0.0 GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
+The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desktop.yml) builds on native Ubuntu 22.04 and macOS 15 runners. It runs when desktop sources change on `main`, and can also be started with **Run workflow**, selecting both platforms or just Linux/macOS. Version 1.2.2 is published on the [NAS download page](https://nestune.0use.net:8443/downloads), including AppImage/DEB for Linux x64 and DMG/App ZIP for macOS Universal. CI artifacts are retained for 30 days. Older packages remain available in the NAS history and the [V1.0.0 GitHub Release](https://github.com/0use-TE/Nestune/releases/tag/v1.0.0).
 
 | Platform | Packages | Checks |
 | --- | --- | --- |
@@ -41,7 +42,7 @@ The [desktop workflow](https://github.com/0use-TE/Nestune/actions/workflows/desk
 
 Each artifact includes `SHA256SUMS.txt`. These checks do not replace real-device music playback testing. The macOS build is not Developer ID signed or Apple notarized, so Gatekeeper may require allowing the app in System Settings before it can run.
 
-On Arch Linux, use the AppImage. Enable its executable permission first, for example `chmod +x Nestune-1.2.1-Linux-x64.AppImage`. AppImage FUSE mounting requires the distribution's FUSE 2 compatibility library (`fuse2` on Arch); `--appimage-extract-and-run` is an alternative. The AppImage includes GStreamer media libraries for audio playback, which makes it larger than the Windows installer. The deb package declares additional GStreamer dependencies. The desktop uses the platform webview; features such as browser access to a local music folder depend on that webview's support.
+On Arch Linux, use the AppImage. Enable its executable permission first, for example `chmod +x Nestune-1.2.2-Linux-x64.AppImage`. AppImage FUSE mounting requires the distribution's FUSE 2 compatibility library (`fuse2` on Arch); `--appimage-extract-and-run` is an alternative. The AppImage includes GStreamer media libraries for audio playback, which makes it larger than the Windows installer. The deb package declares additional GStreamer dependencies. The desktop uses the platform webview; features such as browser access to a local music folder depend on that webview's support.
 
 To build on Linux, install Tauri's [Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux), GStreamer's base/good plugins and libav plugin. From `clients/desktop/`, run:
 
@@ -99,6 +100,14 @@ The script writes the public certificate fingerprint to `../web/public/.well-kno
 The manually dispatched `android-smoke.yml` workflow checks a selected Android build on an Android 15 emulator: real production HTTPS startup, the restricted native media bridge, hardware back interception, MediaSession metadata/state and pause/next/seek callbacks. It signs only temporary test APK copies using an ephemeral CI key; the distributed release still uses the private local release key. The probe does not sign in or modify user playlists and messages.
 
 
+## Desktop tray
+
+Windows, Linux and macOS 1.2.2 provide a native tray/menu-bar icon. Closing the main window hides it and keeps playback alive. The menu opens or hides the main window, controls play/pause and previous/next tracks, toggles the native lyrics window and explicitly exits. Windows left-click restores the window; macOS left-click opens the menu and the Dock icon also restores the window. Playback actions use the existing shared-room/player commands.
+
+Linux requires a StatusNotifierWatcher/AppIndicator host in the desktop panel. If no host is available, closing exits normally so the application cannot become unreachable. The DEB declares the AppIndicator dependency; AppImage bundles the tray libraries.
+
+Debug builds accept `--tray-qa` to register the real native tray and check close, hide, restore, reopen and menu exit using an isolated off-screen window. CI runs it on Linux and macOS; Windows is checked locally.
+
 ## In-app updates
 
 Settings → 关于 provides a manual check for web and Android updates. Dismissing a web update hides its banner while keeping the waiting service worker available from Settings. Web updates require an explicit page reload. Android builds 4 and later query their installed package version through the origin-restricted native bridge and downloads release APKs through Android DownloadManager. The user opens the completion notification to install with Android's normal confirmation; no silent installation is attempted. Older Android shells provide a copyable download URL until upgraded once.
@@ -110,3 +119,7 @@ The public archive reads `data/client-releases/downloads.json`. After verifying 
 Mobile overlays use the visual viewport for keyboard-safe sheets. Android 11+ additionally applies system-bar and IME insets to the native WebView; earlier Android versions use resize mode.
 
 Windows releases use `windows-N.exe` and `windows.json` in the same server release store. The Windows metadata has the same version, versionCode, size and sha256 fields; `/api/client-updates/windows/N` is a public Range-capable download. The update manifest points directly to these server endpoints.
+
+Windows ARM64 updates use `windows-arm64-N.exe` and `windows-arm64.json`. The native bridge exposes its compiled architecture, and the web client requests `/api/client-updates?windows_arch=arm64`; the returned download includes `?arch=arm64`. Existing x64 URLs and metadata remain compatible.
+
+Web release notes are maintained in `web/src/lib/release-notes.ts`. Settings → About, the new-release announcement and the waiting-update prompt open the same history. `/api/release-notes` is uncached so an older open page can read new changes before activating its waiting worker.
