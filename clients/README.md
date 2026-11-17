@@ -1,10 +1,10 @@
 # Nestune installable clients
 
-Current Windows and Android installers, checksums and validation notes are listed in [V1.1.0](../docs/releases/v1.1.0.md). Linux and macOS currently use the V1.0.0 native packages linked below.
+Current Windows and Android installers, checksums and validation notes are listed in [V1.1.1](../docs/releases/v1.1.1.md). Linux and macOS currently use the V1.0.0 native packages linked below.
 
 The clients open `https://music.0use.net/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
-## Windows x64 — Tauri V1.1.0
+## Windows x64 — Tauri V1.1.1
 
 `desktop/` is the Tauri 2 client. Build on Windows with the x64 MSVC Rust toolchain, Microsoft C++ Build Tools and Node.js installed:
 
@@ -12,10 +12,10 @@ The clients open `https://music.0use.net/` and keep account and music data on th
 ./clients/build-tauri-windows.ps1
 ```
 
-The script uses the npm and Cargo lockfiles and writes these files to `releases/1.1.0-tauri/` (git-ignored):
+The script uses the npm and Cargo lockfiles and writes these files to `releases/1.1.1-tauri/` (git-ignored):
 
-- `Nestune-1.1.0-Windows-x64-Tauri-Setup.exe`: per-user NSIS installer with Simplified Chinese and English, shortcuts and uninstaller.
-- `Nestune-1.1.0-Windows-x64-Tauri.exe`: portable executable; requires the Microsoft Edge WebView2 runtime.
+- `Nestune-1.1.1-Windows-x64-Tauri-Setup.exe`: per-user NSIS installer with Simplified Chinese and English, shortcuts and uninstaller.
+- `Nestune-1.1.1-Windows-x64-Tauri.exe`: portable executable; requires the Microsoft Edge WebView2 runtime.
 - `SHA256SUMS.txt`: SHA-256 checksums for both executables.
 
 The installer downloads WebView2 only when it is missing. The browser engine and the NAS server are not bundled. The app has a native window and application icon, remembers the login in its own persistent WebView2 profile, and focuses the existing window when opened again. The older .NET client's login profile is not migrated; sign in once in the Tauri client. Web updates appear without rebuilding the client. An internet connection is required.
@@ -24,7 +24,7 @@ The webview stays on the music HTTPS origin; external HTTPS links open in the sy
 
 For development, run `npm ci` and `npm run dev` from `clients/desktop/`. The Rust shell is separate from the NAS-backed Next.js app; `frontendDist` points to the bundled local lyrics page, while `HOME` and the trusted origin in `src/lib.rs` select the online music application.
 
-Windows 1.1.0 adds a separate transparent always-on-top lyrics window, drag positioning, translation, click-through locking, a background toggle, and position memory. Web volume and playlist queue controls use the live web release. Run `npm test` in `clients/desktop` for the renderer checks.
+Windows 1.1.1 fixes locking in the transparent always-on-top lyrics window: locking fixes its position and keeps the unlock, background and close buttons interactive, including when restoring a lock saved by 1.1.0. Locked controls remain visible. The main player also offers unlock and close actions. Web volume and playlist queue controls use the live web release. Run `npm test` in `clients/desktop` for the renderer checks. A debug Windows build also supports `--lyrics-controls-qa`: it uses a hidden local window, exercises the actual native commands and checks that `WS_EX_TRANSPARENT` stays disabled, then writes `%TEMP%/Nestune-controls-qa-<pid>.json` and exits. It never sends desktop input or signs in.
 
 ## Linux x64 and macOS universal — Tauri V1.0.0
 
