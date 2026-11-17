@@ -1,14 +1,14 @@
 # Nestune installable clients
 
-Current Windows and Android installers, checksums and validation notes are listed in [V1.1.1](../docs/releases/v1.1.1.md). Linux and macOS currently use the V1.0.0 native packages linked below.
+Current Windows and Android installers, checksums and validation notes are listed in [V1.2.1](../docs/releases/v1.2.1.md). Linux and macOS currently use the V1.0.0 native packages linked below.
 
-The next native build uses **1.2.1** (Android code **7**). Word timing and varied blue/yellow flow are implemented in Windows local HTML and Android native text spans; publishing the new packages is separate from the live Web 1.2.1 update. See [build validation](../docs/releases/v1.2.1.md).
+Windows and Android **1.2.1** are published on the NAS (Windows code **121**, Android code **7**). Both use the new HTTPS origin and support word timing and blue/yellow flow in their system lyrics windows. The Android APK uses the original release certificate. See [release validation](../docs/releases/v1.2.1.md).
 
 The clients open `https://nestune.0use.net:8443/` and keep account and music data on the NAS. Web changes use the existing PWA release flow; native wrapper changes require a new package.
 
 See the [NAS download archive](https://nestune.0use.net:8443/downloads) and [migration guide](https://nestune.0use.net:8443/downloads?from=music). Installers published before the move are listed as historical packages.
 
-## Windows x64 — Tauri V1.2.1 build source
+## Windows x64 — Tauri V1.2.1
 
 `desktop/` is the Tauri 2 client. Build on Windows with the x64 MSVC Rust toolchain, Microsoft C++ Build Tools and Node.js installed:
 
@@ -68,7 +68,7 @@ Run `./build-windows.ps1` with the Inno Setup compiler available. Compiler and b
 
 The installer has no public Windows code-signing certificate; Windows may show an unknown-publisher notice. It is not an offline music client.
 
-## Android — Tauri V1.2.1 build source
+## Android — Tauri V1.2.1
 
 The Android client uses the same Rust shell in `desktop/`, with `tauri.android.conf.json` setting the Android package to `net.ouse.nestune`. It requires Android 7.0+ and the system Android WebView; a TWA-compatible browser is no longer required. The app opens the live HTTPS music site and requires an internet connection. Web changes appear without reinstalling; native shell changes require a new APK. A native Android media playback foreground service publishes track metadata and play/pause/previous/next/seek controls to the system media panel. A main-frame-only WebMessage listener restricted to the music HTTPS origin connects it to the web player. Android back first dismisses the queue or player overlay before navigating the underlying page. These features still require physical-device playback testing across manufacturers.
 

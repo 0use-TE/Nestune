@@ -29,17 +29,17 @@
 - 播放与下载权限分开判断，连接错误提供错误码和请求编号。
 - 网易云与 QQ 音乐双源搜索、同录音合并，支持优先音源和保留进度的手动切换。
 - 逐字歌词以蓝黄流光扫色，每句随机配色路径；支持播放器、应用内浮窗和浏览器画中画。
-- 原生 1.2.1 构建源码已包含 Windows/安卓系统浮窗流光（安卓 code 7）；当前已发布安装包见下表。
+- Windows/安卓 1.2.1 已发布，系统浮窗支持流光歌词（安卓 code 7），入口使用 `nestune.0use.net:8443`。
 - 歌手完整曲库一键播放；Windows 歌词锁定位置后仍可解锁、切换背景和关闭。
 
 | 平台 | 下载 |
 | --- | --- |
-| Windows x64 · 1.1.1 | [安装版](https://nestune.0use.net:8443/api/client-updates/windows/111) |
+| Windows x64 · 1.2.1 | [安装版](https://nestune.0use.net:8443/api/client-updates/windows/121) · [便携版](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-Windows-x64-Tauri.exe) |
 | macOS Universal · 原生 1.0.0 | [DMG](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-macOS-universal.dmg) · [App ZIP](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-macOS-universal.app.zip) |
 | Linux x86-64 · 原生 1.0.0 | [AppImage](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Linux-x64.AppImage) · [DEB](https://github.com/0use-TE/Nestune/releases/download/v1.0.0/Nestune-1.0.0-Linux-amd64.deb) |
-| Android 7+ · 1.1.0 | [通用 APK](https://nestune.0use.net:8443/api/client-updates/android/6) |
+| Android 7+ · 1.2.1 | [通用 APK](https://nestune.0use.net:8443/api/client-updates/android/7) |
 
-客户端连接在线服务；网页功能更新无需重新打包，系统悬浮歌词需安装新版 Windows 或 Android 客户端。安装、系统依赖及签名说明见 [clients/README.md](clients/README.md)。[当前安装包校验](docs/releases/v1.1.1.md) · [更新记录](CHANGELOG.md)
+客户端连接在线服务；网页功能更新无需重新打包，系统悬浮歌词需安装新版 Windows 或 Android 客户端。安装、系统依赖及签名说明见 [clients/README.md](clients/README.md)。[当前安装包校验](docs/releases/v1.2.1.md) · [下载与历史版本](https://nestune.0use.net:8443/downloads) · [更新记录](CHANGELOG.md)
 
 展示截图来自当前产品，个人收藏及聊天使用演示内容。
 
