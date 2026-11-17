@@ -2,7 +2,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { del, get, post, put } from './api';
 import { isDeviceSong, useDeviceMusic } from './device-music';
-import type { Me, PlaylistLite, Song } from './types';
+import type { Me, MusicPreference, MusicProvider, PlaylistLite, Song } from './types';
+import { isOnlineId, musicSources, providerOf, sourceIds } from './music-ids';
 import { isCanvasMusic, type CanvasState, type CanvasTake } from './canvas-types';
 import { loadTint, seededTint } from './util';
 import { playbackVolume } from './volume';
@@ -25,7 +26,9 @@ export type AppCtx = {
   favIds: Set<string>; toggleFav: (s: Song) => void;
   deviceMusic: ReturnType<typeof useDeviceMusic>;
   saveDialog: Song | null; openSave: (s: Song) => void; closeSave: () => void;
-  audioInfo: { quality?: string; source?: string } | null;
+  audioInfo: { quality?: string; source?: string; provider?: MusicProvider; sourceId?: string } | null;
+  sourcePreference: MusicPreference; setSourcePreference: (value: MusicPreference) => void;
+  playbackSource: MusicPreference; setPlaybackSource: (value: MusicPreference) => void;
   playlists: PlaylistLite[]; reloadPlaylists: () => Promise<void>;
   queue: Song[]; index: number; current: Song | null; playing: boolean; loading: boolean; error: string | null;
   playbackMode: PlaybackMode; cyclePlaybackMode: () => void;
@@ -75,8 +78,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tint, setTint] = useState<[string, string]>(seededTint('0'));
   const [loadKey, setLoadKey] = useState(0);
   const [saveDialog, setSaveDialog] = useState<Song | null>(null);
-  const [audioInfo, setAudioInfo] = useState<{ quality?: string; source?: string } | null>(null);
+  const [audioInfo, setAudioInfo] = useState<AppCtx['audioInfo']>(null);
 
+  const [sourcePreference, setSourcePreferenceState] = useState<MusicPreference>('auto');
+  const sourcePreferenceRef = useRef<MusicPreference>('auto');
+  const [sourceOverride, setSourceOverride] = useState<{ id: string; provider: MusicPreference } | null>(null);
+  const sourceOverrideRef = useRef<typeof sourceOverride>(null);
   const [sharedQueue, setSharedQueue] = useState(false);
   const roomQueueHandler = useRef<((command: QueueCommand) => void | Promise<void>) | null>(null);
   const personalQueue = useRef<PersonalQueue | null>(null);
@@ -96,6 +103,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const current = index >= 0 ? queue[index] ?? null : null;
 
+  const playbackSource = sourceOverride && sourceOverride.id === current?.id ? sourceOverride.provider : 'auto';
+  const reloadAtPosition = useCallback(() => {
+    pendingSeek.current = audio.current?.currentTime || 0;
+    autoplay.current = !!audio.current && !audio.current.paused;
+    setLoadKey(k => k + 1);
+  }, []);
+  const setSourcePreference = useCallback((value: MusicPreference) => {
+    sourcePreferenceRef.current = value; setSourcePreferenceState(value); lsSet('nt-music-source', value);
+    reloadAtPosition();
+  }, [reloadAtPosition]);
+  const setPlaybackSource = useCallback((value: MusicPreference) => {
+    const id = live.current.queue[live.current.index]?.id; if (!id) return;
+    const next = { id, provider: value }; sourceOverrideRef.current = next; setSourceOverride(next); reloadAtPosition();
+  }, [reloadAtPosition]);
+
   /* ----- toast ----- */
   const toast = useCallback((text: string, kind?: ToastKind) => {
     const id = Date.now() + Math.random();
@@ -105,6 +127,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   /* ----- preferences ----- */
   useEffect(() => {
+    const preferred = lsGet('nt-music-source', 'auto');
+    if (preferred === 'auto' || preferred === 'qq' || preferred === 'netease') { sourcePreferenceRef.current = preferred; setSourcePreferenceState(preferred); }
     setThemeState(lsGet('nt-theme', 'auto') as Theme);
     setShowTrState(lsGet('nt-tr', '1') === '1');
     const savedVolume = playbackVolume(lsGet('nt-volume', '1'));
@@ -204,10 +228,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         preloaded.current = true;
         const { queue: q, index: i } = live.current;
         const nx = q[(i + 1) % q.length];
-        if (nx && !isDeviceSong(nx.id) && nx.id !== q[i]?.id) fetch(`/api/songs/${nx.id}/stream`, { headers: { Range: 'bytes=0-1' } }).catch(() => {});
+        if (nx && !isDeviceSong(nx.id) && nx.id !== q[i]?.id) fetch(`/api/songs/${nx.id}/stream?prefer=${sourcePreferenceRef.current}`,  { headers: { Range: 'bytes=0-1' } }).catch(() => {});
       }
     };
     const onPlaying = () => {
+      setClock(a.currentTime, dur());
       setPlaying(true); setLoading(false); failures.current = 0;
       if (!recorded.current) {
         recorded.current = true;
@@ -231,8 +256,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('playing', onPlaying);
-    a.addEventListener('pause', () => { if (!a.ended) setPlaying(false); });
-    a.addEventListener('waiting', () => setLoading(true));
+    a.addEventListener('pause', () => { setClock(a.currentTime, dur()); if (!a.ended) setPlaying(false); });
+    a.addEventListener('waiting', () => { setClock(a.currentTime, dur()); setLoading(true); });
     a.addEventListener('canplay', () => setLoading(false));
     a.addEventListener('loadedmetadata', onMeta);
     a.addEventListener('ended', () => {
@@ -273,15 +298,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       return () => { live = false; if (source) URL.revokeObjectURL(source); };
     }
-    a.src = `/api/songs/${current.id}/stream`;
     const sid = current.id;
-    fetch(`/api/songs/${sid}/stream`, { headers: { Range: 'bytes=0-0' } }).then(async r => {
-      if (live.current.queue[live.current.index]?.id !== sid) return;
-      if (r.ok) setAudioInfo({ quality: r.headers.get('x-audio-quality') || undefined, source: r.headers.get('x-audio-source') || undefined });
-      else { const j = await r.json().catch(() => ({})); if (j.error) { setError(j.error); setLoading(false); } }
-    }).catch(() => {});
-    if (autoplay.current) a.play().catch(() => { setLoading(false); setPlaying(false); });
-    else setPlaying(false);
+    const forced = sourceOverrideRef.current?.id === sid ? sourceOverrideRef.current.provider : 'auto';
+    const params = new URLSearchParams({ prefer: sourcePreferenceRef.current });
+    if (forced !== 'auto') params.set('source', forced);
+    const streamUrl = `/api/songs/${sid}/stream?${params}`;
+    const controller = new AbortController();
+    const shouldPlay = autoplay.current;
+    a.pause(); a.removeAttribute('src');
+    fetch(streamUrl, { headers: { Range: 'bytes=0-0' }, signal: controller.signal }).then(async r => {
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw Error(j.error || '无法加载歌曲'); }
+      await r.body?.cancel();
+      if (controller.signal.aborted) return;
+      const rawProvider = r.headers.get('x-music-provider');
+      const provider = rawProvider === 'qq' || rawProvider === 'netease' ? rawProvider : undefined;
+      const sourceId = r.headers.get('x-music-source-id') || undefined;
+      setAudioInfo({ quality: r.headers.get('x-audio-quality') || undefined, source: r.headers.get('x-audio-source') || undefined, provider, sourceId });
+      if (provider) {
+        params.set('source', provider);
+        try {
+          const ids = JSON.parse(r.headers.get('x-music-sources') || '[]');
+          const sources = Array.isArray(ids) ? ids.filter(x => isOnlineId(x?.id) && providerOf(x.id) === x.provider) : [];
+          const canonicalId = r.headers.get('x-recording-id') || sid;
+          setQueue(q => q.map(s => s.id === sid ? { ...s, sources, canonicalId } : s));
+          setFavIds(old => sourceIds({ ...current, sources, canonicalId }).some(id => old.has(id)) ? new Set([...old, ...sources.map(x => x.id), canonicalId]) : old);
+        } catch { /* Metadata headers are optional for older servers. */ }
+      }
+      a.src = `/api/songs/${sid}/stream?${params}`;
+      if (shouldPlay) a.play().catch(() => { setLoading(false); setPlaying(false); });
+      else setPlaying(false);
+    }).catch(e => { if (!controller.signal.aborted) { setError(e.message || '无法加载歌曲'); setLoading(false); setPlaying(false); } });
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadKey, current?.id, getFile]);
 
@@ -547,10 +594,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   /* ----- favourites ----- */
   const toggleFav = useCallback((s: Song) => {
     if (isDeviceSong(s.id)) return;
-    const had = favIds.has(s.id);
-    setFavIds(prevSet => { const n = new Set(prevSet); if (had) n.delete(s.id); else n.add(s.id); return n; });
+    const aliases = sourceIds(s);
+    const had = aliases.some(id => favIds.has(id));
+    setFavIds(prevSet => { const n = new Set(prevSet); for (const id of aliases) { if (had) n.delete(id); else n.add(id); } return n; });
     (had ? del(`/api/me/favorites/${s.id}`) : put(`/api/me/favorites/${s.id}`)).catch(e => {
-      setFavIds(prevSet => { const n = new Set(prevSet); if (had) n.add(s.id); else n.delete(s.id); return n; });
+      setFavIds(prevSet => { const n = new Set(prevSet); for (const id of aliases) { if (had) n.add(id); else n.delete(id); } return n; });
       toast(e.message);
     });
   }, [favIds, toast]);
@@ -559,6 +607,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value: AppCtx = useMemo(() => ({
     ready, me, setMe, loadSession, logout, favIds, toggleFav, deviceMusic, playlists, reloadPlaylists,
     saveDialog, openSave: (s: Song) => setSaveDialog(s), closeSave: () => setSaveDialog(null), audioInfo,
+    sourcePreference, setSourcePreference, playbackSource, setPlaybackSource,
     queue, index, current, playing, loading, error, playbackMode, volume, setVolume, toggleMute,
     play, toggle, next: () => next(), prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport,
     cyclePlaybackMode, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler,
@@ -566,7 +615,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     nowOpen, setNowOpen, menu, openMenu: (song, e) => setMenu({ song, x: e.clientX, y: e.clientY }), closeMenu: () => setMenu(null),
     toast, toasts, theme, setTheme, showTr, setShowTr, tint,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [volume, setVolume, toggleMute, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, appendMany, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
+  }), [sourcePreference, setSourcePreference, playbackSource, setPlaybackSource, volume, setVolume, toggleMute, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, appendMany, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

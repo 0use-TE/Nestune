@@ -29,7 +29,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         fun resume() { current?.refreshPermission() }
         fun dispose() { current?.let { it.remove(); it.context.unregisterComponentCallbacks(it) }; current = null }
     }
-    private data class Line(val time: Double, val text: String, val translation: String)
+    private data class Line(val time: Double, val text: String, val translation: String, val timing: JSONObject)
     private val preferences = context.getSharedPreferences("nestune_lyrics", Context.MODE_PRIVATE)
     private val manager = context.getSystemService(WindowManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
@@ -38,7 +38,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var panel = preferences.getBoolean("panel", false)
     private var pendingPermission = false
     private var root: LinearLayout? = null
-    private var textView: TextView? = null
+    private var textView: KaraokeLyricsText? = null
     private var translationView: TextView? = null
     private var titleView: TextView? = null
     private var toolbar: LinearLayout? = null
@@ -47,6 +47,8 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var title = "Nestune"
     private var lines = emptyList<Line>()
     private var plainText = ""
+    private var flowSeed = 0L
+    private var trackDuration = 0.0
     private var mediaTrack = ""
     private var position = 0.0
     private var playing = false
@@ -55,7 +57,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private val ticker = object : Runnable {
         override fun run() {
             if (!allowed()) { enabled = false; preferences.edit().putBoolean("enabled", false).apply(); remove(); emit(); return }
-            render(); if (root != null) handler.postDelayed(this, 100)
+            render(); if (root != null) handler.postDelayed(this, if (playing) 33 else 200)
         }
     }
     init { context.registerComponentCallbacks(this) }
@@ -86,6 +88,8 @@ class LyricsOverlay private constructor(private val context: Context) : android.
             "lyricsData" -> {
                 track = data.optString("id").take(160); title = data.optString("title").take(256)
                 plainText = data.optString("plainText").take(2048)
+                flowSeed = data.optLong("flowSeed")
+                trackDuration = data.optDouble("duration", 0.0)
                 val source = data.optJSONArray("lines")
                 val accepted = ArrayList<Line>(); var budget = 60000
                 for (i in 0 until min(source?.length() ?: 0, 1200)) {
@@ -94,7 +98,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
                     if (!time.isFinite() || time < 0 || time > 86400) continue
                     val text = line.optString("text").take(256); val translation = line.optString("tr").take(256)
                     budget -= text.length + translation.length + 40; if (budget < 0) break
-                    accepted.add(Line(time, text, translation))
+                    accepted.add(Line(time, text, translation, JSONObject(line.toString()).put("text", text)))
                 }
                 lines = accepted.sortedBy { it.time }; render()
             }
@@ -113,7 +117,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         val view = NativeMediaService.webView?.get() ?: return
         view.post {
             val url = android.net.Uri.parse(view.url ?: "")
-            if (url.scheme == "https" && url.host == "music.0use.net" && url.port in listOf(-1, 443))
+            if (NestuneOrigin.allows(url))
                 view.evaluateJavascript("window.dispatchEvent(new CustomEvent('nt:lyrics-state',{detail:${state()}}))", null)
         }
     }
@@ -159,7 +163,11 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         addTool(tool("锁定") { locked = true; preferences.edit().putBoolean("locked", true).apply(); updateFlags(); emit() })
         addTool(tool("关闭") { enabled = false; preferences.edit().putBoolean("enabled", false).apply(); remove(); emit() })
         toolbar = controls; view.addView(controls)
-        textView = label(22f, Color.WHITE, true).also { view.addView(it, LinearLayout.LayoutParams(-1, -2)) }
+        textView = KaraokeLyricsText(context).apply {
+            textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END; setTypeface(typeface, Typeface.BOLD)
+            setShadowLayer(dp(2).toFloat(), 0f, dp(1).toFloat(), Color.BLACK)
+        }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2)) }
         translationView = label(14f, 0xffeeede7.toInt()).also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
         titleView = label(10f, 0xffc5c3bc.toInt()).also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
         val width = min(metrics.widthPixels - dp(20), dp(560)).coerceAtLeast(dp(200))
@@ -212,14 +220,16 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         if (root == null) return
         val seconds = position + if (playing) (SystemClock.elapsedRealtime() - positionAt) / 1000.0 else 0.0
         var line: Line? = null
+        var nextTime = 0.0
         if (track == mediaTrack) {
             var low = 0; var high = lines.size
             while (low < high) { val middle = (low + high) ushr 1; if (lines[middle].time <= seconds) low = middle + 1 else high = middle }
-            line = lines.getOrNull(low - 1)
+            line = lines.getOrNull(low - 1); nextTime = lines.getOrNull(low)?.time ?: 0.0
         }
         val text = if (mediaTrack.isEmpty()) "暂无播放" else if (track != mediaTrack) "正在加载歌词" else
             line?.text?.ifEmpty { "间奏" } ?: if (lines.isNotEmpty()) "前奏" else plainText.lineSequence().firstOrNull { it.isNotBlank() } ?: "暂无歌词"
-        if (textView?.text?.toString() != text) textView?.text = text
+        if (line != null) textView?.render(line.timing, seconds, nextTime, trackDuration, flowSeed)
+        else textView?.clear(text)
         val translation = line?.translation ?: ""
         if (translationView?.text?.toString() != translation) translationView?.text = translation
         translationView?.visibility = if (translation.isEmpty()) View.GONE else View.VISIBLE

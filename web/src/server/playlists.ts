@@ -1,7 +1,8 @@
-import { all, now, one, run } from './db';
+import { all, db, now, one, run } from './db';
 import { fail } from './http';
 import { catalogSong } from './catalog';
 import { visibleSong } from './uploads';
+import { recordingAliases, recordingId, uniqueRecordings } from './recordings';
 
 type PRow = { id: number; user_id: number; name: string; description: string; created_at: number; updated_at: number; is_public: number };
 const MAX_PLAYLISTS = 100, MAX_SONGS = 1000;
@@ -13,10 +14,10 @@ function owned(userId: number, id: number) {
 }
 const shape = (p: PRow, viewer = p.user_id) => {
   const songs = all<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at DESC', p.id)
-    .map(row => visibleSong(viewer, JSON.parse(row.meta))).filter(Boolean);
+    .map(row => visibleSong(viewer, JSON.parse(row.meta))).filter((s): s is NonNullable<typeof s> => !!s);
   return {
     id: p.id, name: p.name, description: p.description, createdAt: p.created_at, updatedAt: p.updated_at,
-    trackCount: songs.length,
+    trackCount: uniqueRecordings(songs).length,
     cover: songs[0]?.cover ?? null, isPublic: !!p.is_public,
   };
 };
@@ -38,12 +39,12 @@ export function createPlaylist(userId: number, name: unknown, description?: unkn
 
 export function getPlaylist(userId: number, id: number) {
   const p = owned(userId, id);
-  const songs = all<{ meta: string; added_at: number }>('SELECT meta,added_at FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC', id)
+  const songs = all<{ meta: string; added_at: number }>('SELECT meta,added_at FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC,rowid ASC', id)
     .flatMap(r => {
       const song = visibleSong(userId, JSON.parse(r.meta));
       return song ? [{ ...song, addedAt: r.added_at }] : [];
     });
-  return { playlist: shape(p), songs };
+  return { playlist: shape(p), songs: uniqueRecordings(songs) };
 }
 
 export function updatePlaylist(userId: number, id: number, patch: { name?: unknown; description?: unknown; isPublic?: unknown }) {
@@ -78,9 +79,9 @@ export function sharedPlaylist(viewer: number, id: number) {
   const p = one<PRow>('SELECT * FROM playlists WHERE id=?', id);
   if (!p || !p.is_public) throw fail(404, '歌单未公开或已删除');
   const { person } = personProfile(viewer, p.user_id);
-  const songs = all<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC', id)
+  const songs = all<{ meta: string }>('SELECT meta FROM playlist_songs WHERE playlist_id=? ORDER BY added_at ASC,rowid ASC', id)
     .flatMap(row => { const song = visibleSong(viewer, JSON.parse(row.meta)); return song ? [song] : []; });
-  return { playlist: shape(p, viewer), songs, owner: person };
+  return { playlist: shape(p, viewer), songs: uniqueRecordings(songs), owner: person };
 }
 
 export function deletePlaylist(userId: number, id: number) {
@@ -91,15 +92,48 @@ export function deletePlaylist(userId: number, id: number) {
 export async function addSong(userId: number, id: number, songId: string) {
   owned(userId, id);
   if (one<{ n: number }>('SELECT COUNT(*) n FROM playlist_songs WHERE playlist_id=?', id)!.n >= MAX_SONGS) throw fail(400, `每个歌单最多 ${MAX_SONGS} 首`);
-  if (one('SELECT 1 x FROM playlist_songs WHERE playlist_id=? AND song_id=?', id, songId)) return { added: false };
+  if (recordingAliases(songId).some(alias => one('SELECT 1 x FROM playlist_songs WHERE playlist_id=? AND song_id=?', id, alias))) return { added: false };
   const meta = await catalogSong(userId, songId);
   run('INSERT OR IGNORE INTO playlist_songs(playlist_id,song_id,meta,added_at) VALUES(?,?,?,?)', id, songId, JSON.stringify(meta), now());
   run('UPDATE playlists SET updated_at=? WHERE id=?', now(), id);
   return { added: true };
 }
 
+export function favoriteSongs(userId: number) {
+  const rows = all<{ meta: string; created_at: number }>('SELECT meta,created_at FROM favorites WHERE user_id=? ORDER BY created_at DESC,rowid DESC', userId);
+  return rows.flatMap(row => {
+    const song = visibleSong(userId, JSON.parse(row.meta));
+    return song ? [{ ...song, favoritedAt: row.created_at }] : [];
+  });
+}
+
+export function addFavoritesToPlaylist(userId: number, id: number) {
+  const connection = db();
+  connection.exec('BEGIN IMMEDIATE');
+  try {
+    owned(userId, id);
+    const existing = all<{ song_id: string; added_at: number }>('SELECT song_id,added_at FROM playlist_songs WHERE playlist_id=?', id);
+    const known = new Set(existing.map(entry => recordingId(entry.song_id)));
+    const favorites = uniqueRecordings(favoriteSongs(userId));
+    const additions = favorites.filter(song => !known.has(recordingId(song.id)));
+    if (additions.length && existing.length + additions.length > MAX_SONGS) {
+      throw fail(400, `这个歌单最多容纳 ${MAX_SONGS} 首，当前还有 ${Math.max(0, MAX_SONGS - existing.length)} 个位置`);
+    }
+    const addedAt = Math.max(now(), ...existing.map(entry => entry.added_at));
+    for (const song of additions) {
+      run('INSERT INTO playlist_songs(playlist_id,song_id,meta,added_at) VALUES(?,?,?,?)', id, song.id, JSON.stringify(song), addedAt);
+    }
+    if (additions.length) run('UPDATE playlists SET updated_at=? WHERE id=?', addedAt, id);
+    connection.exec('COMMIT');
+    return { added: additions.length, skipped: favorites.length - additions.length };
+  } catch (error) {
+    connection.exec('ROLLBACK');
+    throw error;
+  }
+}
+
 export function removeSong(userId: number, id: number, songId: string) {
   owned(userId, id);
-  run('DELETE FROM playlist_songs WHERE playlist_id=? AND song_id=?', id, songId);
+  for (const alias of recordingAliases(songId)) run('DELETE FROM playlist_songs WHERE playlist_id=? AND song_id=?', id, alias);
   run('UPDATE playlists SET updated_at=? WHERE id=?', now(), id);
 }

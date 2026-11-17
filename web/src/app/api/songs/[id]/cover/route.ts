@@ -1,11 +1,12 @@
 import { MAX_AVATAR, avatarMime, sniffImage } from '@/server/avatar';
 import { userRoute } from '@/server/guard';
-import { fail, numericId } from '@/server/http';
-import { cover, songMeta } from '@/server/netease';
+import { fail } from '@/server/http';
+import { catalogId, onlineSong } from '@/server/catalog';
+import { cover } from '@/server/netease';
 
 export const GET = userRoute(async (req, ctx) => {
-  const song = await songMeta(numericId((await ctx.params).id));
-  const url = cover(song.cover);
+  const song = await onlineSong(catalogId((await ctx.params).id));
+  const url = song.cover && /^https:\/\/y\.gtimg\.cn\/music\/photo_new\/T00[12]R500x500M000[a-zA-Z0-9_]+\.jpg$/.test(song.cover) ? song.cover : cover(song.cover);
   if (!url?.startsWith('https://')) throw fail(404, '找不到封面');
   const source = await fetch(url, {
     redirect: 'error', cache: 'no-store',

@@ -18,6 +18,15 @@ import androidx.webkit.WebMessageCompat
 import org.json.JSONObject
 import java.lang.ref.WeakReference
 
+internal object NestuneOrigin {
+    private const val HOST = "nestune.0use.net"
+    private const val PORT = 8443
+    const val URL = "https://$HOST:$PORT"
+
+    fun allows(uri: Uri): Boolean =
+        uri.scheme == "https" && uri.host == HOST && uri.port == PORT && uri.userInfo == null
+}
+
 class MainActivity : TauriActivity() {
     private val musicDownloads by lazy { MusicDownloads(this) }
     override fun onWebViewCreate(webView: WebView) {
@@ -40,8 +49,8 @@ class MainActivity : TauriActivity() {
         } else window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         NativeMediaService.webView = WeakReference(webView)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            WebViewCompat.addWebMessageListener(webView, "NestuneNative", setOf("https://music.0use.net")) { _, message, origin, mainFrame, reply ->
-                if (!mainFrame || origin.scheme != "https" || origin.host != "music.0use.net" || origin.port !in listOf(-1, 443)) return@addWebMessageListener
+            WebViewCompat.addWebMessageListener(webView, "NestuneNative", setOf(NestuneOrigin.URL)) { _, message, origin, mainFrame, reply ->
+                if (!mainFrame || !NestuneOrigin.allows(origin)) return@addWebMessageListener
                 if (message.type != WebMessageCompat.TYPE_STRING) return@addWebMessageListener
                 val raw = message.data ?: return@addWebMessageListener
                 if (raw.length > 300000) return@addWebMessageListener
@@ -68,7 +77,7 @@ class MainActivity : TauriActivity() {
                     }
                     if (data.optString("type") == "downloadUpdate") {
                         val uri = Uri.parse(data.optString("url"))
-                        if (uri.scheme != "https" || uri.host != "music.0use.net" || uri.port !in listOf(-1,443) || !Regex("/api/client-updates/android/[0-9]{1,9}").matches(uri.path ?: "") || uri.query != null || uri.userInfo != null) return@addWebMessageListener
+                        if (!NestuneOrigin.allows(uri) || !Regex("/api/client-updates/android/[0-9]{1,9}").matches(uri.path ?: "") || uri.query != null) return@addWebMessageListener
                         val request = DownloadManager.Request(uri).setTitle("Nestune 更新")
                             .setMimeType("application/vnd.android.package-archive")
                             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -88,7 +97,7 @@ class MainActivity : TauriActivity() {
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 val url = Uri.parse(webView.url ?: "")
-                if (url.scheme != "https" || url.host != "music.0use.net") { moveTaskToBack(true); return }
+                if (!NestuneOrigin.allows(url)) { moveTaskToBack(true); return }
                 webView.evaluateJavascript("window.__nestuneBack ? window.__nestuneBack() : false") { handled ->
                     if (handled != "true") {
                         if (webView.canGoBack()) webView.goBack() else moveTaskToBack(true)

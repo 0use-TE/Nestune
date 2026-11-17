@@ -36,7 +36,7 @@ fn notify(app: &AppHandle, preferences: &Preferences) {
 pub fn persist(app: &AppHandle) {
     let Some(state) = app.try_state::<Mutex<Runtime>>() else { return };
     let Ok(runtime) = state.lock() else { return };
-    let folder = if std::env::args().any(|arg| arg == "--smoke-test" || arg == "--lyrics-qa") {
+    let folder = if std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa")) {
         Ok(std::env::temp_dir().join(format!("nestune-lyrics-check-{}", std::process::id())))
     } else { app.path().app_config_dir() };
     if let Ok(folder) = folder {
@@ -56,6 +56,10 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
         .and_then(|folder| std::fs::read(folder.join("lyrics-window.json")).ok())
         .and_then(|data| serde_json::from_slice::<Preferences>(&data).ok()).unwrap_or_default();
     if smoke_test { preferences.enabled = false; preferences.locked = false; }
+    #[cfg(debug_assertions)]
+    let controls_qa = std::env::args().any(|arg| arg == "--lyrics-controls-qa");
+    #[cfg(debug_assertions)]
+    if controls_qa { preferences.enabled = true; preferences.locked = true; }
     app.manage(Mutex::new(Runtime { preferences: preferences.clone(), data: Value::Null, media: Value::Null }));
     let builder = WebviewWindowBuilder::new(app, "lyrics", WebviewUrl::App("lyrics.html".into()))
         .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 100.0)
@@ -74,6 +78,19 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
                 }
             }
         })
+    } else { builder };
+    #[cfg(debug_assertions)]
+    let builder = if controls_qa {
+        builder.initialization_script(include_str!("../qa/lyrics-controls.js"))
+            .on_document_title_changed(|window, title| {
+                if let Some(raw) = title.strip_prefix("NestuneControlsQA:") {
+                    if serde_json::from_str::<Value>(raw).is_ok() {
+                        let file = std::env::temp_dir().join(format!("Nestune-controls-qa-{}.json", std::process::id()));
+                        let _ = std::fs::write(file, raw);
+                        window.app_handle().exit(0);
+                    }
+                }
+            })
     } else { builder };
     let window = builder.build()?;
     let restored = if let (Some(x), Some(y)) = (preferences.x, preferences.y) {
@@ -113,8 +130,13 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
             persist(&handle);
         }
     });
-    window.set_ignore_cursor_events(preferences.locked)?;
-    if preferences.enabled { window.show()?; }
+    // Locking fixes the position. Keep the toolbar interactive, including after
+    // restoring a lock saved by an older click-through implementation.
+    window.set_ignore_cursor_events(false)?;
+    let show = preferences.enabled;
+    #[cfg(debug_assertions)]
+    let show = show && !controls_qa;
+    if show { window.show()?; }
     Ok(())
 }
 
@@ -154,6 +176,15 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
     match kind {
         "lyricsInfo" => {},
         "lyricsSnapshot" if local => return Ok(json!({ "state": info(&runtime.preferences), "data": runtime.data, "media": runtime.media })),
+        #[cfg(all(debug_assertions, target_os = "windows"))]
+        "lyricsControlsProbe" if local && std::env::args().any(|arg| arg == "--lyrics-controls-qa") => {
+            #[link(name = "user32")]
+            extern "system" { fn GetWindowLongW(hwnd: *mut std::ffi::c_void, index: i32) -> i32; }
+            let hwnd = overlay.hwnd().map_err(|_| "Probe window missing")?;
+            let style = unsafe { GetWindowLongW(hwnd.0, -20) };
+            return Ok(json!({ "state": info(&runtime.preferences), "clickThrough": style & 0x20 != 0,
+                "visible": overlay.is_visible().map_err(|_| "Probe visibility failed")? }));
+        },
         #[cfg(debug_assertions)]
         "lyricsProbe" if main && std::env::args().any(|arg| arg == "--lyrics-qa") => {
             overlay.eval("document.title='NestuneLyricsViewQA:'+JSON.stringify({line:document.getElementById('line').textContent,translation:document.getElementById('translation').textContent,title:document.getElementById('title').textContent})").map_err(|_| "Probe failed")?;
@@ -173,13 +204,13 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             runtime.preferences.enabled = enabled;
             if enabled {
                 overlay.eval(format!("window.nestuneLyricsData && window.nestuneLyricsData({});window.nestuneLyricsMedia && window.nestuneLyricsMedia({})", runtime.data, runtime.media)).map_err(|_| "无法更新歌词")?;
-                overlay.set_ignore_cursor_events(runtime.preferences.locked).map_err(|_| "无法设置歌词锁定")?;
+                overlay.set_ignore_cursor_events(false).map_err(|_| "无法恢复歌词按钮")?;
                 overlay.show().map_err(|_| "无法显示歌词窗口")?;
             } else { overlay.hide().map_err(|_| "无法关闭歌词窗口")?; }
         },
         "lyricsLock" => {
             runtime.preferences.locked = data.get("locked").and_then(Value::as_bool).ok_or("缺少锁定状态")?;
-            overlay.set_ignore_cursor_events(runtime.preferences.locked).map_err(|_| "无法设置歌词锁定")?;
+            overlay.set_ignore_cursor_events(false).map_err(|_| "无法恢复歌词按钮")?;
         },
         "lyricsPanel" if local => {
             runtime.preferences.panel = data.get("panel").and_then(Value::as_bool).ok_or("缺少背景状态")?;
@@ -203,7 +234,7 @@ mod tests {
     use super::*;
     #[test]
     fn rejects_external_or_lookalike_lyrics_pages() {
-        for url in ["https://music.0use.net/lyrics.html", "https://tauri.localhost.evil/lyrics.html", "file:///lyrics.html"] {
+        for url in ["https://nestune.0use.net:8443/lyrics.html", "https://tauri.localhost.evil/lyrics.html", "file:///lyrics.html"] {
             assert!(!local_lyrics_url(&url.parse().unwrap()));
         }
         assert!(local_lyrics_url(&"http://tauri.localhost/lyrics.html".parse().unwrap()));

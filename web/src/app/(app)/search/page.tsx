@@ -11,6 +11,7 @@ import { Cover } from '@/components/Cover';
 import { Icon } from '@/components/Icon';
 import { RecentSearches } from '@/components/RecentSearches';
 import { Empty, SongList } from '@/components/SongList';
+import { mergeSongPages } from '@/lib/music-ids';
 
 const TYPES = [['song', '歌曲'], ['artist', '歌手'], ['album', '专辑'], ['playlist', '歌单']] as const;
 type SearchType = (typeof TYPES)[number][0];
@@ -30,6 +31,9 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
   const [type, setType] = useState<SearchType>('song');
   const [items, setItems] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [hot, setHot] = useState<string[]>([]);
@@ -50,12 +54,13 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
     const my = ++seq.current;
     lastRun.current = k;
     if (!k) { setItems([]); setTotal(0); setBusy(false); setErr(''); return; }
-    if (!offset) { setItems([]); setTotal(0); }
+    if (!offset) { setItems([]); setTotal(0); setHasMore(false); setWarnings([]); }
     setBusy(true); setErr('');
     try {
       const r = await get(`/api/search?keywords=${encodeURIComponent(k)}&type=${t}&limit=30&offset=${offset}`);
       if (my !== seq.current) return;
-      setItems(offset ? p => [...p, ...r.items] : r.items); setTotal(r.total);
+      setItems(p => t === 'song' ? mergeSongPages(offset ? p : [], r.items) : offset ? [...p, ...r.items] : r.items); setTotal(r.total);
+      setNextOffset(r.nextOffset); setHasMore(r.hasMore); setWarnings(r.warnings || []);
       if (!offset) {
         const next = [k, ...recentSearches().filter(x => x !== k)].slice(0, 8);
         saveRecentSearches(next);
@@ -110,6 +115,7 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
       )}
 
       {err && <div className="note">{err}</div>}
+      {warnings.map(w => <div className="note" key={w}>{w}</div>)}
       {busy && !items.length && <Loading />}
       {!busy && !err && q.trim() && searched && !items.length && <Empty text="没有找到相关内容，试试换个关键词。" />}
 
@@ -129,8 +135,8 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
           ))}
         </div>
       )}
-      {items.length > 0 && items.length < total && (
-        <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={busy} onClick={() => run(lastRun.current, type, items.length)}>{busy ? <Loading inline label="加载中" /> : '加载更多'}</button></div>
+      {hasMore && (
+        <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={busy} onClick={() => run(lastRun.current, type, nextOffset)}>{busy ? <Loading inline label="加载中" /> : '加载更多'}</button></div>
       )}
     </>
   );

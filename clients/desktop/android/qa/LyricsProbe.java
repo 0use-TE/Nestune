@@ -64,7 +64,7 @@ public class LyricsProbe extends Instrumentation {
             activity=startActivitySync(new Intent().setClassName("net.ouse.nestune","net.ouse.nestune.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             for(int i=0;i<80&&web==null;i++){runOnMainSync(()->web=find(activity.getWindow().getDecorView()));SystemClock.sleep(150);}
             if(web==null)throw new AssertionError("Missing WebView");
-            expect("location.origin==='https://music.0use.net' && document.readyState==='complete' && typeof NestuneNative!=='undefined'");
+            expect("location.origin==='https://nestune.0use.net:8443' && document.readyState==='complete' && typeof NestuneNative!=='undefined'");
             js("window.__lyricsReplies={};const old=NestuneNative.onmessage;NestuneNative.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.requestId)window.__lyricsReplies[d.requestId]=d}catch{};old?.(e)};window.__overlayEvents=[];window.addEventListener('nt:lyrics-state',e=>__overlayEvents.push(e.detail));true");
             ActivityMonitor prompt=addMonitor(new IntentFilter(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),null,true);
             JSONObject state=request(type("lyricsInfo"));

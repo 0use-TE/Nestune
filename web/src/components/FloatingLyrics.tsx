@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import { Icon } from './Icon';
-import { useDesktopLyrics } from './DesktopLyrics';
+import { LyricsClientUpgrade, useDesktopLyrics } from './DesktopLyrics';
 
 type Position = { x: number; y: number };
 const INSET = 8;
@@ -81,7 +81,10 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
           <button className="ib" aria-label="关闭歌词" title="关闭歌词" onClick={onClose}><Icon n="x" s={16} /></button>
         </div>
       </div>
-      {desktopLyrics.status && <span className="pinned-lyrics-status" role="status">{desktopLyrics.status}</span>}
+      {(desktopLyrics.status || desktopLyrics.upgradeRequired) && <div className="pinned-lyrics-status" role="status">
+        {desktopLyrics.status && <p>{desktopLyrics.status}</p>}
+        {desktopLyrics.upgradeRequired && <LyricsClientUpgrade />}
+      </div>}
     </div>
   );
 }

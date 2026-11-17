@@ -14,9 +14,9 @@ namespace Nestune;
 public partial class App : Application
 {
     private Mutex? instance;
-    private const string Home = "https://music.0use.net/";
+    private const string Home = "https://nestune.0use.net:8443/";
     private static bool Trusted(string uri) => Uri.TryCreate(uri, UriKind.Absolute, out var u)
-        && u.Scheme == "https" && u.Host.Equals("music.0use.net", StringComparison.OrdinalIgnoreCase) && u.IsDefaultPort;
+        && u.Scheme == "https" && u.Host.Equals("nestune.0use.net", StringComparison.OrdinalIgnoreCase) && u.Port == 8443;
 
     protected override void OnStartup(StartupEventArgs e)
     {

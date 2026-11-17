@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { PwaProvider } from '@/components/Pwa';
 import { DesktopLyricsProvider } from '@/components/DesktopLyrics';
 import './globals.css';
+import './karaoke.css';
 import './square.css';
 import './client-features.css';
 import './playlist-queue.css';

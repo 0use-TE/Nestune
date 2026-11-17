@@ -1,4 +1,5 @@
 'use client';
+import { sourceIds } from '@/lib/music-ids';
 import { Loading } from './Loading';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -108,7 +109,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
           ))}
           <div className="lab">我的歌单<button aria-label="新建歌单" onClick={() => setNewPl({})}><Icon n="plus" s={16} /></button></div>
-          <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
+          <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library?collection=likes" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
             <span className="favorites-cover" aria-hidden="true"><Icon n="heart" s={16} /></span>
             <span className="t1">我喜欢的音乐</span>
           </Link></CanvasSource>
@@ -177,7 +178,7 @@ function SongMenu({ onNewPlaylist }: { onNewPlaylist: (s: Song) => void }) {
   }, [m, app]);
   if (!m) return null;
 
-  const s = m.song, fav = app.favIds.has(s.id), device = isDeviceSong(s.id);
+  const s = m.song, fav = sourceIds(s).some(id => app.favIds.has(id)), device = isDeviceSong(s.id);
   const w = 232, h = Math.min(window.innerHeight * 0.7, 120 + 40 * (6 + app.playlists.length));
   const x = Math.min(m.x, window.innerWidth - w - 12), y = Math.min(m.y, window.innerHeight - h - 12);
   const run = (fn: () => void) => () => { app.closeMenu(); fn(); };
@@ -237,7 +238,7 @@ function NewPlaylist({ song, onClose }: { song?: Song; onClose: () => void }) {
   );
 }
 
-type Plan = { playable: boolean; reason?: string; tiers: Tier[]; best: string | null; canDownload?: boolean };
+type Plan = { playable: boolean; reason?: string; tiers: Tier[]; best: string | null; canDownload?: boolean; downloadId?: string };
 
 /** Lets the user see every quality tier (format, bitrate, size, and why one is unavailable) before saving. */
 function SaveDialog({ song }: { song: Song }) {
@@ -265,7 +266,7 @@ function SaveDialog({ song }: { song: Song }) {
     setBusy(true);
     setError('');
     try {
-      const result = await app.deviceMusic.download(song, pick, includeLyrics);
+      const result = await app.deviceMusic.download(plan?.downloadId ? { ...song, id: plan.downloadId } : song, pick, includeLyrics);
       app.closeSave();
       const missing = [song.cover && !result.coverSaved && '封面', includeLyrics && !result.lyricsSaved && '歌词'].filter(Boolean);
       app.toast(missing.length ? `音频已下载，未能保存${missing.join('和')}` : '已下载到设备的音乐文件夹');
@@ -285,7 +286,7 @@ function SaveDialog({ song }: { song: Song }) {
         {status === 'unsupported' && <div className="note">当前浏览器无法访问系统音乐文件夹，请用支持文件夹访问的桌面浏览器打开。</div>}
         {status === 'authorize' && <p className="sub sm" style={{ marginBottom: 12 }}>请在浏览器弹窗里授权系统的「音乐」文件夹。</p>}
         {!plan && <Loading label="正在查询可用音质" />}
-        {plan?.canDownload === false && <div className="note">此账号没有下载权限。</div>}
+        {plan?.canDownload === false && <div className="note">{plan.reason || '此账号没有下载权限。'}</div>}
         {plan && !plan.playable && <div className="note">{unplayableText(plan.reason)}：{plan.reason}</div>}
         {plan?.playable && plan.canDownload !== false && (
           <div style={{ display: 'grid', gap: 8 }}>

@@ -91,7 +91,7 @@ public class Probe extends Instrumentation {
             activity=startActivitySync(new Intent().setClassName("net.ouse.nestune","net.ouse.nestune.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             for (int i=0;i<40;i++) { runOnMainSync(() -> web=find(activity.getWindow().getDecorView())); if (web!=null) break; SystemClock.sleep(250); }
             if (web==null) throw new AssertionError("No native WebView");
-            expectJS("location.origin==='https://music.0use.net' && document.readyState==='complete' && !!document.querySelector('#login,#app')");
+            expectJS("location.origin==='https://nestune.0use.net:8443' && document.readyState==='complete' && !!document.querySelector('#login,#app')");
             if(chatOnly) {
                 checkChatKeyboard();
                 result.putString("report","NESTUNE_ANDROID_PASS: real chat UI, 40 fixture messages, real IME open/close twice, visible header, composer adjacent to navigation, latest message retained; no server data changed");
@@ -127,7 +127,7 @@ public class Probe extends Instrumentation {
             media.getTransportControls().skipToNext(); expectJS("window.__probeEvents.some(e=>e.action==='next')");
             media.getTransportControls().seekTo(9000); expectJS("window.__probeEvents.some(e=>e.action==='seek'&&e.position===9)");
             js("NestuneNative.postMessage(JSON.stringify({type:'media',id:''}));true");
-            js("NestuneNative.postMessage(JSON.stringify({type:'downloadUpdate',url:'https://music.0use.net/api/client-updates/android/4'}));true");
+            js("NestuneNative.postMessage(JSON.stringify({type:'downloadUpdate',url:'https://nestune.0use.net:8443/api/client-updates/android/4'}));true");
             DownloadManager downloads=getTargetContext().getSystemService(DownloadManager.class);
             boolean complete=false;
             for(int i=0;i<600 && !complete;i++) {
@@ -135,7 +135,7 @@ public class Probe extends Instrumentation {
                 try(Cursor cursor=downloads.query(new DownloadManager.Query())) {
                     while(cursor.moveToNext()) {
                         String url=cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_URI));
-                        if(!url.equals("https://music.0use.net/api/client-updates/android/4")) continue;
+                        if(!url.equals("https://nestune.0use.net:8443/api/client-updates/android/4")) continue;
                         int state=cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
                         if(state==DownloadManager.STATUS_FAILED) throw new AssertionError("System download failed: "+cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)));
                         if(state==DownloadManager.STATUS_SUCCESSFUL) {

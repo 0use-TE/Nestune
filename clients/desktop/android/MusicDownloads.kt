@@ -169,5 +169,5 @@ class MusicDownloads(private val activity: Activity) {
 
     fun close() { executor.shutdown() }
 
-    companion object { private const val PICK_FOLDER = 0x4E55; private const val ORIGIN = "https://music.0use.net" }
+    companion object { private const val PICK_FOLDER = 0x4E55; private const val ORIGIN = NestuneOrigin.URL }
 }

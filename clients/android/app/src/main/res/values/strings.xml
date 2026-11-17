@@ -2,5 +2,5 @@
     <string name="app_name">Nestune</string>
     <color name="background">#0f0f0e</color>
     <color name="icon_background">#2d50b2</color>
-    <string name="asset_statements">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://music.0use.net\"}}]</string>
+    <string name="asset_statements">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://nestune.0use.net:8443\"}}]</string>
 </resources>

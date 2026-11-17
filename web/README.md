@@ -80,7 +80,7 @@ After acceptance, the host device initializes a room-owned queue from its curren
 
 The queue panel has numbered rows, durations, a current-track marker, **清空**, and a **保存为歌单** action for a shared queue. Clearing the shared queue stops playback but keeps the room open. Each device preserves its personal queue, mode and position separately, including across a page refresh in the same tab. Leaving or ending the room restores that personal queue in a paused state. Shared changes are not written to either user's saved personal queue; save a shared list as a personal playlist before ending the session if you want to keep it.
 
-Use **https://music.0use.net** (the existing tunnel points to NAS port 3000). In Settings → Preferences, choose **安装 Nestune**; on iPhone/iPad use Safari → Share → Add to Home Screen. Sign in again after installation if the browser requests it. Plain LAN HTTP addresses do not support service workers.
+Use **https://nestune.0use.net:8443** (the NAS HTTPS proxy forwards to the Web container). In Settings → Preferences, choose **安装 Nestune**; on iPhone/iPad use Safari → Share → Add to Home Screen. Sign in again after installation if the browser requests it. Plain LAN HTTP addresses do not support service workers.
 
 The manifest supplies desktop, Android maskable, and Apple home-screen icons. The service worker caches only public app assets and an offline connection screen. Account APIs, audio, uploaded files, personalized pages, and the admin panel are never stored in its cache. This version does not provide offline song playback.
 
@@ -95,6 +95,8 @@ Offline song playback, HTTPS setup, audio-worker auto-import of saved songs.
 ## NAS deployment
 
 Run the Web Compose project from `/vol1/opt/docker/nestune/web`. The existing audio-worker Compose project supplies the `nestune_default` network. Keep `ADMIN_KEY`, `WORKER_KEY`, and the LAN `BIND_IP` in the server-side `.env` file. Give the container's Node user (UID 1000) write access to `./data`.
+
+The `qqmusic` service uses a locally provisioned QQ Music API image (`QQMUSIC_IMAGE`, default `nestune-qq-api-test:0.9.0`). Set `QQMUSIC_ROOT` to a directory containing the service's `data/`, `config.toml`, and `accounts.toml`. On the existing NAS deployment it defaults to `../../nestune-qq-test` so the service can reuse its saved login. Web reaches the API through Docker at `http://qqmusic:8080`.
 
 ```sh
 docker compose -f compose.nas.yaml up -d --build

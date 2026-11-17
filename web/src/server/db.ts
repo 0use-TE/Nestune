@@ -55,6 +55,10 @@ function open() {
       created_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, song_id)
     );
+    CREATE TABLE IF NOT EXISTS library_card_order (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      card_order TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS collection_favorites (
       user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       kind TEXT NOT NULL CHECK(kind IN ('album','playlist','shared')),
@@ -136,6 +140,17 @@ function open() {
       PRIMARY KEY (playlist_id, song_id)
     );
     CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS music_sources (
+      source_id TEXT PRIMARY KEY,
+      recording_id TEXT NOT NULL,
+      meta TEXT NOT NULL,
+      match_key TEXT NOT NULL DEFAULT '',
+      updated_at INTEGER NOT NULL,
+      checked_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS music_sources_recording ON music_sources(recording_id);
+    CREATE INDEX IF NOT EXISTS music_sources_match ON music_sources(match_key);
+    CREATE INDEX IF NOT EXISTS music_sources_isrc ON music_sources(json_extract(meta,'$.isrc'));
     CREATE TABLE IF NOT EXISTS social_presence (
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       visible INTEGER NOT NULL DEFAULT 1,

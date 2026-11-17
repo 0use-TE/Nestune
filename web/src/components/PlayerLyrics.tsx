@@ -2,10 +2,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { LyricLine } from '@/lib/types';
+import { KaraokeText } from './KaraokeText';
 
-export function PlayerLyrics({ lines, active, status, plainText, showTranslation, onSeek, onBackgroundClick }: {
+export function PlayerLyrics({ lines, active, status, plainText, showTranslation, onSeek, onBackgroundClick, position = 0, playing = false, duration, karaoke = true, flowSeed = 0 }: {
   lines: LyricLine[]; active: number; status: ReactNode; plainText?: string; showTranslation: boolean; onSeek: (seconds: number) => void;
   onBackgroundClick: () => void;
+  position?: number; playing?: boolean; duration?: number; karaoke?: boolean; flowSeed?: number;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: number; y: number; top: number; moved: boolean } | null>(null);
@@ -88,7 +90,7 @@ export function PlayerLyrics({ lines, active, status, plainText, showTranslation
           <button type="button" key={index} className={`ln ${Math.abs(index - active) === 1 ? 'near' : ''}`}
             aria-current={index === active ? true : undefined} data-lyric-focus={index === active ? '' : undefined}
             onClick={() => { clearTimeout(resumeTimer.current); onSeek(line.t); setBrowsing(false); }}>
-            {line.text}{showTranslation && line.tr && <small>{line.tr}</small>}
+            {karaoke && index === active ? <KaraokeText line={line} position={position} playing={playing} nextTime={lines[index + 1]?.t} duration={duration} flowSeed={flowSeed} /> : line.text}{showTranslation && line.tr && <small>{line.tr}</small>}
           </button>
         ))}
       </div>

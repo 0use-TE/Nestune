@@ -4,7 +4,7 @@
     <application android:label="Nestune" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:allowBackup="false" android:supportsRtl="true" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Translucent.NoTitleBar">
         <meta-data android:name="asset_statements" android:resource="@string/asset_statements" />
         <activity android:name="com.google.androidbrowserhelper.trusted.LauncherActivity" android:exported="true" android:label="Nestune">
-            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="https://music.0use.net/" />
+            <meta-data android:name="android.support.customtabs.trusted.DEFAULT_URL" android:value="https://nestune.0use.net:8443/" />
             <meta-data android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR" android:resource="@color/background" />
             <meta-data android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR" android:resource="@color/background" />
             <intent-filter>
@@ -15,7 +15,7 @@
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="music.0use.net" />
+                <data android:scheme="https" android:host="nestune.0use.net" android:port="8443" />
             </intent-filter>
         </activity>
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />

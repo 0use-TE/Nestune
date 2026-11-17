@@ -29,7 +29,7 @@ class NativeMediaService : Service() {
             if (position != null) data.put("position", position / 1000.0)
             view.post {
                 val url = Uri.parse(view.url ?: "")
-                if (url.scheme == "https" && url.host == "music.0use.net" && url.port in listOf(-1, 443))
+                if (NestuneOrigin.allows(url))
                     view.evaluateJavascript("window.dispatchEvent(new CustomEvent('nt:media', {detail: $data}))", null)
             }
         }

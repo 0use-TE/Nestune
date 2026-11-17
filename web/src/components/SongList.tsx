@@ -7,6 +7,8 @@ import { mmss, unplayableText } from '@/lib/util';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
 import { Loading } from './Loading';
+import { sourceIds } from '@/lib/music-ids';
+import { MusicSources } from './MusicSources';
 export { Loading } from './Loading';
 
 export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?: boolean; onRemove?: (s: Song) => void }) {
@@ -32,10 +34,14 @@ export function SongList({ songs, num = true, onRemove }: { songs: Song[]; num?:
                 ))}
                 {s.uploader && <span className="song-uploader">{s.artists.length > 0 && ' · '}由 {s.uploader.name} 上传</span>}
               </div>
+              <MusicSources song={s} className="music-sources-mobile" />
             </div>
-            <div className="sub al t1">{s.album.id ? <Link href={`/album/${s.album.id}`} onClick={e => e.stopPropagation()}>{s.album.name}</Link> : s.album.name}</div>
+            <div className="sub al song-album-cell">
+              <span className="t1">{s.album.id ? <Link href={`/album/${s.album.id}`} onClick={e => e.stopPropagation()}>{s.album.name}</Link> : s.album.name}</span>
+              <MusicSources song={s} className="music-sources-desktop" />
+            </div>
             <div className="muted du sm">{device && !s.duration ? '' : mmss(s.duration)}</div>
-            {device ? <span /> : <button className={`heart ${app.favIds.has(s.id) ? 'on' : ''}`} aria-label="收藏" onClick={e => { e.stopPropagation(); app.toggleFav(s); }}><Icon n="heart" s={18} /></button>}
+            {device ? <span /> : <button className={`heart ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" onClick={e => { e.stopPropagation(); app.toggleFav(s); }}><Icon n="heart" s={18} /></button>}
             {onRemove
               ? <button className="more" aria-label="移除" onClick={e => { e.stopPropagation(); onRemove(s); }}><Icon n="x" s={18} /></button>
               : <button className="more" aria-label="更多" onClick={e => { e.stopPropagation(); app.openMenu(s, e); }}><Icon n="more" s={18} /></button>}

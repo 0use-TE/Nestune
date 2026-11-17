@@ -6,6 +6,8 @@ import { inLibrary } from '@/server/library';
 import { songMeta } from '@/server/netease';
 import { requireUpload, uploadAudio } from '@/server/uploads';
 import { tiersFor } from '@/server/quality';
+import { recordingAliases } from '@/server/recordings';
+import { isQqId } from '@/lib/music-ids';
 
 /**
  * Which quality tiers exist for this song and which the user can actually get, with format, bitrate and size.
@@ -18,6 +20,8 @@ export const GET = userRoute(async (_req, ctx, u) => {
     return { id, playable: true, canDownload: !!u.can_save, best: 'original',
       tiers: [{ level: 'original', label: '原始文件', format: audio.ext.toUpperCase(), bitrate: null, size: audio.size, state: 'ok' }] };
   }
-  const song = await songMeta(id);
-  return { id, local: inLibrary(id), canDownload: !!u.can_save, cap: u.max_quality, ...tiersFor(song.qualities, song.access, u.max_quality as Quality) };
+  const downloadId = recordingAliases(id).find(s => !isQqId(s));
+  if (!downloadId) return { id, canDownload: false, playable: true, best: null, tiers: [], reason: 'QQ 音乐暂不提供下载，可以在线播放' };
+  const song = await songMeta(downloadId);
+  return { id, downloadId, local: inLibrary(downloadId), canDownload: !!u.can_save, cap: u.max_quality, ...tiersFor(song.qualities, song.access, u.max_quality as Quality) };
 });

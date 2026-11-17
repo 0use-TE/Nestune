@@ -1,5 +1,5 @@
-import { numericId } from '@/server/http';
+import { catalogId } from '@/server/catalog';
 import { userRoute } from '@/server/guard';
-import { album } from '@/server/netease';
+import { catalogAlbum as album } from '@/server/catalog';
 
-export const GET = userRoute(async (_req, ctx) => album(numericId((await ctx.params).id)));
+export const GET = userRoute(async (_req, ctx) => album(catalogId((await ctx.params).id)));
