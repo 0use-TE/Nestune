@@ -19,6 +19,8 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
     private data class Word(val time: Double, val duration: Double, val text: String)
     private var current: JSONObject? = null
     private var seconds = 0.0
+    private var scrollStart = 0.0
+    private var scrollEnd = 0.0
     private var phase = 0f
     private var direction = 1
     private var speed = 14
@@ -26,13 +28,16 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
     private var gradientWidth = 0
     private val matrix = Matrix()
 
-    fun clear(value: String) { current = null; if (text.toString() != value) text = value }
+    fun clear(value: String) { current = null; scrollTo(0, 0); if (text.toString() != value) text = value }
 
     fun render(line: JSONObject, position: Double, nextTime: Double, duration: Double, seed: Long) {
         seconds = position
         if (current !== line) {
             current = line
             val text = line.optString("text"); val time = line.optDouble("t")
+            scrollStart = time
+            scrollEnd = if (line.optDouble("d") > 0) time + line.optDouble("d") else if (nextTime > time) nextTime else if (duration > time) duration else time + 5
+            scrollTo(0, 0)
             val supplied = line.optJSONArray("words")
             var words = (0 until (supplied?.length() ?: 0).coerceAtMost(128)).mapNotNull { index ->
                 supplied?.optJSONObject(index)?.let { Word(it.optDouble("t", -1.0), it.optDouble("d", -1.0), it.optString("text")) }
@@ -61,6 +66,12 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
+        val textWidth = layout?.getLineWidth(0) ?: 0f
+        val overflow = (textWidth - width + compoundPaddingLeft + compoundPaddingRight).coerceAtLeast(0f)
+        val progress = if (current == null) 0.0 else ((seconds - scrollStart) / (scrollEnd - scrollStart).coerceAtLeast(.2) - .12) / .76
+        val target = (overflow * progress.coerceIn(0.0, 1.0)).toInt()
+        if (scrollX != target) scrollTo(target, 0)
+
         if (width != gradientWidth) {
             gradientWidth = width
             gradient = LinearGradient(0f, 0f, (width * 2).coerceAtLeast(1).toFloat(), 0f,

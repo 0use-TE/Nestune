@@ -48,11 +48,25 @@ public class LyricsProbe extends Instrumentation {
         if(node==null)return null;if(node.getText()!=null && text.contentEquals(node.getText()))return node;
         for(int i=0;i<node.getChildCount();i++){AccessibilityNodeInfo found=search(node.getChild(i),text);if(found!=null)return found;}return null;
     }
+    private String describe(AccessibilityNodeInfo node) {
+        if(node==null)return "";String value=node.getText()==null?"":node.getText().toString()+"|";
+        for(int i=0;i<node.getChildCount();i++)value+=describe(node.getChild(i));return value;
+    }
     private AccessibilityNodeInfo visible(String text) {
         for(AccessibilityWindowInfo window:getUiAutomation().getWindows()){AccessibilityNodeInfo found=search(window.getRoot(),text);if(found!=null)return found;}return null;
     }
+    private Rect nativeTextBounds(String text) {
+        try {
+            Class<?> c=Class.forName("net.ouse.nestune.LyricsOverlay");Object instance=null;
+            for(java.lang.reflect.Field f:c.getDeclaredFields())if(java.lang.reflect.Modifier.isStatic(f.getModifiers())&&f.getType()==c){f.setAccessible(true);instance=f.get(null);}
+            for(java.lang.reflect.Field f:c.getDeclaredFields()){
+                f.setAccessible(true);Object value=f.get(instance);
+                if(value instanceof android.widget.TextView){android.widget.TextView view=(android.widget.TextView)value;if(text.contentEquals(view.getText())&&view.isShown()){Rect[] rect={null};runOnMainSync(()->{int[] at=new int[2];view.getLocationOnScreen(at);rect[0]=new Rect(at[0],at[1],at[0]+view.getWidth(),at[1]+view.getHeight());});return rect[0];}}
+            }
+        }catch(Exception ignored){}return null;
+    }
     private Rect waitText(String text) throws Exception {
-        for(int i=0;i<60;i++){AccessibilityNodeInfo node=visible(text);if(node!=null){Rect result=new Rect();node.getBoundsInScreen(result);return result;}SystemClock.sleep(150);}
+        for(int i=0;i<60;i++){AccessibilityNodeInfo node=visible(text);if(node!=null){Rect result=new Rect();node.getBoundsInScreen(result);return result;}Rect nativeBounds=nativeTextBounds(text);if(nativeBounds!=null)return nativeBounds;SystemClock.sleep(150);}
         throw new AssertionError("Overlay text absent: "+text);
     }
     private void pointer(int action,float x,float y,long down,long at) {sendPointerSync(MotionEvent.obtain(down,at,action,x,y,0));}
@@ -88,7 +102,7 @@ public class LyricsProbe extends Instrumentation {
             AccessibilityServiceInfo service=getUiAutomation().getServiceInfo();service.flags|=AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;getUiAutomation().setServiceInfo(service);
             state=request(type("lyricsEnable").put("enabled",true));if(!state.optBoolean("enabled"))throw new AssertionError("Overlay did not enable");
             JSONObject data=new JSONObject("{\"type\":\"lyricsData\",\"id\":\"qa\",\"title\":\"Nestune QA\",\"plainText\":\"\",\"lines\":[{\"t\":0,\"text\":\"Native first line\",\"tr\":\"Translation one\"},{\"t\":2,\"text\":\"Native second line\",\"tr\":\"Translation two\"},{\"t\":4,\"text\":\"Native third line\"}]}");
-            post(data);post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",true));waitText("Native first line");
+            post(data);post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));waitText("Native first line");post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",true));
             post(new JSONObject("{\"type\":\"media\",\"id\":\"qa\",\"title\":\"Nestune QA\",\"artist\":\"QA\",\"duration\":60,\"position\":0,\"playing\":true}"));
             activity.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitText("Native second line");waitText("Native third line");
@@ -99,11 +113,15 @@ public class LyricsProbe extends Instrumentation {
             SystemClock.sleep(300);Rect after=waitText("Native first line");if(after.centerY()>=before.centerY()-20)throw new AssertionError("Dragging did not move overlay");
             showTools(); tap(waitText("锁定"));
             state=request(type("lyricsInfo"));if(!state.optBoolean("locked"))throw new AssertionError("Native lock button failed");
+            activity.startActivity(new Intent().setClassName("net.ouse.nestune","net.ouse.nestune.MainActivity").addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT));
+            expect("document.visibilityState==='visible'");
+            js("window.__underTap=0;document.body.style.height='100vh';document.body.style.margin='0';document.addEventListener('pointerdown',()=>window.__underTap++);true");
             Rect fixed=waitText("Native first line");
             t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,fixed.centerX(),fixed.centerY(),t,t);
             pointer(MotionEvent.ACTION_MOVE,fixed.centerX()+50,fixed.centerY()-90,t,t+180);pointer(MotionEvent.ACTION_UP,fixed.centerX()+50,fixed.centerY()-90,t,t+260);
             SystemClock.sleep(3500);Rect still=waitText("Native first line");
             if(still.centerX()!=fixed.centerX()||still.centerY()!=fixed.centerY())throw new AssertionError("Locked overlay moved");
+            js("window.__underTap=0;true");tap(waitText("Native first line"));expect("window.__underTap>0");
             tap(waitText("背景"));tap(waitText("解锁"));
             state=request(type("lyricsInfo"));if(state.optBoolean("locked"))throw new AssertionError("Native unlock button failed");
             Rect movable=waitText("Native first line");
@@ -115,14 +133,27 @@ public class LyricsProbe extends Instrumentation {
             int width=getTargetContext().getResources().getDisplayMetrics().widthPixels;if(rotated.left<0||rotated.right>width+2)throw new AssertionError("Rotated lyrics outside display");
             tap(waitText("解锁"));
             getUiAutomation().setRotation(Surface.ROTATION_0);SystemClock.sleep(700);
+            String longText="这是一句很长的歌词用于验证滚动能够显示末尾".repeat(7);
+            post(type("lyricsData").put("id","qa").put("title","Long lyric").put("lines",new org.json.JSONArray().put(new JSONObject().put("t",0).put("d",20).put("text",longText))));
+            post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));SystemClock.sleep(500);
+            Class<?> overlayClass=Class.forName("net.ouse.nestune.LyricsOverlay");Object overlay=null;
+            for(java.lang.reflect.Field field:overlayClass.getDeclaredFields())if(java.lang.reflect.Modifier.isStatic(field.getModifiers())&&field.getType()==overlayClass){field.setAccessible(true);overlay=field.get(null);}
+            android.widget.TextView scrolling=null;
+            for(java.lang.reflect.Field field:overlayClass.getDeclaredFields()){field.setAccessible(true);Object value=field.get(overlay);if(value instanceof android.widget.TextView&&((android.widget.TextView)value).getText().toString().equals(longText))scrolling=(android.widget.TextView)value;}
+            if(scrolling==null||scrolling.getScrollX()!=0)throw new AssertionError("Long lyric did not start at beginning");
+            post(type("lyricsMedia").put("id","qa").put("position",19).put("playing",false));SystemClock.sleep(500);
+            if(scrolling.getScrollX()<=0)throw new AssertionError("Long lyric did not scroll");
+            int pausedScroll=scrolling.getScrollX();SystemClock.sleep(450);if(scrolling.getScrollX()!=pausedScroll)throw new AssertionError("Paused lyric still scrolling");
+            post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));SystemClock.sleep(350);if(scrolling.getScrollX()!=0)throw new AssertionError("Seek did not reset scrolling");
+            post(data);post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));SystemClock.sleep(250);
             showTools();tap(waitText("锁定"));tap(waitText("关闭"));SystemClock.sleep(400);
             state=request(type("lyricsInfo"));if(state.optBoolean("enabled")||visible("Native first line")!=null)throw new AssertionError("Close failed");
             expect("window.__overlayEvents.some(e=>e.enabled===false)");
             js("const f=document.createElement('iframe');f.srcdoc='<script>setTimeout(()=>window.NestuneNative?.postMessage(JSON.stringify({type:\"lyricsEnable\",enabled:true})),20)<\\/script>';document.body.append(f);true");SystemClock.sleep(350);
             if(request(type("lyricsInfo")).optBoolean("enabled"))throw new AssertionError("Child frame controlled the overlay");
             post(new JSONObject("{\"type\":\"media\",\"id\":\"\"}"));
-            result.putString("report","NESTUNE_LYRICS_RUNTIME_PASS: real native overlay over launcher, independent background clock, pause, seek, translation, drag, lock/unlock, rotation, native close event, child-frame denial; no login or server writes");finish(Activity.RESULT_OK,result);
-        } catch(Throwable error){result.putString("failure",error.toString());try{result.putString("page",js("({url:location.href,ready:document.readyState,native:typeof NestuneNative})"));}catch(Exception ignored){}error.printStackTrace();finish(Activity.RESULT_CANCELED,result);}
+            result.putString("report","NESTUNE_LYRICS_RUNTIME_PASS: real native overlay over launcher, independent background clock, pause, seek, translation, drag, lock/unlock, rotation, real underlying click-through, long-line scrolling/seek/pause, native close event, child-frame denial; no login or server writes");finish(Activity.RESULT_OK,result);
+        } catch(Throwable error){result.putString("failure",error.toString());try {String tree="";for(AccessibilityWindowInfo w:getUiAutomation().getWindows())tree+=describe(w.getRoot());result.putString("visibleTexts",tree);result.putString("nativeState",request(type("lyricsInfo")).toString());Class<?> c=Class.forName("net.ouse.nestune.LyricsOverlay");Object instance=null;for(java.lang.reflect.Field f:c.getDeclaredFields())if(java.lang.reflect.Modifier.isStatic(f.getModifiers())&&f.getType()==c){f.setAccessible(true);instance=f.get(null);}String views="";for(java.lang.reflect.Field f:c.getDeclaredFields()){f.setAccessible(true);Object v=f.get(instance);if(v instanceof android.widget.TextView){android.widget.TextView t=(android.widget.TextView)v;views+=t.getText()+":"+t.getWidth()+"x"+t.getHeight()+";";}}result.putString("nativeViews",views);}catch(Exception ignored){}try{result.putString("page",js("({url:location.href,ready:document.readyState,native:typeof NestuneNative})"));}catch(Exception ignored){}error.printStackTrace();finish(Activity.RESULT_CANCELED,result);}
         finally {getUiAutomation().setRotation(Surface.ROTATION_0);}
     }
 }

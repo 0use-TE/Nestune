@@ -6,7 +6,7 @@ addEventListener('DOMContentLoaded', async () => {
   try {
     const initial = await request({ type: 'lyricsControlsProbe' });
     window.nestuneLyricsState(initial.state);
-    check(initial.state.locked && !initial.clickThrough && !initial.visible, 'restored lock must accept input');
+    check(initial.state.locked && initial.clickThrough && !initial.toolsClickThrough && !initial.visible, 'restored lock must pass text through and preserve tool input');
     report.restoredLockInteractive = true;
     await request({ type: 'lyricsMoveProbe' });
     await new Promise(resolve => setTimeout(resolve, 200));
@@ -28,7 +28,7 @@ addEventListener('DOMContentLoaded', async () => {
     check(moved.x !== unlocked.x || moved.y !== unlocked.y, 'unlocked lyrics must remain movable');
     report.unlockedNativeMovement = true;
     const locked = await click('lock');
-    check(locked.state.locked && !locked.clickThrough, 'lock swallowed input');
+    check(locked.state.locked && locked.clickThrough && !locked.toolsClickThrough, 'lock swallowed input');
     report.lockButton = true;
     try { await request({ type: 'lyricsDrag' }); throw Error('locked drag was accepted'); }
     catch (error) { check(String(error).includes('不支持'), 'locked drag must be rejected'); }
