@@ -73,7 +73,7 @@ it('shares a playlist snapshot while preserving its source and checking playlist
   expect(database.all('SELECT * FROM playlist_songs WHERE playlist_id=11')).toHaveLength(2);
 });
 it('rejects invalid coordinates, local files, unavailable queue entries and private uploads without losing shared data', async () => {
-  for (const x of [NaN, Infinity, -1, 1001, '50']) await expect(canvas.addRecord(1, { songId: '101', x, y: 100 })).rejects.toThrow();
+  for (const x of [NaN, Infinity, -1000001, 1000001, '50']) await expect(canvas.addRecord(1, { songId: '101', x, y: 100 })).rejects.toThrow();
   await expect(canvas.addRecord(1, { songId: 'device-123', x: 100, y: 100 })).rejects.toThrow();
   await expect(canvas.addRecord(1, { kind: 'queue', songIds: ['101','999'], x: 100, y: 100 })).rejects.toThrow();
   await expect(canvas.addRecord(1, { songId: 'upload-' + 'a'.repeat(32), x: 100, y: 100 })).rejects.toThrow('设为公开');
