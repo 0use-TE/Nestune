@@ -13,7 +13,9 @@ $credentials = Get-Content -LiteralPath $CredentialsPath -Raw | ConvertFrom-Json
 if (!(Test-Path -LiteralPath $credentials.keystore)) { throw 'Release keystore is missing.' }
 $inputApk = (Resolve-Path -LiteralPath $UnsignedApk).Path
 $version = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'desktop/src-tauri/tauri.conf.json') -Raw | ConvertFrom-Json).version
-$versionCode = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'desktop/src-tauri/tauri.android.conf.json') -Raw | ConvertFrom-Json).bundle.android.versionCode
+$androidConfig = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'desktop/src-tauri/tauri.android.conf.json') -Raw | ConvertFrom-Json
+if ($androidConfig.version) { $version = $androidConfig.version }
+$versionCode = $androidConfig.bundle.android.versionCode
 if ($version -notmatch '^\d+\.\d+\.\d+$' -or $versionCode -lt 1) { throw 'Invalid Android release version.' }
 $outputDirectory = Join-Path $repo "releases/$version-tauri/android"
 New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
