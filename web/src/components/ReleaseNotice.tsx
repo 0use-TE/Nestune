@@ -23,7 +23,7 @@ export function ReleaseNotes({ onClose }: { onClose: () => void }) {
       <div className="release-downloads">
         <a className="btn sm" href="/downloads">下载客户端</a>
       </div>
-      <p className="sub sm">网页功能刷新后即可使用，系统托盘需要安装新版桌面客户端。Android 当前版本为 1.2.1。</p>
+      <p className="sub sm">来源图标刷新后即可恢复；系统悬浮歌词修复需安装 1.2.3 客户端后重启。</p>
       {releases.slice(1).map(release => <details key={release.version}>
         <summary>历史更新 · {release.version} · {release.title}</summary>
         <p className="sub sm">{release.date}</p>

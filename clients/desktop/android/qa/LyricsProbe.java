@@ -57,6 +57,7 @@ public class LyricsProbe extends Instrumentation {
     }
     private void pointer(int action,float x,float y,long down,long at) {sendPointerSync(MotionEvent.obtain(down,at,action,x,y,0));}
     private void tap(Rect rect){long t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,rect.centerX(),rect.centerY(),t,t);pointer(MotionEvent.ACTION_UP,rect.centerX(),rect.centerY(),t,t+100);}
+    private void showTools() throws Exception { if(visible("锁定")==null && visible("解锁")==null)tap(waitText("Native first line")); }
     private JSONObject type(String value)throws Exception{return new JSONObject().put("type",value);}
     @Override public void onStart() {
         Bundle result=new Bundle();
@@ -64,6 +65,7 @@ public class LyricsProbe extends Instrumentation {
             activity=startActivitySync(new Intent().setClassName("net.ouse.nestune","net.ouse.nestune.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             for(int i=0;i<80&&web==null;i++){runOnMainSync(()->web=find(activity.getWindow().getDecorView()));SystemClock.sleep(150);}
             if(web==null)throw new AssertionError("Missing WebView");
+            runOnMainSync(()->web.loadDataWithBaseURL("https://nestune.0use.net:8443/", "<!doctype html><html><body>Isolated native lyrics test</body></html>", "text/html", "UTF-8", "https://nestune.0use.net:8443/"));
             expect("location.origin==='https://nestune.0use.net:8443' && document.readyState==='complete' && typeof NestuneNative!=='undefined'");
             js("window.__lyricsReplies={};const old=NestuneNative.onmessage;NestuneNative.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.requestId)window.__lyricsReplies[d.requestId]=d}catch{};old?.(e)};window.__overlayEvents=[];window.addEventListener('nt:lyrics-state',e=>__overlayEvents.push(e.detail));true");
             ActivityMonitor prompt=addMonitor(new IntentFilter(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),null,true);
@@ -95,12 +97,25 @@ public class LyricsProbe extends Instrumentation {
             long t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,before.centerX(),before.centerY(),t,t);SystemClock.sleep(150);
             pointer(MotionEvent.ACTION_MOVE,before.centerX()+50,before.centerY()-90,t,t+180);pointer(MotionEvent.ACTION_UP,before.centerX()+50,before.centerY()-90,t,t+260);
             SystemClock.sleep(300);Rect after=waitText("Native first line");if(after.centerY()>=before.centerY()-20)throw new AssertionError("Dragging did not move overlay");
-            state=request(type("lyricsLock").put("locked",true));if(!state.optBoolean("locked"))throw new AssertionError("Lock failed");
-            state=request(type("lyricsLock").put("locked",false));if(state.optBoolean("locked"))throw new AssertionError("Unlock failed");
+            showTools(); tap(waitText("锁定"));
+            state=request(type("lyricsInfo"));if(!state.optBoolean("locked"))throw new AssertionError("Native lock button failed");
+            Rect fixed=waitText("Native first line");
+            t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,fixed.centerX(),fixed.centerY(),t,t);
+            pointer(MotionEvent.ACTION_MOVE,fixed.centerX()+50,fixed.centerY()-90,t,t+180);pointer(MotionEvent.ACTION_UP,fixed.centerX()+50,fixed.centerY()-90,t,t+260);
+            SystemClock.sleep(3500);Rect still=waitText("Native first line");
+            if(still.centerX()!=fixed.centerX()||still.centerY()!=fixed.centerY())throw new AssertionError("Locked overlay moved");
+            tap(waitText("背景"));tap(waitText("解锁"));
+            state=request(type("lyricsInfo"));if(state.optBoolean("locked"))throw new AssertionError("Native unlock button failed");
+            Rect movable=waitText("Native first line");
+            t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,movable.centerX(),movable.centerY(),t,t);
+            pointer(MotionEvent.ACTION_MOVE,movable.centerX()+20,movable.centerY()-40,t,t+180);pointer(MotionEvent.ACTION_UP,movable.centerX()+20,movable.centerY()-40,t,t+260);
+            SystemClock.sleep(250);if(waitText("Native first line").centerY()>=movable.centerY()-15)throw new AssertionError("Unlocked overlay could not move");
+            showTools();tap(waitText("锁定"));
             getUiAutomation().setRotation(Surface.ROTATION_90);SystemClock.sleep(1000);Rect rotated=waitText("Native first line");
             int width=getTargetContext().getResources().getDisplayMetrics().widthPixels;if(rotated.left<0||rotated.right>width+2)throw new AssertionError("Rotated lyrics outside display");
+            tap(waitText("解锁"));
             getUiAutomation().setRotation(Surface.ROTATION_0);SystemClock.sleep(700);
-            tap(waitText("Native first line"));tap(waitText("关闭"));SystemClock.sleep(400);
+            showTools();tap(waitText("锁定"));tap(waitText("关闭"));SystemClock.sleep(400);
             state=request(type("lyricsInfo"));if(state.optBoolean("enabled")||visible("Native first line")!=null)throw new AssertionError("Close failed");
             expect("window.__overlayEvents.some(e=>e.enabled===false)");
             js("const f=document.createElement('iframe');f.srcdoc='<script>setTimeout(()=>window.NestuneNative?.postMessage(JSON.stringify({type:\"lyricsEnable\",enabled:true})),20)<\\/script>';document.body.append(f);true");SystemClock.sleep(350);

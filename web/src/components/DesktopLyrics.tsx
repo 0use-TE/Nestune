@@ -144,7 +144,7 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
   }, []);
   const value = useMemo(() => ({ ...state, busy, status, upgradeRequired, setEnabled, setLocked, send }), [state, busy, status, upgradeRequired, setEnabled, setLocked, send]);
   return <LyricsContext.Provider value={value}>{children}
-    {state.enabled && state.locked && state.platform === 'desktop' && <div className="pwa-update" role="status"><span>桌面歌词已锁定</span><button className="btn sm" onClick={() => void setLocked(false)}>解锁歌词</button><button className="link" onClick={() => void setEnabled(false)}>关闭歌词</button></div>}
+    {state.enabled && state.locked && state.platform !== 'browser' && <div className="pwa-update" role="status"><span>{state.platform === 'android' ? '悬浮歌词已锁定' : '桌面歌词已锁定'}</span><button className="btn sm" onClick={() => void setLocked(false)}>解锁歌词</button><button className="link" onClick={() => void setEnabled(false)}>关闭歌词</button></div>}
   </LyricsContext.Provider>;
 }
 

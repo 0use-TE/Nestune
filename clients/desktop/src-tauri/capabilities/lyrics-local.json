@@ -5,7 +5,6 @@
     "lyrics"
   ],
   "permissions": [
-    "allow-lyrics-command",
-    "core:window:allow-start-dragging"
+    "allow-lyrics-command"
   ]
 }

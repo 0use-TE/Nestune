@@ -21,8 +21,8 @@ vm.runInNewContext(script, { window, document: { getElementById: get, body: { cl
 await Promise.resolve();
 calls.length = 0;
 get('drag').listeners.mousedown({ button: 0, target: { closest: () => null } });
-assert.equal(calls[0].command, 'plugin:window|start_dragging');
-assert.equal(calls[0].payload.label, 'lyrics');
+assert.equal(calls[0].command, 'lyrics_command');
+assert.equal(calls[0].payload.data.type, 'lyricsDrag');
 calls.length = 0;
 get('drag').listeners.mousedown({ button: 0, target: { closest: () => ({}) } });
 assert.equal(calls.length, 0, 'Toolbar buttons must not start dragging');

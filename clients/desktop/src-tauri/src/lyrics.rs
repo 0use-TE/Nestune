@@ -62,7 +62,7 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
     if controls_qa { preferences.enabled = true; preferences.locked = true; }
     app.manage(Mutex::new(Runtime { preferences: preferences.clone(), data: Value::Null, media: Value::Null }));
     let builder = WebviewWindowBuilder::new(app, "lyrics", WebviewUrl::App("lyrics.html".into()))
-        .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 100.0)
+        .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 138.0)
         .decorations(false).transparent(true).shadow(false).always_on_top(true)
         .skip_taskbar(true).focused(false).resizable(true).visible(false)
         .background_color(tauri::window::Color(0, 0, 0, 0))
@@ -112,12 +112,25 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
             ))?;
         }
     }
+    let position = window.outer_position()?;
+    if let Ok(mut runtime) = app.state::<Mutex<Runtime>>().lock() {
+        runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+    }
     let handle = app.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Moved(position) = event {
             if let Some(state) = handle.try_state::<Mutex<Runtime>>() {
                 if let Ok(mut runtime) = state.lock() {
-                    runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+                    if runtime.preferences.locked {
+                        let restore = runtime.preferences.x.zip(runtime.preferences.y)
+                            .filter(|(x, y)| *x != position.x || *y != position.y);
+                        drop(runtime);
+                        if let (Some((x, y)), Some(window)) = (restore, handle.get_webview_window("lyrics")) {
+                            let _ = window.set_position(PhysicalPosition::new(x, y));
+                        }
+                    } else {
+                        runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+                    }
                 }
             }
         }
@@ -204,8 +217,17 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             extern "system" { fn GetWindowLongW(hwnd: *mut std::ffi::c_void, index: i32) -> i32; }
             let hwnd = overlay.hwnd().map_err(|_| "Probe window missing")?;
             let style = unsafe { GetWindowLongW(hwnd.0, -20) };
+            let position = overlay.outer_position().map_err(|_| "Probe position failed")?;
             return Ok(json!({ "state": info(&runtime.preferences), "clickThrough": style & 0x20 != 0,
+                "x": position.x, "y": position.y,
                 "visible": overlay.is_visible().map_err(|_| "Probe visibility failed")? }));
+        },
+        #[cfg(debug_assertions)]
+        "lyricsMoveProbe" if local && std::env::args().any(|arg| arg == "--lyrics-controls-qa") => {
+            drop(runtime);
+            let position = overlay.outer_position().map_err(|_| "Probe position failed")?;
+            overlay.set_position(PhysicalPosition::new(position.x + 50, position.y - 30)).map_err(|_| "Probe movement failed")?;
+            return Ok(json!({ "ok": true }));
         },
         #[cfg(debug_assertions)]
         "lyricsProbe" if main && std::env::args().any(|arg| arg == "--lyrics-qa") => {

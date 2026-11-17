@@ -42,6 +42,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var translationView: TextView? = null
     private var titleView: TextView? = null
     private var toolbar: LinearLayout? = null
+    private var lockButton: Button? = null
     private var layout: WindowManager.LayoutParams? = null
     private var track = ""
     private var title = "Nestune"
@@ -53,7 +54,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var position = 0.0
     private var playing = false
     private var positionAt = SystemClock.elapsedRealtime()
-    private val hideToolbar = Runnable { toolbar?.visibility = View.GONE }
+    private val hideToolbar = Runnable { if (!locked) toolbar?.visibility = View.GONE }
     private val ticker = object : Runnable {
         override fun run() {
             if (!allowed()) { enabled = false; preferences.edit().putBoolean("enabled", false).apply(); remove(); emit(); return }
@@ -160,7 +161,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         val controls = LinearLayout(context).apply { gravity = Gravity.END; visibility = View.GONE }
         fun addTool(button: Button) { controls.addView(button, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(32)).apply { marginStart = dp(5) }) }
         addTool(tool("背景") { panel = !panel; preferences.edit().putBoolean("panel", panel).apply(); background() })
-        addTool(tool("锁定") { locked = true; preferences.edit().putBoolean("locked", true).apply(); updateFlags(); emit() })
+        lockButton = tool("锁定") { locked = !locked; preferences.edit().putBoolean("locked", locked).apply(); updateFlags(); emit() }.also { addTool(it) }
         addTool(tool("关闭") { enabled = false; preferences.edit().putBoolean("enabled", false).apply(); remove(); emit() })
         toolbar = controls; view.addView(controls)
         textView = KaraokeLyricsText(context).apply {
@@ -185,6 +186,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> { downX = event.rawX; downY = event.rawY; startX = params.x; startY = params.y; moved = false; true }
                 MotionEvent.ACTION_MOVE -> {
+                    if (locked) return@OnTouchListener true
                     val dx = event.rawX - downX; val dy = event.rawY - downY
                     if (abs(dx) + abs(dy) > dp(6)) moved = true
                     if (moved) {
@@ -194,6 +196,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
                     }; true
                 }
                 MotionEvent.ACTION_UP -> {
+                    if (locked) { controls.visibility = View.VISIBLE; return@OnTouchListener true }
                     preferences.edit().putInt("x", params.x).putInt("y", params.y).apply()
                     if (!moved) { controls.visibility = if (controls.visibility == View.VISIBLE) View.GONE else View.VISIBLE; handler.removeCallbacks(hideToolbar); handler.postDelayed(hideToolbar, 3000) }
                     true
@@ -209,10 +212,16 @@ class LyricsOverlay private constructor(private val context: Context) : android.
 
     private fun updateFlags() {
         val view = root ?: return; val params = layout ?: return
-        params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-            (if (locked) WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE else 0)
-        params.alpha = if (locked) 0.75f else 1f
-        if (locked) toolbar?.visibility = View.GONE
+        // Lock position only. Never disable input on the unlock/close controls.
+        params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        params.alpha = 1f
+        lockButton?.apply {
+            text = if (locked) "解锁" else "锁定"
+            contentDescription = if (locked) "解锁歌词位置" else "锁定歌词位置"
+        }
+        handler.removeCallbacks(hideToolbar)
+        toolbar?.visibility = View.VISIBLE
+        if (!locked) handler.postDelayed(hideToolbar, 3000)
         runCatching { manager.updateViewLayout(view, params) }
     }
 
@@ -239,6 +248,6 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private fun remove() {
         handler.removeCallbacks(ticker); handler.removeCallbacks(hideToolbar)
         root?.let { runCatching { manager.removeView(it) } }; root = null; toolbar = null
-        textView = null; translationView = null; titleView = null; layout = null
+        textView = null; translationView = null; titleView = null; lockButton = null; layout = null
     }
 }
