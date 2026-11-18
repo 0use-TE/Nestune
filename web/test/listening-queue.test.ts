@@ -55,6 +55,24 @@ it('starts from the host queue, preserving duplicate occurrences, index, mode an
   expect(room().queue?.entries).toHaveLength(4);
 });
 
+it('shares one unheard-first round across both listeners and ignores duplicate automatic advances', async () => {
+  await queues.initializeListeningQueue(listener(1), roomId, { ...seed, mode: 'shuffle', index: 0 });
+  const heard = ['101'];
+  for (let i = 0; i < 2; i++) {
+    const command = { type: 'next', automatic: true, version: room().transportVersion };
+    await queues.editListeningQueue(listener(1), roomId, command);
+    const selected = room().playback!.songId;
+    await queues.editListeningQueue(listener(1), roomId, command);
+    expect(room(2).playback!.songId).toBe(selected);
+    expect(room(2).queue!.shuffle).toEqual(room().queue!.shuffle);
+    heard.push(selected);
+  }
+  expect(new Set(heard).size).toBe(3);
+  await queues.editListeningQueue(listener(2), roomId, { type:'append', songId:'109' });
+  await queues.editListeningQueue(listener(2), roomId, { type:'next' });
+  expect(room().playback!.songId).toBe('109');
+});
+
 it('keeps concurrent additions and removes exactly the selected duplicate without resetting playback', async () => {
   await queues.initializeListeningQueue(listener(1), roomId, seed);
   await Promise.all([queues.editListeningQueue(listener(1), roomId, { type: 'append', songId: '104' }),

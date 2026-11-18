@@ -11,6 +11,7 @@ import { onlineSongs as songs } from './catalog';
 import { enrichSong } from './recordings';
 import { uploadedSong, visibleUpload } from './uploads';
 import { createPlaylist, getPlaylist } from './playlists';
+import { createShuffle } from '@/lib/shuffle';
 
 type Listener = { userId: number; sessionId: string };
 type Room = { id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null;
@@ -29,7 +30,8 @@ export function readSharedQueue(room: Pick<Room, 'queue_data' | 'host_id' | 'gue
   const selected = queue.entries[queue.index]?.key;
   const entries = queue.entries.filter(({ song }) => !isUploadSong(song.id) ||
     !!visibleUpload(room.host_id, song.id) && !!visibleUpload(room.guest_id, song.id));
-  return { ...queue, entries: entries.map(entry => ({ ...entry, song: enrichSong(entry.song) })), index: entries.findIndex(entry => entry.key === selected) };
+  const visible = entries.map(entry => ({ ...entry, song: enrichSong(entry.song) })), index = entries.findIndex(entry => entry.key === selected);
+  return { ...queue, entries: visible, index, shuffle: createShuffle(visible.map(entry => entry.song), index, queue.shuffle) };
 }
 
 function ids(value: unknown): string[] {
@@ -85,7 +87,7 @@ export async function initializeListeningQueue(listener: Listener, id: number, v
   atomic(() => {
     const current = participating(listener, id);
     if (current.queue_data) return;
-    const queue: SharedQueue = { entries, index: entries.length ? index : -1, mode: initialMode };
+    const queue: SharedQueue = { entries, index: entries.length ? index : -1, mode: initialMode, shuffle: createShuffle(entries.map(entry => entry.song), entries.length ? index : -1, seed.shuffle) };
     run(`UPDATE listening_rooms SET queue_data=?,song_id=?,position=?,playing=?,updated_at=?,transport_version=transport_version+1 WHERE id=?`,
       JSON.stringify(queue), entries[index]?.song.id ?? null, entries[index]?.song.id === initialId ? initialPosition : 0,
       Number(!!entries.length && seed.playing), now(), id);
