@@ -16,8 +16,20 @@ type NativeWindow = Window & {
   chrome?: { webview?: unknown };
   documentPictureInPicture?: { requestWindow: (options: { width: number; height: number }) => Promise<Window> };
 };
-type Context = State & { busy: boolean; status: string; upgradeRequired: boolean; setEnabled: (value: boolean) => Promise<void>; setLocked: (value: boolean) => Promise<void>; send: (data: OverlayData | OverlayMedia) => void };
+const ANDROID_CONTENT = [
+  ['title', '显示歌名'],
+  ['translation', '显示翻译'],
+] as const;
+type AndroidContentField = typeof ANDROID_CONTENT[number][0];
+type AndroidContent = Record<AndroidContentField, boolean>;
+const androidContentKey = (field: AndroidContentField) => `nt-android-lyrics-${field}`;
+type Context = State & {
+  busy: boolean; status: string; windowLabel: string; upgradeRequired: boolean;
+  androidContent: AndroidContent; setAndroidContent: (field: AndroidContentField, visible: boolean) => void;
+  setEnabled: (value: boolean) => Promise<boolean>; setLocked: (value: boolean) => Promise<void>; send: (data: OverlayData | OverlayMedia) => void;
+};
 const INITIAL: State = { supported: false, enabled: false, locked: false, permission: false, platform: 'browser' };
+const ANDROID_PERMISSION_HINT = '请允许 Nestune 显示在其他应用上层，返回后即可开启系统悬浮歌词。';
 const LyricsContext = createContext<Context>(null as never);
 export const useDesktopLyrics = () => useContext(LyricsContext);
 function nativeBridge(host: NativeWindow) {
@@ -56,12 +68,32 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [upgradeRequired, setUpgradeRequired] = useState(false);
+  const [androidContent, setAndroidContentState] = useState<AndroidContent>({ title: false, translation: false });
+  useEffect(() => {
+    try {
+      setAndroidContentState({
+        title: localStorage.getItem(androidContentKey('title')) === '1',
+        translation: localStorage.getItem(androidContentKey('translation')) === '1',
+      });
+    } catch { /* Storage may be unavailable. */ }
+  }, []);
+  const setAndroidContent = useCallback((field: AndroidContentField, visible: boolean) => {
+    setAndroidContentState(previous => ({ ...previous, [field]: visible }));
+    try { localStorage.setItem(androidContentKey(field), visible ? '1' : '0'); } catch { /* Storage may be unavailable. */ }
+  }, []);
+  const pendingPermission = useRef(false);
+  const changing = useRef(false);
   const pip = useRef<Window | null>(null);
   const content = useRef<OverlayData | null>(null);
   const media = useRef<OverlayMedia & { at: number }>({ type: 'lyricsMedia', id: '', position: 0, playing: false, at: 0 });
   const stateRef = useRef(state); stateRef.current = state;
   const accept = useCallback((next: State) => {
-    if (next?.supported === true && typeof next.enabled === 'boolean') setState(next);
+    if (next?.supported !== true || typeof next.enabled !== 'boolean') return;
+    setState(next);
+    if (next.platform === 'android' && pendingPermission.current && next.enabled) {
+      pendingPermission.current = false;
+      setStatus('');
+    }
   }, []);
   useEffect(() => {
     const host = window as NativeWindow;
@@ -69,7 +101,11 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
     const inspect = () => {
       const kind = transport();
       if (kind === 'native') nativeRequest({ type: 'lyricsInfo' }).then(value => {
-        if (alive) { accept(value); setUpgradeRequired(false); setStatus(''); }
+        if (alive) {
+          accept(value);
+          setUpgradeRequired(false);
+          setStatus(pendingPermission.current && !value.permission ? ANDROID_PERMISSION_HINT : '');
+        }
       }).catch(() => { if (alive) {
         const android = !!host.NestuneNative;
         setState({ ...INITIAL, platform: android ? 'android' : 'desktop' }); setUpgradeRequired(!android);
@@ -87,15 +123,17 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
     return () => { alive = false; clearTimeout(timer); window.removeEventListener('focus', inspect); window.removeEventListener('nt:lyrics-state', receive); pip.current?.close(); };
   }, [accept]);
   const setEnabled = useCallback(async (enabled: boolean) => {
-    if (busy) return;
+    if (changing.current) return stateRef.current.enabled;
+    changing.current = true;
     setBusy(true); setStatus('');
+    if (!enabled) pendingPermission.current = false;
     const kind = transport();
     try {
       const host = window as NativeWindow;
       if (kind === 'upgrade') { setUpgradeRequired(true); throw Error(lyricsOpenFailure(true)); }
       if (kind === 'unsupported') throw Error(lyricsOpenFailure(false));
       if (kind === 'pip') {
-        if (!enabled) { pip.current?.close(); pip.current = null; setState(previous => ({ ...previous, enabled: false })); return; }
+        if (!enabled) { pip.current?.close(); pip.current = null; setState(previous => ({ ...previous, enabled: false })); return false; }
         if (!host.documentPictureInPicture) throw Error('此浏览器暂不支持桌面歌词，请使用新版客户端');
         const child = await host.documentPictureInPicture.requestWindow({ width: 560, height: 185 });
         pip.current = child;
@@ -147,16 +185,24 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
           if (pip.current === child) { pip.current = null; setState(previous => ({ ...previous, enabled: false })); }
         }, { once: true });
         setState(previous => ({ ...previous, enabled: true }));
+        return true;
       } else {
-        const next = await nativeRequest({ type: 'lyricsEnable', enabled }); accept(next);
-        if (enabled && !next.permission) setStatus('请在系统设置中允许“显示在其他应用上层”，返回后即可显示歌词');
+        const next = await nativeRequest({ type: 'lyricsEnable', enabled });
+        accept(next);
+        if (enabled && next.platform === 'android') {
+          pendingPermission.current = !next.permission;
+          if (pendingPermission.current) setStatus(ANDROID_PERMISSION_HINT);
+          else if (!next.enabled) setStatus('系统浮窗未能打开，请检查 Nestune 的悬浮窗权限。');
+        }
+        return next.enabled;
       }
     } catch (error) {
       if (kind === 'pip') { pip.current?.close(); pip.current = null; setState(previous => ({ ...previous, enabled: false })); }
       setStatus(kind === 'pip' ? lyricsOpenFailure(false) : error instanceof Error ? error.message : '无法打开桌面歌词');
+      return false;
     }
-    finally { setBusy(false); }
-  }, [accept, busy]);
+    finally { changing.current = false; setBusy(false); }
+  }, [accept]);
   const setLocked = useCallback(async (locked: boolean) => {
     try { accept(await nativeRequest({ type: 'lyricsLock', locked })); setStatus(locked ? stateRef.current.platform === 'desktop' ? '歌词位置已锁定，窗口按钮仍可使用' : '歌词已锁定，可在这里解锁' : '歌词已解锁'); }
     catch (error) { setStatus(error instanceof Error ? error.message : '无法调整歌词窗口'); }
@@ -171,7 +217,10 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
     else if (kind === 'android') host.NestuneNative!.postMessage(JSON.stringify(data));
     else if (kind === 'tauri') void host.__TAURI_INTERNALS__!.invoke('lyrics_command', { data }).catch(() => {});
   }, []);
-  const value = useMemo(() => ({ ...state, busy, status, upgradeRequired, setEnabled, setLocked, send }), [state, busy, status, upgradeRequired, setEnabled, setLocked, send]);
+  const windowLabel = state.platform === 'android' ? '系统悬浮歌词' : '桌面歌词';
+  const value = useMemo(() => ({
+    ...state, busy, status, windowLabel, upgradeRequired, androidContent, setAndroidContent, setEnabled, setLocked, send,
+  }), [state, busy, status, windowLabel, upgradeRequired, androidContent, setAndroidContent, setEnabled, setLocked, send]);
   return <LyricsContext.Provider value={value}>{children}
     {state.enabled && state.locked && state.platform !== 'browser' && <div className="pwa-update" role="status"><span>{state.platform === 'android' ? '悬浮歌词已锁定' : '桌面歌词已锁定'}</span><button className="btn sm" onClick={() => void setLocked(false)}>解锁歌词</button><button className="link" onClick={() => void setEnabled(false)}>关闭歌词</button></div>}
   </LyricsContext.Provider>;
@@ -186,11 +235,19 @@ export function LyricsClientUpgrade() {
 export function DesktopLyricsSettings() {
   const lyrics = useDesktopLyrics();
   return <>
-    <div className="set"><div><b>桌面歌词</b><p className="sub sm">{lyrics.supported ? lyrics.platform === 'browser' ? '在独立画中画窗口显示歌词' : '切换到其他应用时也能看歌词' : '新版客户端支持在应用外显示歌词'}</p></div>
-      <div className="lyrics-native-actions"><button type="button" className="btn ghost sm" disabled={!lyrics.supported || lyrics.busy} onClick={() => void lyrics.setEnabled(!lyrics.enabled)}>{lyrics.enabled ? '关闭' : '打开桌面歌词'}</button>
+    <div className="set"><div><b>{lyrics.windowLabel}</b><p className="sub sm">{lyrics.supported ? lyrics.platform === 'browser' ? '在独立画中画窗口显示歌词' : '切换到其他应用时也能看歌词' : '新版客户端支持在应用外显示歌词'}</p></div>
+      <div className="lyrics-native-actions"><button type="button" className="btn ghost sm" disabled={!lyrics.supported || lyrics.busy} onClick={() => void lyrics.setEnabled(!lyrics.enabled)}>{lyrics.enabled ? '关闭' : `打开${lyrics.windowLabel}`}</button>
         {lyrics.enabled && lyrics.platform !== 'browser' && <button type="button" className="btn ghost sm" onClick={() => void lyrics.setLocked(!lyrics.locked)}>{lyrics.locked ? '解锁歌词' : '锁定歌词'}</button>}
       </div>
     </div>
+    {lyrics.platform === 'android' && <div role="group" aria-label="悬浮歌词内容">
+      {ANDROID_CONTENT.map(([field, label]) => <div className="set" key={field}>
+        <b>悬浮歌词{label}</b>
+        <button type="button" className={`switch ${lyrics.androidContent[field] ? 'on' : ''}`} role="switch"
+          aria-label={`悬浮歌词${label}`} aria-checked={lyrics.androidContent[field]}
+          onClick={() => lyrics.setAndroidContent(field, !lyrics.androidContent[field])} />
+      </div>)}
+    </div>}
     {lyrics.status && <p className="sub sm pad" role="status">{lyrics.status}</p>}
     {lyrics.upgradeRequired && <div className="pad"><LyricsClientUpgrade /></div>}
   </>;

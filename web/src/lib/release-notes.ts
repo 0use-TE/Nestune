@@ -12,11 +12,36 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 18 日',
+    title: '悬浮歌词可以调大小了',
+    summary: '浮窗大小和歌词一起调整，按钮闲置后完全淡出，并随浮窗位置自动换边。',
+    sections: [
+      { title: '桌面客户端', paragraphs: ['解锁浮窗后，用工具栏的减号和加号调整大小，也可拖动窗口边缘。原歌词、翻译和歌名会随窗口缩放。'] },
+      { title: '网页内浮窗', paragraphs: ['打开歌词浮窗后，用加减按钮调整显示大小。'] },
+      { title: '安卓客户端', paragraphs: ['解锁后点「−」或「+」调整浮窗及歌词大小。恢复之前的大小设置，无需重新调整。'] },
+      { title: '下载方式', paragraphs: ['1.2.9 已提供 Windows、安卓、Linux 和 macOS Universal 安装包。Linux 和 macOS 请从下载页下载并覆盖安装。'] },
+      { title: '浮窗按钮', paragraphs: ['浮窗在屏幕上半区时，按钮显示在歌词下方。在下半区时则放到歌词上方。闲置三秒后按钮完全淡出，移动鼠标或轻触浮窗可再次显示。'] },
+    ],
+  },
+  {
+    version: '1.2.8',
+    date: '2026 年 11 月 18 日',
+    title: 'Android 悬浮歌词修复',
+    summary: '切到其他应用时也能看到原歌词，歌名和翻译可以分别开启。',
+    sections: [
+      { title: '歌词浮窗', paragraphs: ['更新 Android 客户端后，浮窗默认只显示原歌词。在「我的 → 设置 → 偏好」可开启显示歌名、显示翻译。'] },
+    ],
+    images: [
+      { src: '/release-notes/1.2.8/android-lyrics-settings.jpg', alt: '悬浮歌词的显示歌名和显示翻译开关', width: 684, height: 252 },
+    ],
+  },
+  {
+    version: '1.2.7',
+    date: '2026 年 11 月 18 日',
     title: '底栏切换循环，歌词浮窗也能切歌',
     summary: '支持导入网易云公开喜欢列表，修复 iOS 聊天键盘遮挡。',
     sections: [
       { title: '网页', paragraphs: ['底栏新增循环键。网易云公开喜欢列表可导入，iPhone 打字时发送按钮保持可见。'] },
-      { title: '歌词浮窗', paragraphs: ['可切歌、暂停和切换循环。按钮闲置 3 秒淡出。系统浮窗请更新 Windows 或 Android 客户端。'] },
+      { title: '歌词浮窗', paragraphs: ['可切歌、暂停和切换循环，按钮闲置 3 秒淡出。Android 底栏可直接打开系统悬浮歌词，首次使用请允许「显示在其他应用上层」。'] },
     ],
     images: [
       { src: '/release-notes/1.2.7/playback.jpg', alt: '底部播放栏和歌词浮窗的播放控制', width: 866, height: 157 },

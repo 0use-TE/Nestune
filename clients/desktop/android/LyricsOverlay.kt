@@ -37,6 +37,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var enabled = preferences.getBoolean("enabled", false)
     private var locked = preferences.getBoolean("locked", false)
     private var panel = preferences.getBoolean("panel", false)
+    private var sizeStep = preferences.getInt("sizeStep", 0).coerceIn(-2, 3)
     private var pendingPermission = false
     private var root: LinearLayout? = null
     private var textView: KaraokeLyricsText? = null
@@ -50,7 +51,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var lockButton: Button? = null
     private var layout: WindowManager.LayoutParams? = null
     private var track = ""
-    private var title = "Nestune"
+    private var title = ""
     private var lines = emptyList<Line>()
     private var plainText = ""
     private var flowSeed = 0L
@@ -62,7 +63,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var positionAt = SystemClock.elapsedRealtime()
     private val fadeToolbar = Runnable {
         val active = if (locked) floatingToolbar else toolbar
-        active?.animate()?.alpha(.22f)?.setDuration(200)?.start()
+        active?.animate()?.alpha(0f)?.setDuration(200)?.start()
     }
 
     private fun wakeToolbar() {
@@ -163,7 +164,11 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         contentDescription = label; minWidth = 0; minimumWidth = 0; minHeight = 0; minimumHeight = 0
         setPadding(0, 0, 0, 0); isAllCaps = false
         background = GradientDrawable().apply { setColor(0xdc181817.toInt()); cornerRadius = dp(9).toFloat() }
-        setOnClickListener { wakeToolbar(); action() }
+        setOnClickListener {
+            val visibleToolbar = (if (locked) floatingToolbar else toolbar)?.alpha ?: 1f
+            wakeToolbar()
+            if (visibleToolbar > .05f) action()
+        }
         setOnHoverListener { _, _ -> wakeToolbar(); false }
     }
 
@@ -188,6 +193,10 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         playback("⏮", "上一首", "previous")
         playback("▶", "播放", "toggle")
         playback("⏭", "下一首", "next")
+        if (!floating) {
+            add(tool("−") { resize(-1) }.apply { contentDescription = "缩小歌词窗口" })
+            add(tool("+") { resize(1) }.apply { contentDescription = "放大歌词窗口" })
+        }
         add(tool("背景") { panel = !panel; preferences.edit().putBoolean("panel", panel).apply(); background() })
         val lock = tool(if (locked) "解锁" else "锁定") { locked = !locked; preferences.edit().putBoolean("locked", locked).apply(); updateFlags(); emit() }
         if (floating) floatingLockButton = lock else lockButton = lock
@@ -227,18 +236,18 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         val controls = makeToolbar(false)
         toolbar = controls
         toolbarSlot = FrameLayout(context).also { slot ->
-            val toolbarWidth = min(metrics.widthPixels - dp(44), dp(308)).coerceAtLeast(dp(176))
+            val toolbarWidth = toolbarWidth(overlayWidth())
             slot.addView(controls, FrameLayout.LayoutParams(toolbarWidth, dp(34), Gravity.END))
             view.addView(slot, LinearLayout.LayoutParams(-1, dp(34)))
         }
         textView = KaraokeLyricsText(context).apply {
-            textSize = 22f; setTextColor(Color.WHITE); gravity = Gravity.CENTER; setSingleLine(true); setHorizontallyScrolling(true)
+            textSize = 22f * lyricScale(); setTextColor(Color.WHITE); gravity = Gravity.CENTER; setSingleLine(true); setHorizontallyScrolling(true)
             ellipsize = null; setTypeface(typeface, Typeface.BOLD)
             setShadowLayer(dp(2).toFloat(), 0f, dp(1).toFloat(), Color.BLACK)
         }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2)) }
-        translationView = label(14f, 0xffeeede7.toInt()).apply { setSingleLine(true); ellipsize = android.text.TextUtils.TruncateAt.MARQUEE; marqueeRepeatLimit = -1; isSelected = true }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
-        titleView = label(10f, 0xffc5c3bc.toInt()).also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
-        val width = min(metrics.widthPixels - dp(20), dp(560)).coerceAtLeast(dp(200))
+        translationView = label(14f * lyricScale(), 0xffeeede7.toInt()).apply { setSingleLine(true); ellipsize = android.text.TextUtils.TruncateAt.MARQUEE; marqueeRepeatLimit = -1; isSelected = true; visibility = View.GONE }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
+        titleView = label(10f * lyricScale(), 0xffc5c3bc.toInt()).apply { visibility = View.GONE }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
+        val width = overlayWidth()
         val params = WindowManager.LayoutParams(width, -2,
             if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
@@ -248,6 +257,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
             y = preferences.getInt("y", metrics.heightPixels - dp(240)).coerceIn(dp(24), (metrics.heightPixels - dp(150)).coerceAtLeast(dp(24)))
         }
         layout = params; root = view; background()
+        view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> placeToolbar() }
         var downX = 0f; var downY = 0f; var startX = 0; var startY = 0; var moved = false
         val touch = View.OnTouchListener { _, event ->
             when (event.actionMasked) {
@@ -258,9 +268,10 @@ class LyricsOverlay private constructor(private val context: Context) : android.
                     val dx = event.rawX - downX; val dy = event.rawY - downY
                     if (abs(dx) + abs(dy) > dp(6)) moved = true
                     if (moved) {
-                        params.x = (startX + dx.toInt()).coerceIn(0, (metrics.widthPixels - width).coerceAtLeast(0))
+                        params.x = (startX + dx.toInt()).coerceIn(0, (metrics.widthPixels - params.width).coerceAtLeast(0))
                         params.y = (startY + dy.toInt()).coerceIn(dp(20), (metrics.heightPixels - view.height).coerceAtLeast(dp(20)))
                         runCatching { manager.updateViewLayout(view, params) }
+                        placeToolbar()
                     }; true
                 }
                 MotionEvent.ACTION_UP -> {
@@ -278,12 +289,70 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         catch (_: Exception) { root = null; enabled = false; preferences.edit().putBoolean("enabled", false).apply(); emit() }
     }
 
+    private fun lyricScale() = 1f + sizeStep * .16f
+
+    private fun overlayWidth(): Int {
+        val available = (context.resources.displayMetrics.widthPixels - dp(20)).coerceAtLeast(1)
+        val base = min(available, dp(560))
+        return (base * lyricScale()).toInt().coerceIn(min(available, dp(238)), available)
+    }
+
+    private fun toolbarWidth(width: Int) = (width - dp(24)).coerceIn(1, dp(340))
+
+    private fun resize(direction: Int) {
+        val view = root ?: return
+        val params = layout ?: return
+        val step = (sizeStep + direction).coerceIn(-2, 3)
+        if (locked || sizeStep == step) return
+        sizeStep = step
+        preferences.edit().putInt("sizeStep", step).apply()
+        params.width = overlayWidth()
+        params.x = params.x.coerceIn(0, (context.resources.displayMetrics.widthPixels - params.width).coerceAtLeast(0))
+        textView?.textSize = 22f * lyricScale()
+        translationView?.textSize = 14f * lyricScale()
+        titleView?.textSize = 10f * lyricScale()
+        toolbar?.let { controls ->
+            controls.layoutParams = FrameLayout.LayoutParams(toolbarWidth(params.width), dp(34), Gravity.END)
+        }
+        runCatching { manager.updateViewLayout(view, params) }
+    }
+
+    private fun placeToolbar() {
+        val view = root ?: return
+        val params = layout ?: return
+        val slot = toolbarSlot ?: return
+        if (view.height <= 0) return
+        val metrics = context.resources.displayMetrics
+        val y = params.y.coerceIn(0, (metrics.heightPixels - view.height).coerceAtLeast(0))
+        if (params.y != y) {
+            params.y = y
+            runCatching { manager.updateViewLayout(view, params) }
+        }
+        val below = (params.y + view.height / 2) < metrics.heightPixels / 2
+        val currentIndex = view.indexOfChild(slot)
+        val targetIndex = if (below) view.childCount - 1 else 0
+        if (currentIndex != targetIndex) {
+            val slotParams = slot.layoutParams
+            view.removeView(slot)
+            view.addView(slot, targetIndex, slotParams)
+        }
+        val floating = floatingToolbar ?: return
+        val tools = toolbarLayout ?: return
+        val x = (params.x + params.width - dp(12) - tools.width).coerceIn(0, (metrics.widthPixels - tools.width).coerceAtLeast(0))
+        val toolsY = if (below) params.y + view.height - dp(8) - tools.height else params.y + dp(7)
+        if (tools.x != x || tools.y != toolsY) {
+            tools.x = x
+            tools.y = toolsY
+            runCatching { manager.updateViewLayout(floating, tools) }
+        }
+    }
+
     private fun updateFlags() {
         val view = root ?: return; val params = layout ?: return
         val controls = toolbar ?: return
         if (locked && toolbarLayout == null) {
             val floating = makeToolbar(true)
-            val toolsWidth = min(params.width - dp(24), dp(308))
+            val toolsWidth = toolbarWidth(params.width)
             val tools = WindowManager.LayoutParams(toolsWidth, dp(34), params.type,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT).apply {
                 gravity = Gravity.TOP or Gravity.START
@@ -308,6 +377,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
         }
         }
         toolbar?.visibility = if (locked) View.INVISIBLE else View.VISIBLE
+        placeToolbar()
         updatePlaybackButtons()
         wakeToolbar()
         runCatching { manager.updateViewLayout(view, params) }
@@ -324,13 +394,17 @@ class LyricsOverlay private constructor(private val context: Context) : android.
             line = lines.getOrNull(low - 1); nextTime = lines.getOrNull(low)?.time ?: 0.0
         }
         val text = if (mediaTrack.isEmpty()) "暂无播放" else if (track != mediaTrack) "正在加载歌词" else
-            line?.text?.ifEmpty { "间奏" } ?: if (lines.isNotEmpty()) "前奏" else plainText.lineSequence().firstOrNull { it.isNotBlank() } ?: "暂无歌词"
-        if (line != null) textView?.render(line.timing, seconds, nextTime, trackDuration, flowSeed)
+            line?.text?.ifBlank { "间奏" } ?: if (lines.isNotEmpty()) "前奏" else plainText.lineSequence().firstOrNull { it.isNotBlank() } ?: "暂无歌词"
+        if (line != null && line.text.isNotBlank()) textView?.render(line.timing, seconds, nextTime, trackDuration, flowSeed)
         else textView?.clear(text)
-        val translation = line?.translation ?: ""
-        if (translationView?.text?.toString() != translation) translationView?.text = translation
-        translationView?.visibility = if (translation.isEmpty()) View.GONE else View.VISIBLE
-        if (titleView?.text?.toString() != title) titleView?.text = title
+        updateLabel(translationView, line?.translation.orEmpty())
+        updateLabel(titleView, if (track == mediaTrack && mediaTrack.isNotEmpty()) title else "")
+    }
+
+    private fun updateLabel(view: TextView?, value: String) {
+        if (view == null) return
+        if (view.text.toString() != value) view.text = value
+        view.visibility = if (value.isBlank()) View.GONE else View.VISIBLE
     }
 
     private fun remove() {

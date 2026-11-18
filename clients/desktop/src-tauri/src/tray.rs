@@ -58,7 +58,17 @@ pub fn action(app: &AppHandle, id: &str) {
     match id {
         "nestune.show" => show_main(app),
         "nestune.hide" => { let _ = hide_main(app); },
-        "nestune.quit" => { super::lyrics::persist(app); app.exit(0); },
+        "nestune.quit" => {
+            #[cfg(target_os = "macos")]
+            let handle = app.clone();
+            #[cfg(target_os = "macos")]
+            let _ = app.run_on_main_thread(move || {
+                super::lyrics::persist(&handle);
+                handle.exit(0);
+            });
+            #[cfg(not(target_os = "macos"))]
+            { super::lyrics::persist(app); app.exit(0); }
+        },
         "nestune.lyrics" => { let _ = super::lyrics::toggle(app); },
         _ => {
             let command = match id {

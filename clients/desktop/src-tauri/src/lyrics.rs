@@ -1,7 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Mutex;
-use tauri::{AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+
+const TOOLS_WIDTH: f64 = 324.0;
+const TOOLS_HEIGHT: f64 = 44.0;
+const DEFAULT_WIDTH: f64 = 620.0;
+const DEFAULT_HEIGHT: f64 = 138.0;
+const MIN_WIDTH: f64 = 280.0;
+const MIN_HEIGHT: f64 = 112.0;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -11,6 +18,8 @@ pub struct Preferences {
     panel: bool,
     x: Option<i32>,
     y: Option<i32>,
+    width: Option<f64>,
+    height: Option<f64>,
 }
 
 pub struct Runtime {
@@ -33,10 +42,64 @@ fn notify(app: &AppHandle, preferences: &Preferences) {
     }
 }
 
+fn tools_position(
+    lyrics: PhysicalPosition<i32>,
+    lyric_size: PhysicalSize<u32>,
+    tools: PhysicalSize<u32>,
+    work_area: Option<(PhysicalPosition<i32>, PhysicalSize<u32>)>,
+) -> (PhysicalPosition<i32>, bool) {
+    let below = work_area.is_some_and(|(origin, size)| {
+        i64::from(lyrics.y) * 2 + i64::from(lyric_size.height)
+            < i64::from(origin.y) * 2 + i64::from(size.height)
+    });
+    let mut x = lyrics.x + lyric_size.width as i32 - tools.width as i32;
+    let mut y = if below { lyrics.y + lyric_size.height as i32 - tools.height as i32 } else { lyrics.y };
+    if let Some((origin, size)) = work_area {
+        x = x.clamp(origin.x, origin.x + size.width.saturating_sub(tools.width) as i32);
+        y = y.clamp(origin.y, origin.y + size.height.saturating_sub(tools.height) as i32);
+    }
+    (PhysicalPosition::new(x, y), below)
+}
+
+fn toolbar_layout(lyrics: &WebviewWindow) -> tauri::Result<(PhysicalPosition<i32>, PhysicalSize<u32>, bool)> {
+    let monitor = lyrics.current_monitor()?;
+    let work_area = monitor.as_ref().map(|monitor| {
+        let rect = monitor.work_area();
+        (rect.position, rect.size)
+    });
+    let scale = match monitor {
+        Some(monitor) => monitor.scale_factor(),
+        None => lyrics.scale_factor()?,
+    };
+    let size = LogicalSize::new(TOOLS_WIDTH, TOOLS_HEIGHT).to_physical(scale);
+    let (position, below) = tools_position(lyrics.inner_position()?, lyrics.inner_size()?, size, work_area);
+    Ok((position, size, below))
+}
+
 fn position_tools(app: &AppHandle) -> tauri::Result<()> {
     if let (Some(lyrics), Some(tools)) = (app.get_webview_window("lyrics"), app.get_webview_window("lyrics-tools")) {
-        let origin = lyrics.outer_position()?;
-        tools.set_position(PhysicalPosition::new(origin.x + lyrics.inner_size()?.width as i32 - tools.inner_size()?.width as i32, origin.y))?;
+        let (position, size, below) = toolbar_layout(&lyrics)?;
+        let outer = tools.outer_position()?;
+        let inner = tools.inner_position()?;
+        if inner != position {
+            tools.set_position(PhysicalPosition::new(position.x + outer.x - inner.x, position.y + outer.y - inner.y))?;
+        }
+        let inner_size = tools.inner_size()?;
+        if inner_size != size {
+            // A borderless Windows window can still have an invisible non-client frame.
+            #[cfg(target_os = "windows")]
+            let size = {
+                let outer_size = tools.outer_size()?;
+                PhysicalSize::new(
+                    size.width + outer_size.width.saturating_sub(inner_size.width),
+                    size.height + outer_size.height.saturating_sub(inner_size.height),
+                )
+            };
+            tools.set_size(size)?;
+        }
+        let script = format!("window.nestuneLyricsToolsBelow?.({below})");
+        lyrics.eval(&script)?;
+        tools.eval(&script)?;
     }
     Ok(())
 }
@@ -46,8 +109,14 @@ fn lock_input(app: &AppHandle, locked: bool) -> Result<(), String> {
     let tools = app.get_webview_window("lyrics-tools").ok_or("歌词按钮不可用")?;
     position_tools(app).map_err(|_| "无法定位歌词按钮")?;
     // Keep the small recovery toolbar interactive while the text window passes through.
-    if locked && lyrics.is_visible().unwrap_or(false) { tools.show().map_err(|_| "无法显示解锁按钮")?; }
+    if locked && lyrics.is_visible().unwrap_or(false) {
+        tools.eval("window.nestuneLyricsWake?.()").map_err(|_| "无法唤醒歌词按钮")?;
+        tools.show().map_err(|_| "无法显示解锁按钮")?;
+    } else if !locked {
+        lyrics.eval("window.nestuneLyricsWake?.()").map_err(|_| "无法唤醒歌词按钮")?;
+    }
     lyrics.set_ignore_cursor_events(locked).map_err(|_| "无法调整歌词穿透")?;
+    lyrics.set_resizable(!locked).map_err(|_| "无法调整歌词窗口大小")?;
     if !locked || !lyrics.is_visible().unwrap_or(false) { tools.hide().map_err(|_| "无法隐藏歌词按钮")?; }
     Ok(())
 }
@@ -80,8 +149,10 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
     #[cfg(debug_assertions)]
     if controls_qa { preferences.enabled = true; preferences.locked = true; }
     app.manage(Mutex::new(Runtime { preferences: preferences.clone(), data: Value::Null, media: Value::Null }));
+    let width = preferences.width.unwrap_or(DEFAULT_WIDTH).clamp(MIN_WIDTH, DEFAULT_WIDTH * 3.0);
+    let height = preferences.height.unwrap_or(DEFAULT_HEIGHT).clamp(MIN_HEIGHT, DEFAULT_HEIGHT * 3.0);
     let builder = WebviewWindowBuilder::new(app, "lyrics", WebviewUrl::App("lyrics.html".into()))
-        .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 138.0)
+        .title("Nestune · 桌面歌词").inner_size(width, height).min_inner_size(MIN_WIDTH, MIN_HEIGHT)
         .decorations(false).transparent(true).shadow(false).always_on_top(true)
         .skip_taskbar(true).focused(false).resizable(true).visible(false)
         .background_color(tauri::window::Color(0, 0, 0, 0))
@@ -126,8 +197,8 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
             let scale = monitor.scale_factor();
             let size = monitor.size(); let origin = monitor.position();
             window.set_position(PhysicalPosition::new(
-                origin.x + ((size.width as f64 - 620.0 * scale) / 2.0).max(0.0) as i32,
-                origin.y + (size.height as f64 - 210.0 * scale).max(0.0) as i32,
+                origin.x + ((size.width as f64 - width * scale) / 2.0).max(0.0) as i32,
+                origin.y + (size.height as f64 - (height + 72.0) * scale).max(0.0) as i32,
             ))?;
         }
     }
@@ -153,7 +224,22 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
                 }
             }
         }
-        if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) { let _ = position_tools(&handle); }
+        if let tauri::WindowEvent::Resized(size) = event {
+            if let Some(lyrics) = handle.get_webview_window("lyrics") {
+                if let Ok(scale) = lyrics.scale_factor() {
+                    if let Ok(mut runtime) = handle.state::<Mutex<Runtime>>().try_lock() {
+                        if !runtime.preferences.locked {
+                            let size = size.to_logical::<f64>(scale);
+                            runtime.preferences.width = Some(size.width);
+                            runtime.preferences.height = Some(size.height);
+                        }
+                    }
+                }
+            }
+        }
+        if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
+            let _ = position_tools(&handle);
+        }
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             if let Some(window) = handle.get_webview_window("lyrics") { let _ = window.hide(); }
@@ -165,7 +251,7 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
         }
     });
     WebviewWindowBuilder::new(app, "lyrics-tools", WebviewUrl::App("lyrics.html?tools=1".into()))
-        .title("Nestune · 歌词控制").inner_size(240.0, 44.0)
+        .title("Nestune · 歌词控制").inner_size(TOOLS_WIDTH, TOOLS_HEIGHT)
         .decorations(false).transparent(true).shadow(false).always_on_top(true)
         .skip_taskbar(true).focused(false).resizable(false).visible(false)
         .background_color(tauri::window::Color(0, 0, 0, 0))
@@ -246,7 +332,11 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
     let overlay = app.get_webview_window("lyrics").ok_or("歌词窗口不可用")?;
     match kind {
         "lyricsInfo" => {},
-        "lyricsSnapshot" if local => return Ok(json!({ "state": info(&runtime.preferences), "data": runtime.data, "media": runtime.media })),
+        "lyricsSnapshot" if local => {
+            let tools_below = toolbar_layout(&overlay).is_ok_and(|(_, _, below)| below);
+            return Ok(json!({ "state": info(&runtime.preferences), "data": runtime.data,
+                "media": runtime.media, "toolsBelow": tools_below }));
+        },
         "lyricsPlayback" if local && runtime.preferences.enabled => {
             let action = data.get("action").and_then(Value::as_str).ok_or("缺少播放操作")?;
             if !matches!(action, "mode" | "previous" | "toggle" | "next") {
@@ -270,15 +360,33 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             let tools_hwnd = tools.hwnd().map_err(|_| "Missing tools handle")?;
             let tools_style = unsafe { GetWindowLongW(tools_hwnd.0, -20) };
             let position = overlay.outer_position().map_err(|_| "Probe position failed")?;
+            let tools_size = tools.inner_size().map_err(|_| "Probe tools size failed")?;
+            let tools_origin = tools.inner_position().map_err(|_| "Probe tools position failed")?;
+            let (expected_position, expected_size, tools_below) = toolbar_layout(&overlay)
+                .map_err(|_| "Probe toolbar layout failed")?;
             return Ok(json!({ "state": info(&runtime.preferences), "clickThrough": style & 0x20 != 0, "toolsClickThrough": tools_style & 0x20 != 0,
                 "x": position.x, "y": position.y,
+                "toolsAligned": tools_origin == expected_position, "toolsBelow": tools_below,
+                "toolsWidth": tools_size.to_logical::<f64>(tools.scale_factor().map_err(|_| "Probe scale failed")?).width,
+                "toolsSizeCorrect": tools_size == expected_size,
                 "visible": overlay.is_visible().map_err(|_| "Probe visibility failed")? }));
         },
         #[cfg(debug_assertions)]
         "lyricsMoveProbe" if local && std::env::args().any(|arg| arg == "--lyrics-controls-qa") => {
             drop(runtime);
             let position = overlay.outer_position().map_err(|_| "Probe position failed")?;
-            overlay.set_position(PhysicalPosition::new(position.x + 50, position.y - 30)).map_err(|_| "Probe movement failed")?;
+            let target = match data["edge"].as_str() {
+                Some(edge @ ("top" | "bottom")) => {
+                    let monitor = overlay.current_monitor().ok().flatten().ok_or("Probe monitor missing")?;
+                    let work_area = monitor.work_area();
+                    let height = overlay.inner_size().map_err(|_| "Probe size failed")?.height;
+                    let y = if edge == "top" { work_area.position.y + 20 }
+                        else { work_area.position.y + work_area.size.height.saturating_sub(height + 20) as i32 };
+                    PhysicalPosition::new(position.x, y)
+                }
+                _ => PhysicalPosition::new(position.x + 50, position.y - 30),
+            };
+            overlay.set_position(target).map_err(|_| "Probe movement failed")?;
             return Ok(json!({ "ok": true }));
         },
         #[cfg(debug_assertions)]
@@ -317,6 +425,26 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             overlay.start_dragging().map_err(|_| "无法拖动歌词窗口")?;
             return Ok(json!({ "ok": true }));
         },
+        "lyricsResize" if local && !runtime.preferences.locked => {
+            let factor = match data["direction"].as_str() {
+                Some("larger") => 1.15,
+                Some("smaller") => 1.0 / 1.15,
+                _ => return Err("无效的缩放方向".into()),
+            };
+            let scale = overlay.scale_factor().map_err(|_| "无法读取显示缩放")?;
+            let current = overlay.inner_size().map_err(|_| "无法读取歌词窗口大小")?.to_logical::<f64>(scale);
+            let ceiling = overlay.current_monitor().ok().flatten().map(|m| m.work_area().size.to_logical::<f64>(scale));
+            let max_width = ceiling.map_or(DEFAULT_WIDTH * 3.0, |size| size.width).min(DEFAULT_WIDTH * 3.0).max(MIN_WIDTH);
+            let max_height = ceiling.map_or(DEFAULT_HEIGHT * 3.0, |size| size.height).min(DEFAULT_HEIGHT * 3.0).max(MIN_HEIGHT);
+            let width = (current.width * factor).clamp(MIN_WIDTH, max_width);
+            let height = (current.height * factor).clamp(MIN_HEIGHT, max_height);
+            runtime.preferences.width = Some(width);
+            runtime.preferences.height = Some(height);
+            drop(runtime);
+            overlay.set_size(LogicalSize::new(width, height)).map_err(|_| "无法缩放歌词窗口")?;
+            persist(&app);
+            return Ok(json!({ "ok": true }));
+        },
         _ => return Err("不支持此歌词窗口操作".into()),
     }
     let response = info(&runtime.preferences);
@@ -329,6 +457,22 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn toolbar_flips_at_monitor_midpoint_and_stays_inside_work_area() {
+        // Second monitor has a negative origin and 150% scaling.
+        let work_area = Some((PhysicalPosition::new(-1920, -200), PhysicalSize::new(1920, 1040)));
+        let lyrics = PhysicalSize::new(930, 207);
+        let tools = PhysicalSize::new(384, 66);
+        let (top, below) = tools_position(PhysicalPosition::new(-1700, -180), lyrics, tools, work_area);
+        assert!(below);
+        assert_eq!(top, PhysicalPosition::new(-1154, -39));
+
+        let (bottom, below) = tools_position(PhysicalPosition::new(-600, 600), lyrics, tools, work_area);
+        assert!(!below);
+        assert_eq!(bottom, PhysicalPosition::new(-384, 600));
+    }
+
     #[test]
     fn rejects_external_or_lookalike_lyrics_pages() {
         for url in ["https://nestune.0use.net:8443/lyrics.html", "https://tauri.localhost.evil/lyrics.html", "file:///lyrics.html"] {

@@ -27,6 +27,31 @@ addEventListener('DOMContentLoaded', async () => {
     const moved = await request({ type: 'lyricsControlsProbe' });
     check(moved.x !== unlocked.x || moved.y !== unlocked.y, 'unlocked lyrics must remain movable');
     report.unlockedNativeMovement = true;
+    for (const edge of ['top', 'bottom']) {
+      await request({ type: 'lyricsMoveProbe', edge });
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const placed = await request({ type: 'lyricsControlsProbe' });
+      check(placed.toolsAligned && placed.toolsBelow === (edge === 'top'), 'tools did not flip at the ' + edge);
+      check(placed.toolsSizeCorrect && placed.toolsWidth >= 255, 'native tools size: ' + JSON.stringify(placed));
+    }
+    report.toolbarPlacementBothHalves = true;
+    const measure = () => ({
+      width: innerWidth,
+      height: innerHeight,
+      font: parseFloat(getComputedStyle(document.getElementById('line')).fontSize),
+    });
+    const original = measure();
+    await request({ type: 'lyricsResize', direction: 'larger' });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const larger = measure();
+    check(larger.width > original.width && larger.height > original.height && larger.font > original.font,
+      'window and lyric did not enlarge: ' + JSON.stringify({ original, larger }));
+    await request({ type: 'lyricsResize', direction: 'smaller' });
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const smaller = measure();
+    check(smaller.width < larger.width && smaller.height < larger.height && smaller.font < larger.font,
+      'window and lyric did not shrink');
+    report.nativeResize = { original, larger, smaller };
     const locked = await click('lock');
     check(locked.state.locked && locked.clickThrough && !locked.toolsClickThrough, 'lock swallowed input');
     report.lockButton = true;

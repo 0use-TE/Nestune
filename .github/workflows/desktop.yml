@@ -6,10 +6,10 @@ on:
       platform:
         description: Platform to build
         type: choice
-        options: [both, linux, linux-arm64, macos]
+        options: [both, linux, linux-arm64, macos, macos-intel, windows-arm64]
         default: both
   push:
-    branches: [main]
+    branches: [main, 'release/**']
     paths:
       - 'clients/desktop/**'
       - '.github/workflows/desktop.yml'
@@ -23,11 +23,12 @@ concurrency:
 
 jobs:
   build:
-    name: ${{ matrix.os == 'macos-15' && 'macOS universal' || matrix.os == 'ubuntu-22.04-arm' && 'Linux ARM64' || 'Linux x64' }}
+    if: inputs.platform != 'windows-arm64'
+    name: ${{ startsWith(matrix.os, 'macos-') && 'macOS universal' || matrix.os == 'ubuntu-22.04-arm' && 'Linux ARM64' || 'Linux x64' }}
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.platform == 'macos' && '["macos-15"]' || inputs.platform == 'linux-arm64' && '["ubuntu-22.04-arm"]' || inputs.platform == 'linux' && '["ubuntu-22.04","ubuntu-22.04-arm"]' || '["ubuntu-22.04","ubuntu-22.04-arm","macos-15"]') }}
+        os: ${{ fromJSON(inputs.platform == 'macos-intel' && '["macos-15-intel"]' || inputs.platform == 'macos' && '["macos-15"]' || inputs.platform == 'linux-arm64' && '["ubuntu-22.04-arm"]' || inputs.platform == 'linux' && '["ubuntu-22.04","ubuntu-22.04-arm"]' || '["ubuntu-22.04","ubuntu-22.04-arm","macos-15"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
@@ -64,6 +65,15 @@ jobs:
           cache-on-failure: true
       - name: Install CLI
         run: npm ci --no-audit --no-fund
+      - name: Check native tray lifecycle
+        run: |
+          cargo test --locked --lib --manifest-path src-tauri/Cargo.toml
+          cargo build --locked --manifest-path src-tauri/Cargo.toml
+          if [[ '${{ runner.os }}' == 'Linux' ]]; then
+            dbus-run-session -- xvfb-run -a timeout 30s src-tauri/target/debug/nestune --tray-qa
+          else
+            python3 -c 'import subprocess; subprocess.run(["src-tauri/target/debug/nestune", "--tray-qa"], check=True, timeout=30)'
+          fi
       - name: Build
         run: npm run '${{ runner.os == 'macOS' && 'build:macos' || 'build:linux' }}'
         env:
@@ -98,15 +108,6 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/Info.plist"
           hdiutil verify src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
-      - name: Check native tray lifecycle
-        run: |
-          cargo test --locked --lib --manifest-path src-tauri/Cargo.toml
-          cargo build --locked --manifest-path src-tauri/Cargo.toml
-          if [[ '${{ runner.os }}' == 'Linux' ]]; then
-            dbus-run-session -- xvfb-run -a timeout 30s src-tauri/target/debug/nestune --tray-qa
-          else
-            python3 -c 'import subprocess; subprocess.run(["src-tauri/target/debug/nestune", "--tray-qa"], check=True, timeout=30)'
-          fi
       - name: Collect packages
         id: packages
         run: |
@@ -131,5 +132,41 @@ jobs:
         with:
           name: Nestune-${{ steps.packages.outputs.version }}-${{ steps.packages.outputs.artifact_suffix }}
           path: clients/desktop/packages/
+          if-no-files-found: error
+          retention-days: 30
+
+  windows-arm64:
+    name: Windows ARM64
+    if: github.event_name == 'push' || inputs.platform == 'both' || inputs.platform == 'windows-arm64'
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: clients/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/desktop/src-tauri -> target
+          key: windows-arm64
+      - name: Build and verify ARM64 installer and executable
+        shell: pwsh
+        run: |
+          $vs = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+          if (!$vs) { throw 'MSVC ARM64 build tools are missing' }
+          Import-Module (Join-Path $vs 'Common7/Tools/Microsoft.VisualStudio.DevShell.dll')
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=arm64 -host_arch=x64'
+          ./clients/build-tauri-windows.ps1 -Architecture arm64
+          $version = (Get-Content -Raw clients/desktop/src-tauri/tauri.conf.json | ConvertFrom-Json).version
+          "NESTUNE_BUILD_VERSION=$version" >> $env:GITHUB_ENV
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Nestune-${{ env.NESTUNE_BUILD_VERSION }}-Windows-arm64
+          path: releases/${{ env.NESTUNE_BUILD_VERSION }}-tauri/
           if-no-files-found: error
           retention-days: 30
