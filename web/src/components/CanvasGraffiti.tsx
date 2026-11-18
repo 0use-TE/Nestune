@@ -20,6 +20,7 @@ import { registerOverlay } from '@/lib/overlays';
 import { Icon } from './Icon';
 import { GraffitiColorPicker, GraffitiPaintCards } from './GraffitiColorPicker';
 import { GraffitiImageLayers, GraffitiSourcePreview } from './GraffitiImageLayers';
+import { GraffitiLayerGuide, GUIDE_LOGO_LAYERS, type LayerGuide } from './GraffitiLayerGuide';
 import { GraffitiSprayCans } from './GraffitiSprayCans';
 
 const snapshot = (ctx: CanvasRenderingContext2D) => ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -47,10 +48,10 @@ type SprayGesture = { id: number; before: ImageData; last: Point; timer: ReturnT
 type Tab = 'paint' | 'stencil' | 'text' | 'hand';
 type EditorStencil = Exclude<GraffitiStencil, { type: 'image' }> | 'image' | null;
 export type GraffitiEditorHandle = { cancelGesture: () => void; importImage: (file: File, at?: Point) => Promise<void> };
-const letteringPasses: { pass: GraffitiPass; label: string; hex: string }[] = [
-  { pass: 'fill', label: '字面', hex: '#f9e331' },
-  { pass: 'offset', label: '错位阴影', hex: '#15cee1' },
-  { pass: 'outline', label: '描边', hex: '#252422' },
+const letteringPasses: { pass: GraffitiPass; label: string }[] = [
+  { pass: 'fill', label: '字面' },
+  { pass: 'offset', label: '错位阴影' },
+  { pass: 'outline', label: '描边' },
 ];
 
 function reproject(target: CanvasRenderingContext2D, to: GraffitiArea, from: GraffitiArea, source: HTMLCanvasElement) {
@@ -96,13 +97,22 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   const renderedArea = useRef<GraffitiArea | null>(null);
   const active = useRef(true);
   const [tab, setTab] = useState<Tab>('paint');
-  const hand = tab === 'hand';
+  const guideKey = `nt-graffiti-layer-guide-v1:${accountId ?? 'guest'}`;
+  const [guide, setGuide] = useState<LayerGuide | null>(() => {
+    try { return localStorage.getItem(guideKey) === '1' ? null : { stage: 'intro' }; }
+    catch { return { stage: 'intro' }; }
+  });
+  const practice = guide?.stage === 'practice' ? guide : null;
+  const inGuide = guide?.stage === 'practice' || guide?.stage === 'complete';
+  const practicePath = practice ? GUIDE_LOGO_LAYERS[practice.step].path : null;
+  const hand = tab === 'hand' && !inGuide;
   const [hasInk, setHasInk] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [cans, setCans] = useState(() => PAINT_CARDS[0].colors.map(paintFromHex));
   const [selectedCan, setSelectedCan] = useState(0);
   const [paintPanel, setPaintPanel] = useState<'picker' | 'cards' | null>(null);
   const [sprayOptions, setSprayOptions] = useState(sprayPreferences);
+  const allowOutside = sprayOptions.outside && !inGuide;
   const paintColor = cans[selectedCan];
   const [fileHover, setFileHover] = useState(false);
   const color = paintHex(paintColor);
@@ -115,7 +125,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     size: 230, rotation: 0, position: { x: initialArea.x + initialArea.width / 2, y: initialArea.y + initialArea.height / 2 },
   });
   const activeImage = selectedStencil === 'image' ? imageSource : null;
-  const { position, rotation, size } = activeImage?.pose ?? basicPose;
+  const { position, rotation, size } = practice ? { position: practice.position, rotation: 0, size: 220 } : activeImage?.pose ?? basicPose;
   const pixels = activeImage?.pixels;
   const imageMode = activeImage?.mode;
   const matchColors = activeImage?.layers.map(layer => layer.sample).join(',');
@@ -132,8 +142,10 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     if (imageMode !== 'colors') return imageStencilMask(pixels, imageMode, threshold);
     return assignments && !layerHidden ? stencilColorMask(pixels, assignments, activeLayer) : null;
   }, [pixels, imageMode, threshold, assignments, activeLayer, layerHidden]);
-  const stencil = useMemo<GraffitiStencil | null>(() => selectedStencil === 'image'
-    ? { type: 'image', mask: imageMask } : selectedStencil, [selectedStencil, imageMask]);
+  const stencil = useMemo<GraffitiStencil | null>(() => {
+    if (inGuide) return practicePath ? { type: 'shape', path: practicePath } : null;
+    return selectedStencil === 'image' ? { type: 'image', mask: imageMask } : selectedStencil;
+  }, [inGuide, practicePath, selectedStencil, imageMask]);
   const latestImage = useRef(imageSource);
   latestImage.current = imageSource;
   const storedImage = useRef<StencilImage | null>(null);
@@ -268,13 +280,13 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     guide.globalCompositeOperation = 'destination-out';
     guide.drawImage(paperMask.canvas, 0, 0);
     guide.restore();
-    if (sprayOptions.outside) {
+    if (allowOutside) {
       paperMask.save();
       paperMask.globalCompositeOperation = 'source-out';
       paperMask.fillRect(x, y, width, height);
       paperMask.restore();
     }
-  }, [stencil, pixels, position, size, sizeScale, textShape, textEffects, rotation, area, initialArea, scaleX, scaleY, rasterWidth, rasterHeight, sprayOptions.outside]);
+  }, [stencil, pixels, position, size, sizeScale, textShape, textEffects, rotation, area, initialArea, scaleX, scaleY, rasterWidth, rasterHeight, allowOutside]);
 
   useLayoutEffect(() => {
     if (hand || movingView || gesture.current || stencilDrag.current) return;
@@ -297,6 +309,33 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
       ? Math.max(boardRect.height / 2, Math.min(boardRect.height, dockTop - boardRect.top))
       : view.height * zoom;
     return { x: view.x + view.width / 2, y: view.y + visibleHeight / zoom / 2 };
+  }
+
+  function rememberGuide() {
+    try { localStorage.setItem(guideKey, '1'); } catch { /* The practice is still available without local storage. */ }
+  }
+
+  function startGuide() {
+    if (gesture.current || stencilDrag.current || generating || saving || hasInk) return;
+    const center = viewCenter();
+    rememberGuide();
+    setGuide({ stage: 'practice', step: 0, painted: false, position: { x: center.x, y: center.y - 24 / zoom } });
+  }
+
+  function nextGuideLayer() {
+    if (!practice?.painted || gesture.current) return;
+    const step = practice.step + 1;
+    setGuide(step === GUIDE_LOGO_LAYERS.length ? { stage: 'complete' } : { ...practice, step, painted: false });
+  }
+
+  function exitGuide() {
+    if (gesture.current) return;
+    if (guide?.stage === 'intro') rememberGuide();
+    if (inGuide) {
+      context.current?.clearRect(0, 0, rasterWidth, rasterHeight);
+      setHasInk(false);
+    }
+    setGuide(null);
   }
 
   function changePose(patch: Partial<StencilPose>) {
@@ -347,12 +386,14 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
 
   function spray(point: Point) {
     if (!context.current || !scratch.current) return;
-    sprayPaint(context.current, scratch.current, stencil ? mask.current?.canvas ?? null : null, point, radius * sizeScale, color, sprayOptions.outside);
+    sprayPaint(context.current, scratch.current, stencil ? mask.current?.canvas ?? null : null, point, radius * sizeScale, color, allowOutside);
   }
 
   function begin(event: PointerEvent<HTMLCanvasElement>) {
-    if (!context.current || gesture.current || stencilDrag.current || hand || movingView || saving || generating || !event.isPrimary || event.button !== 0) return;
+    if (!context.current || gesture.current || stencilDrag.current || hand || movingView || saving || generating
+      || guide?.stage === 'complete' || !event.isPrimary || event.button !== 0) return;
     event.preventDefault();
+    if (guide?.stage === 'intro') exitGuide();
     if (event.pointerType === 'mouse') event.currentTarget.focus({ preventScroll: true });
     const point = pointAt(event);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -400,7 +441,8 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     }
     const after = snapshot(context.current);
     if (!after.data.some((value, index) => value !== current.before.data[index])) return;
-    remember(current.before);
+    if (practice) setGuide({ ...practice, painted: true });
+    else remember(current.before);
     setHasInk(true);
   }
 
@@ -482,7 +524,6 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
           setStencil({ ...stencil, font: selectedFont });
         } else {
           applyStencil({ type: 'text', text, font: selectedFont, pass: 'fill' }, 350);
-          setPaintColor(paintFromHex(letteringPasses[0].hex));
         }
       }
     } catch {
@@ -525,7 +566,8 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   }
 
   async function importStencil(file: File, at?: Point) {
-    if (generating || saving || gesture.current || stencilDrag.current) return;
+    if (inGuide || generating || saving || gesture.current || stencilDrag.current) return;
+    if (guide?.stage === 'intro') exitGuide();
     setGenerating(true);
     setError('');
     try {
@@ -564,7 +606,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   }
 
   async function publish() {
-    if (!context.current || gesture.current || saving || !hasInk) return;
+    if (inGuide || !context.current || gesture.current || saving || !hasInk) return;
     const bounds = inkBounds(snapshot(context.current));
     if (!bounds) return;
     setSaving(true);
@@ -612,12 +654,13 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     <div className="nc-graffiti-board nc-graffiti-ink" style={areaStyle} aria-hidden="true">
       <canvas ref={drawing} />
     </div>
-    <div data-graffiti-draft data-hand={hand ? '' : undefined} data-moving={movingView ? '' : undefined} className="nc-graffiti-board"
+    <div data-graffiti-draft data-graffiti-practice={inGuide ? '' : undefined}
+      data-hand={hand ? '' : undefined} data-moving={movingView ? '' : undefined} className="nc-graffiti-board"
       style={{ ...areaStyle, zIndex: guideDepth }}>
         <canvas ref={paper} className="nc-graffiti-guide" tabIndex={-1} aria-label="在画布上喷漆"
           onContextMenu={event => event.preventDefault()} onPointerDown={begin} onPointerMove={move} onPointerUp={event => finish(event.pointerId)}
           onPointerCancel={event => finish(event.pointerId, true)} onLostPointerCapture={event => finish(event.pointerId, true)} />
-        {handle && !hand && !movingView && <button className="nc-stencil-handle ib" type="button"
+        {handle && !inGuide && !hand && !movingView && <button className="nc-stencil-handle ib" type="button"
           aria-label="拖动模板" title="拖动模板"
           style={{ left: `${handle.x * 100}%`, top: `${handle.y * 100}%`, scale: 1 / zoom }}
           onPointerDown={event => moveByHandle(event, true)} onPointerMove={moveByHandle}
@@ -632,6 +675,8 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
       <GraffitiSprayCans colors={cans.map(paintHex)} selected={selectedCan} onSelect={selectCan} />
       <div className="nc-graffiti-dock-chassis panel">
       <div className="nc-graffiti-dock-options">
+        {guide && <GraffitiLayerGuide guide={guide} onStart={startGuide} onNext={nextGuideLayer} onExit={exitGuide} />}
+        {!inGuide && <>
         {hand && <div className="nc-graffiti-view" role="group" aria-label="涂鸦视角">
           <span className="sub sm">拖动墙面 · 空格拖动 / 中键 / 双指</span>
           <button className="ib" type="button" aria-label="缩小画布" onClick={() => onZoom(1 / 1.25)}>−</button>
@@ -726,11 +771,9 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
             <button className="btn sm" disabled={!draft.trim() || generating}>{generating ? '生成中…' : '生成模板'}</button>
           </form>
           {stencil?.type === 'text' && <div className="nc-graffiti-text-presets" role="group" aria-label="文字分色模板">
-            {letteringPasses.map(({ pass, label, hex }) => <button key={pass}
-              className={`chip nc-graffiti-pass ${stencil.pass === pass ? 'on' : ''}`} type="button" aria-pressed={stencil.pass === pass}
-              onClick={() => { setStencil({ ...stencil, pass }); setPaintColor(paintFromHex(hex)); }}>
-              <i style={{ background: hex }} aria-hidden="true" />{label}
-            </button>)}
+            {letteringPasses.map(({ pass, label }) => <button key={pass}
+              className={`chip ${stencil.pass === pass ? 'on' : ''}`} type="button" aria-pressed={stencil.pass === pass}
+              onClick={() => { if (!gesture.current) setStencil({ ...stencil, pass }); }}>{label}</button>)}
           </div>}
           <div className="nc-graffiti-text-presets" role="group" aria-label="字形预设">
             {TEXT_SHAPES.map(({ label, shape }) => <button className="chip" key={label} type="button" onClick={() => setTextShape(shape)}>{label}</button>)}
@@ -757,13 +800,18 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
           </div>}
           {stencil?.type === 'text' && adjustStencil}
         </>}
+        </>}
         {error && <p className="sub sm nc-graffiti-error" role="alert">{error}</p>}
       </div>
-      <div className="nc-graffiti-bar">
+      {!inGuide && <div className="nc-graffiti-bar">
         <div className="nc-graffiti-tabs" role="group" aria-label="涂鸦工具类型">
           {([['paint', '喷漆'], ['hand', '手'], ['stencil', '图案'], ['text', '文字']] as const).map(([id, label]) =>
             <button key={id} className={`chip ${tab === id ? 'on' : ''}`} type="button" aria-pressed={tab === id}
-              onClick={() => { if (!gesture.current && !stencilDrag.current) setTab(id); }}>
+              onClick={() => {
+                if (gesture.current || stencilDrag.current) return;
+                if (guide?.stage === 'intro') exitGuide();
+                setTab(id);
+              }}>
               {id === 'hand' && <Icon n="hand" s={14} />}{label}
             </button>)}
         </div>
@@ -773,7 +821,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
           <button className="btn sm" type="button" disabled={!hasInk || saving || generating} onClick={() => void publish()}>{saving ? '保存中…' : '完成'}</button>
           <button className="ib" type="button" disabled={saving} onClick={onClose} aria-label="丢弃涂鸦" title="丢弃涂鸦"><Icon n="x" s={16} /></button>
         </div>
-      </div>
+      </div>}
       </div>
     </section>, dock)}
   </>;

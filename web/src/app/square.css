@@ -127,7 +127,7 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: #eee6d6 url('/canvas-walls/plaster.webp') repeat;
+  background: #bdbab4 url('/canvas-walls/concrete.webp') repeat;
 }
 .nc-wall-paint-layer {
   position: absolute;
@@ -146,6 +146,9 @@
 }
 .nc-world.nc-painting > .nc-record {
   pointer-events: none;
+}
+.nc-world:has([data-graffiti-practice]) :is(.nc-record, .nc-wall-paint) {
+  visibility: hidden;
 }
 .nc-graffiti-custom-color,
 .nc-graffiti-color-output {
@@ -539,6 +542,36 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: 10px 12px;
+}
+.nc-graffiti-lesson {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 11px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+}
+.nc-graffiti-lesson > canvas {
+  flex: none;
+  width: 45px;
+  height: 45px;
+}
+.nc-graffiti-lesson-copy {
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.nc-graffiti-lesson-copy b {
+  font-size: 13px;
+}
+.nc-graffiti-lesson-copy p {
+  margin: 2px 0 0;
+}
+.nc-graffiti-lesson-actions {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
 }
 .nc-graffiti-dock button {
   touch-action: manipulation;

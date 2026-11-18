@@ -1,2 +1,2 @@
 // Shared release version for Web update discovery and diagnostics.
-export const VERSION = '1.2.10';
+export const VERSION = '1.2.11';
