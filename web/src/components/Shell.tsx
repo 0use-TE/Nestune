@@ -104,7 +104,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <KeyboardViewport />
       <div id="app">
         <aside>
-          <div className="brand"><span className="logo" />Nestune</div>
+          <div className="brand"><span className="brand-wordmark">Nestune</span></div>
           {NAV.map(([href, label, icon]) => (
             <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
           ))}

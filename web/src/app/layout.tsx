@@ -3,6 +3,7 @@ import { PwaProvider } from '@/components/Pwa';
 import { DesktopLyricsProvider } from '@/components/DesktopLyrics';
 import './globals.css';
 import './karaoke.css';
+import './brand-flow.css';
 import './square.css';
 import './client-features.css';
 import './playlist-queue.css';

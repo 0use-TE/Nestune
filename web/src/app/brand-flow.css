@@ -1,0 +1,34 @@
+:root{
+  --brand-blue:#477dc1;--brand-mid:#628fbf;--brand-yellow:#a57a22;--brand-warm:#ac822c;
+  --brand-flow:linear-gradient(100deg,var(--brand-blue) 0%,var(--brand-mid) 22%,var(--brand-yellow) 46%,var(--brand-warm) 54%,var(--brand-mid) 78%,var(--brand-blue) 100%);
+}
+:root[data-theme=dark]{--brand-blue:#73acf0;--brand-mid:#9bbded;--brand-yellow:#edd083;--brand-warm:#f1d78e}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--brand-blue:#73acf0;--brand-mid:#9bbded;--brand-yellow:#edd083;--brand-warm:#f1d78e}}
+.brand-wordmark{display:inline-block;font-size:30px;font-weight:800;line-height:1.2;letter-spacing:-.045em}
+.brand-wordmark,.tr.cur .song-name{
+  color:var(--brand-blue);background-image:var(--brand-flow);background-size:200% 100%;background-position:0% 50%;
+  background-clip:text;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  animation:nestune-color-flow 6s linear infinite;
+}
+.tr.cur .song-name{animation-delay:-2s}
+.tr[data-playing=false] .song-name{animation-play-state:paused}
+.tr.cur .nm,.qlist .tr.cur .nm{color:var(--text)}
+.eq.playing-indicator i{
+  height:14px;background-image:var(--brand-flow);background-color:var(--brand-blue);background-size:200% 100%;
+  transform-origin:center bottom;animation:nestune-equalizer .9s infinite ease-in-out,nestune-color-flow 5s linear infinite;
+}
+.eq.playing-indicator i:nth-child(2){animation-delay:-.3s,-1.6s}
+.eq.playing-indicator i:nth-child(3){animation-delay:-.6s,-3.3s}
+@keyframes nestune-color-flow{from{background-position:0% 50%}to{background-position:200% 50%}}
+@keyframes nestune-equalizer{0%,100%{transform:scaleY(.25)}50%{transform:scaleY(1)}}
+@media(prefers-reduced-motion:reduce){
+  .brand-wordmark,.tr.cur .song-name{animation-duration:12s}
+  .eq.playing-indicator i{animation-name:nestune-equalizer-gentle,nestune-color-flow;animation-duration:1.8s,12s}
+  @keyframes nestune-equalizer-gentle{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(.9)}}
+}
+.eq.playing-indicator.off i{animation:none;height:6px;transform:none}
+@media(forced-colors:active){
+  .brand-wordmark,.tr.cur .song-name{background:none;-webkit-text-fill-color:currentColor;color:CanvasText}
+  .tr.cur .song-name{color:Highlight}
+  .eq.playing-indicator i{background:Highlight}
+}
