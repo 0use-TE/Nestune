@@ -1,6 +1,9 @@
 'use client';
 import { Select } from './Select';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCanvasCamera } from '@/lib/use-canvas-camera';
+import { WORLD_LIMIT } from '@/lib/canvas-camera';
+import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { api, get, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
@@ -25,6 +28,8 @@ const songSource = (song: Song, kind: 'song' | 'album' = 'song'): CanvasSource =
 
 export function Square() {
   const app = useApp();
+  const preview = useCanvasPreview();
+  const audition = useRef(preview); audition.current = preview;
   const live = useRef(app); live.current = app;
   const [state, setState] = useState<CanvasState>({ revision: -1, records: [] });
   const stateRef = useRef(state); stateRef.current = state;
@@ -108,16 +113,14 @@ export function Square() {
       .catch(error => live.current.toast(error.message)).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [collection, picker]);
-  const point = useCallback((x: number, y: number) => {
-    const rect = board.current!.getBoundingClientRect();
-    return { x: clamp((x - rect.left) / rect.width * 1000, 90, 910), y: clamp((y - rect.top) / rect.height * 650, 90, 560) };
-  }, []);
+  const camera = useCanvasCamera(board, app.me?.id, cancel);
+  const point = camera.point;
   const onBoard = useCallback((x: number, y: number) => { const rect = board.current?.getBoundingClientRect(); return !!rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom; }, []);
   const receiver = useCallback(() => (document.getElementById('bar') ?? emptyPlayer.current)?.getBoundingClientRect(), []);
   const over = useCallback((x: number, y: number) => {
     const rect = receiver(); return !!rect && x >= rect.left - 12 && x <= rect.right + 12 && y >= rect.top - 28 && y <= rect.bottom + 15;
   }, [receiver]);
-  const positionForNewItem = useCallback(() => { const n = stateRef.current.records.length; return { x: 180 + (n * 173) % 640, y: 130 + (n * 113) % 360 }; }, []);
+  const positionForNewItem = useCallback(() => { const rect = board.current!.getBoundingClientRect(), centre = point(rect.left + rect.width / 2, rect.top + rect.height / 2); const n = stateRef.current.records.length; return { x: centre.x + (n % 3 - 1) * 35, y: centre.y + (n % 5 - 2) * 20 }; }, [point]);
   const add = useCallback(async (source: CanvasSource, position?: { x: number; y: number }) => {
     setAdding(true);
     try {
@@ -139,7 +142,7 @@ export function Square() {
     finally { pending.current--; if (mounted.current) setAdding(false); }
   }, [apply, positionForNewItem]);
   const insert = useCallback((item: CanvasRecord, x: number, y: number, size: number, source?: CanvasSource) => {
-    cancel(); setPicker(false); setTools(false);
+    audition.current.stop(); cancel(); setPicker(false); setTools(false);
     const generation = ++playbackGeneration.current;
     const takeAndPlay = () => {
       finishAnimation.current = null;
@@ -171,6 +174,7 @@ export function Square() {
   }, [apply, cancel, dismissGuide, dismissPlaybackGuide, primeSound, receiver, refresh]);
   const activate = useCallback((operation: Drag) => {
     if (drag.current !== operation || operation.cancelled || operation.active) return;
+    if (!operation.source && isCanvasMusic(operation.item)) void audition.current.play(operation.item, false);
     operation.active = true; setSelected(null); setDraggingId(operation.source ? null : operation.item.id);
     setGhost({ item: operation.item, x: operation.x, y: operation.y, size: operation.size });
   }, []);
@@ -195,7 +199,8 @@ export function Square() {
     const finish = (event: PointerEvent) => {
       const operation = drag.current; if (!operation || event.pointerId !== operation.pointer) return;
       clearTimeout(operation.timer); drag.current = null; setDraggingId(null); setOverPlayer(false);
-      if (event.type === 'pointercancel' || !operation.active) { setGhost(null); return; }
+      if (event.type === 'pointercancel' || operation.cancelled) { setGhost(null); return; }
+      if (!operation.active) { setGhost(null); if (!operation.source && isCanvasMusic(operation.item)) void audition.current.play(operation.item); return; }
       setPicker(false); setGhost(null); window.dispatchEvent(new Event('nt:canvas-source-dropped'));
       if (isCanvasMusic(operation.item) && over(event.clientX, event.clientY)) insert(operation.item, event.clientX, event.clientY, operation.size, operation.source);
       else if (onBoard(event.clientX, event.clientY)) {
@@ -248,7 +253,7 @@ export function Square() {
     return () => { window.removeEventListener('nt:canvas-native', native); window.removeEventListener('nt:canvas-library', library); document.removeEventListener('dragover', dragging); document.removeEventListener('dragleave', leave); document.removeEventListener('drop', drop); document.removeEventListener('paste', paste); };
   }, [add, insert, onBoard, over, point, primeSound, upload]);
   useEffect(() => {
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { cancel(); setPicker(false); setTools(false); setNote(null); setEmojiPicker(false); setSelected(null); } };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { audition.current.stop(); cancel(); setPicker(false); setTools(false); setNote(null); setEmojiPicker(false); setSelected(null); } };
     window.addEventListener('keydown', escape); return () => window.removeEventListener('keydown', escape);
   }, [cancel]);
   const sources = useMemo(() => {
@@ -264,23 +269,27 @@ export function Square() {
   const receivingItem = ghost?.item ?? insertion?.item ?? (nativeSource ? sourceItem(nativeSource) : null);
   const receivingCollection = receivingItem && isCanvasMusic(receivingItem) && receivingItem.kind !== 'song';
   return <div className={`music-canvas ${dropOver ? 'nc-drop-over' : ''}`} aria-label="画布">
-    <div className="nc-board" ref={board} aria-label="共享音乐画布" aria-busy={!loaded} onPointerDown={event => { if (event.target === event.currentTarget) { setSelected(null); setTools(false); setEmojiPicker(false); } }}>
+    <div className={`nc-board ${camera.moving ? 'nc-panning' : ''}`} ref={board} {...camera.handlers} aria-label="共享音乐画布" aria-busy={!loaded} onPointerDown={event => { if (event.target === event.currentTarget) { setSelected(null); setTools(false); setEmojiPicker(false); } }}>
       {!loaded && <div className="nc-loading"><Loading label="正在加载画布" /></div>}
-      {state.records.map((item, index) => <div key={item.id} data-canvas-item={item.id} className={`nc-record nc-kind-${item.kind} ${draggingId === item.id || insertion?.item.id === item.id ? 'nc-lifted' : ''} ${selected === item.id ? 'nc-selected' : ''}`} style={{ zIndex: index + 1, left: `clamp(calc(var(--object-size) / 2 + 15px),${item.x / 10}%,calc(100% - var(--object-size) / 2 - 15px))`, top: `clamp(calc(var(--object-size) / 2 + 18px),${item.y / 6.5}%,calc(100% - var(--object-size) / 2 - 18px))`, '--record-angle': `${item.rotation}deg` } as React.CSSProperties}
+      <div className="nc-world" style={{ transform: `translate(${camera.camera.x}px,${camera.camera.y}px) scale(${camera.camera.zoom})` }}>
+      {state.records.map((item, index) => <div key={item.id} data-canvas-item={item.id} className={`nc-record nc-kind-${item.kind} ${draggingId === item.id || insertion?.item.id === item.id ? 'nc-lifted' : ''} ${selected === item.id ? 'nc-selected' : ''} ${preview.active?.id === item.id && !preview.active.loading ? 'nc-auditioning' : ''}`} style={{ zIndex: index + 1, left: item.x, top: item.y, '--record-angle': `${item.rotation}deg` } as React.CSSProperties}
         role="button" tabIndex={0} aria-label={`${item.name}，${isCanvasMusic(item) ? item.kind === 'song' ? '单曲' : item.kind === 'album' ? '专辑封套' : '歌单文件夹' : '画布物件'}，${item.ownerName ?? '用户'}放置`} title={item.kind === 'note' ? item.text : item.name}
-        onContextMenu={event => event.preventDefault()} onPointerDown={event => begin(event, item)} onDoubleClick={() => { if (isCanvasMusic(item)) keyboardPlay(item); }}
+        onContextMenu={event => event.preventDefault()} onPointerDown={event => begin(event, item)}
         onKeyDown={event => {
           if (event.target !== event.currentTarget) return;
-          if ((event.key === 'Enter' || event.key === ' ') && isCanvasMusic(item)) { event.preventDefault(); keyboardPlay(item); }
+          if ((event.key === 'Enter' || event.key === ' ') && isCanvasMusic(item)) { event.preventDefault(); void preview.play(item); }
           if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); remove(item.id); }
           const delta = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[event.key];
-          if (delta) { event.preventDefault(); void change({ action: 'move', id: item.id, x: clamp(item.x + delta[0] * 15, 90, 910), y: clamp(item.y + delta[1] * 15, 90, 560) }).catch(() => {}); }
+          if (delta) { event.preventDefault(); void change({ action: 'move', id: item.id, x: clamp(item.x + delta[0] * 15, -WORLD_LIMIT, WORLD_LIMIT), y: clamp(item.y + delta[1] * 15, -WORLD_LIMIT, WORLD_LIMIT) }).catch(() => {}); }
         }}>
-        <ItemArtwork item={item} spinning={isCanvasMusic(item) && app.current?.id === item.song.id && app.playing} />
+        <ItemArtwork item={item} spinning={preview.active?.id === item.id && !preview.active.loading || isCanvasMusic(item) && app.current?.id === item.song.id && app.playing} />
         <span className="nc-credit" title={`${item.ownerName ?? '用户'}放置`}>{item.ownerAvatar ? <img src={item.ownerAvatar} alt="" draggable={false} /> : <i>{(item.ownerName ?? '用')[0]}</i>}<span>{item.ownerName ?? '用户'}</span></span>
         {selected === item.id && !ghost && !insertion && <div className="nc-record-actions">{isCanvasMusic(item) && <button className="ib" aria-label={`拿走并播放${item.name}`} onClick={() => keyboardPlay(item)}><Icon n="play" s={16} /></button>}<button className="ib" aria-label={`取走${item.name}`} onClick={() => remove(item.id)}><Icon n="trash" s={16} /></button></div>}
       </div>)}
+      </div>
     </div>
+    <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit(state.records)}><Icon n="refresh" s={17} /></button></div>
+    {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
     {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter' }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setPicker(true); setTools(false); }}><Icon n="note" />从歌单选音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
     <input type="file" ref={fileInput} hidden accept="image/png,image/jpeg,image/webp,image/gif" aria-label="选择画布图片" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ''; }} />
@@ -288,7 +297,7 @@ export function Square() {
     {adding && <div className="nc-saving"><Loading inline label="正在放到画布" /></div>}
     {!app.current && <div ref={emptyPlayer} className="nc-empty-player" role="region" aria-label="唱片播放器"><span className="nc-slot" /><Icon n="play" s={20} /></div>}
     {(ghost && isCanvasMusic(ghost.item) || insertion || nativeSource) && <div className={`nc-receiver ${receivingCollection ? 'nc-receiver-collection' : ''} ${overPlayer || insertion ? 'nc-receiver-ready' : ''} ${insertion ? 'nc-receiver-loading' : ''}`} aria-label={insertion ? '唱片正在装入播放器' : receivingCollection ? '松开以接到播放列表末尾' : '松开唱片以加入播放列表'}><span className="nc-platter" /><span className="nc-slot" /><i className="nc-machine-light" /><Icon n={receivingCollection ? 'list' : 'play'} s={22} /></div>}
-    {ghost && <div className={`nc-ghost nc-kind-${ghost.item.kind} ${overPlayer ? 'nc-ghost-ready' : ''}`} style={{ left: ghost.x, top: ghost.y, width: ghost.size }} aria-hidden="true"><ItemArtwork item={ghost.item} /></div>}
+    {ghost && <div className={`nc-ghost nc-kind-${ghost.item.kind} ${preview.active?.id === ghost.item.id && !preview.active.loading ? 'nc-auditioning' : ''} ${overPlayer ? 'nc-ghost-ready' : ''}`} style={{ left: ghost.x, top: ghost.y, width: ghost.size }} aria-hidden="true"><ItemArtwork item={ghost.item} spinning={preview.active?.id === ghost.item.id && !preview.active.loading} /></div>}
     {insertion && <div className="nc-insertion" aria-hidden="true" style={{ '--intake-x': `${insertion.x}px`, '--slot-y': `${insertion.slotY}px`, '--disc-size': `${insertion.size}px`, '--approach-x': `${insertion.fromX - insertion.x}px`, '--approach-y': `${insertion.fromY - (insertion.slotY - insertion.size / 2)}px`, '--intake-duration': `${RECORD_INSERT_MS}ms` } as React.CSSProperties}><div className="nc-intake-clip"><div className="nc-feeding-disc"><ItemArtwork item={insertion.item} /></div></div><div className="nc-intake-lip" /></div>}
     {picker && <div className={`nc-picker-mask ${ghost ? 'nc-picker-dragging' : ''}`} onPointerDown={event => { if (event.target === event.currentTarget) setPicker(false); }}>
       <section className="nc-picker panel" role="dialog" aria-modal="true" aria-label="从歌单添加唱片">
@@ -310,7 +319,7 @@ function ItemArtwork({ item, spinning = false }: { item: CanvasItem; spinning?: 
   if (item.kind === 'emoji') return <div className="nc-emoji-art">{item.emoji}</div>;
   const count = item.tracks?.length ? `${item.tracks.length} 首` : '';
   if (item.kind === 'album') return <div className="nc-music-art nc-album-art">
-    <div className="nc-album-disc"><Vinyl song={item.song} /></div>
+    <div className="nc-album-disc"><Vinyl song={item.song} spinning={spinning} /></div>
     <div className="nc-album-jacket"><Cover src={item.song.cover} seed={item.song.id || item.name} /><i className="nc-album-spine" /><i className="nc-album-sheen" />{count && <span className="nc-album-count">{count}</span>}</div>
   </div>;
   if (item.kind === 'playlist' || item.kind === 'queue') {
@@ -318,7 +327,7 @@ function ItemArtwork({ item, spinning = false }: { item: CanvasItem; spinning?: 
     return <div className="nc-music-art nc-folder-art">
       <div className="nc-folder-back" />
       <div className="nc-folder-paper"><Cover src={second.cover} seed={second.id || item.name} /></div>
-      <div className="nc-folder-disc"><Vinyl song={item.song} /></div>
+      <div className="nc-folder-disc"><Vinyl song={item.song} spinning={spinning} /></div>
       <div className="nc-folder-front"><i /><b>{item.name}</b>{count && <small>{count}</small>}</div>
     </div>;
   }

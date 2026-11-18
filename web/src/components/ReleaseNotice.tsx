@@ -1,8 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { LATEST_RELEASE, RELEASE_NOTES } from '@/lib/release-notes';
+import { LATEST_RELEASE, RELEASE_NOTES, type ReleaseNote } from '@/lib/release-notes';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
+
+function ReleaseImages({ images }: { images: ReleaseNote['images'] }) {
+  if (!images?.length) return null;
+  return <div className="release-images">
+    {images.map(image => <img key={image.src} src={image.src} alt={image.alt}
+      width={image.width} height={image.height} loading="lazy" decoding="async" />)}
+  </div>;
+}
 
 export function ReleaseNotes({ onClose }: { onClose: () => void }) {
   const [releases, setReleases] = useState(RELEASE_NOTES);
@@ -20,6 +28,7 @@ export function ReleaseNotes({ onClose }: { onClose: () => void }) {
       {latest.sections.map(section => <section key={section.title}>
         <h3>{section.title}</h3>{section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
       </section>)}
+      <ReleaseImages images={latest.images} />
       <div className="release-downloads">
         <a className="btn sm" href="/downloads">下载客户端</a>
       </div>
@@ -30,6 +39,7 @@ export function ReleaseNotes({ onClose }: { onClose: () => void }) {
         {release.sections.map(section => <section key={section.title}>
           <h3>{section.title}</h3>{section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
         </section>)}
+        <ReleaseImages images={release.images} />
       </details>)}
     </div>
   </Sheet>;

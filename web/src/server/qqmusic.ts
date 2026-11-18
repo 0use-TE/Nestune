@@ -152,3 +152,24 @@ export async function qqQrCheck(key: string) {
   return { code: data.event === 0 ? 803 : data.event === 2 ? 802 : data.event === 1 ? 801 : 800, loggedIn: data.event === 0 };
 }
 export function qqLogout() { fs.rmSync(dir('qq-session.json'), { force: true }); g.__qq_meta?.clear(); g.__qq_qr?.clear(); }
+
+export async function qqPlaylist(id: string) {
+  if (!/^[1-9]\d{0,19}$/.test(id)) throw fail(400, 'QQ 歌单编号无效');
+  const songs: Song[] = []; let name = '', cover: string | null = null, total = 0;
+  for (let page = 1; page <= 10; page++) {
+    const data = await call(`/songlist/${id}/detail`, { num: 100, page });
+    if (Number(data.code || 0) !== 0 || Number(data.subcode || 0) !== 0) throw fail(502, 'QQ 歌单暂时无法读取，请检查分享权限后重试');
+    const list = data.songlist ?? data.song_list ?? data.songs ?? [];
+    if (!Array.isArray(list)) throw fail(502, 'QQ 歌单格式无法识别');
+    name ||= clean(data.info?.title ?? data.dirinfo?.title ?? data.disstname ?? data.name ?? data.title);
+    cover ||= typeof (data.info?.picurl ?? data.dirinfo?.picurl) === 'string' ? (data.info?.picurl ?? data.dirinfo.picurl) : null;
+    total = Number(data.total_song_num ?? data.total ?? data.songnum);
+    if (!Number.isSafeInteger(total) || total < 0 || total > 1000) throw fail(400, '一个歌单最多导入 1000 首，请拆分后再导入');
+    const batch = list.map(qqSong).filter((song: Song) => song.id);
+    songs.push(...batch);
+    if (songs.length >= total) break;
+    if (!batch.length) throw fail(502, 'QQ 歌单内容不完整，本次没有导入');
+  }
+  if (songs.length < total) throw fail(502, 'QQ 歌单内容不完整，本次没有导入');
+  return { id, provider: 'qq' as const, name: name || 'QQ 音乐歌单', cover: cover ?? songs[0]?.cover ?? null, songs };
+}

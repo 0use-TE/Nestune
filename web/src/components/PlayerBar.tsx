@@ -9,6 +9,7 @@ import { Cover } from './Cover';
 import { Icon } from './Icon';
 import { CanvasSource } from './CanvasSource';
 import { VolumeControl } from './VolumeControl';
+import { PlaybackModeButton } from './PlaybackControls';
 
 export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQueue, onDetails }: {
   lyricsPinned: boolean; onToggleLyrics: () => void; queueOpen: boolean; onToggleQueue: () => void; onDetails: () => void;
@@ -36,6 +37,7 @@ export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQue
         <button className="ib next" aria-label="下一首" onClick={app.next}><Icon n="next" /></button>
       </div>
       <div className="right">
+        <PlaybackModeButton className="bar-mode" mode={app.playbackMode} onChange={app.cyclePlaybackMode} />
         <VolumeControl />
         <span className="sub sm">{mmss(time)} / {mmss(duration || s.duration)}</span>
         {!isDeviceSong(s.id) && <button className={`ib heartb ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" /></button>}

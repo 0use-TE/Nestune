@@ -16,3 +16,5 @@
 @media(max-width:480px){.set:has(.volume-inline){flex-wrap:wrap;gap:10px}.set>.volume-inline{width:100%}.volume-inline input{min-height:40px}}
 
 .release-notes details{margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}.release-notes summary{cursor:pointer;font-weight:600}.release-notes details[open]>summary{margin-bottom:12px}
+.release-images{display:grid;gap:10px;justify-items:start;margin:14px 0}
+.release-images img{display:block;max-width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}

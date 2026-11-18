@@ -45,3 +45,16 @@ it('does not expose upstream errors or credentials in a failed media request', a
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: -1, msg: 'musickey=secret-should-not-escape' }), { status: 500 })));
   await expect(qq.qqMediaUrl('qq-track123', 'standard')).rejects.toMatchObject({ status: 502, message: 'QQ 音乐请求失败，请稍后重试' });
 });
+it('reads a complete QQ playlist over multiple pages using the deployed API metadata shape', async () => {
+  const fetcher = vi.fn(async (url: URL) => {
+    const page = Number(url.searchParams.get('page'));
+    const count = page === 1 ? 100 : 11;
+    return new Response(JSON.stringify({ code: 0, data: { info: { title: 'Public playlist', picurl: 'https://y.gtimg.cn/cover.jpg' }, total: 111, songs: Array.from({ length: count }, (_, i) => ({ ...raw, mid: 'track' + ((page - 1) * 100 + i) })) } }));
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const result = await qq.qqPlaylist('123');
+  expect(result).toMatchObject({ name: 'Public playlist', cover: 'https://y.gtimg.cn/cover.jpg' });
+  expect(result.songs).toHaveLength(111);
+  expect(result.songs[100].id).toBe('qq-track100');
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});

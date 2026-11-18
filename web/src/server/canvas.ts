@@ -1,3 +1,4 @@
+import { WORLD_LIMIT } from '@/lib/canvas-camera';
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import type { CanvasBase, CanvasItem, CanvasRecord, CanvasState } from '@/lib/canvas-types';
@@ -41,12 +42,12 @@ function mutate(change: (state: CanvasState) => void) {
     kvSet(storageKey(), JSON.stringify(state)); database.exec('COMMIT'); return state;
   } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
-function coordinate(value: unknown, max: number) {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > max) throw fail(400, '物件位置无效');
+function coordinate(value: unknown) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > WORLD_LIMIT) throw fail(400, '物件位置无效');
   return value;
 }
 function base(ownerId: number, input: Record<string, unknown>): CanvasBase {
-  return { id: randomUUID(), ownerId, ...poster(ownerId), x: coordinate(input.x, 1000), y: coordinate(input.y, 650), rotation: Math.random() * 18 - 9, name: '' };
+  return { id: randomUUID(), ownerId, ...poster(ownerId), x: coordinate(input.x), y: coordinate(input.y), rotation: Math.random() * 18 - 9, name: '' };
 }
 function store(item: CanvasItem) {
   return mutate(state => {
@@ -120,7 +121,7 @@ export function addCanvasTool(ownerId: number, input: Record<string, unknown>) {
   throw fail(400, '小工具无效');
 }
 export function moveRecord(_viewer: number, input: Record<string, unknown>) {
-  const x = coordinate(input.x, 1000), y = coordinate(input.y, 650);
+  const x = coordinate(input.x), y = coordinate(input.y);
   return mutate(state => {
     const item = state.records.find(r => r.id === input.id);
     if (!item) throw fail(409, '这个物件已经被拿走了');

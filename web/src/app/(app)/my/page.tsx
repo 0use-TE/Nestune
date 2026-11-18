@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { PlaylistImport } from '@/components/PlaylistImport';
 import { useApp } from '@/lib/app';
 import { Cover, Avatar } from '@/components/Cover';
 import { PlaylistLink } from '@/components/PlaylistLink';
@@ -23,7 +24,7 @@ export default function MyMusicPage() {
   }
   return <>
     <div className="my-heading"><div className="row"><Avatar src={app.me!.avatar} name={app.me!.displayName} /><h1>{app.me!.displayName}</h1></div><Link href="/settings" className="btn ghost sm">设置</Link></div>
-    <div className="my-heading"><h2>我的歌单</h2><button className="btn ghost sm" onClick={() => window.dispatchEvent(new CustomEvent('nt:new-playlist'))}><Icon n="plus" s={16} />新建歌单</button></div>
+    <div className="my-heading"><h2>我的歌单</h2><div className="row"><PlaylistImport /><button className="btn ghost sm" onClick={() => window.dispatchEvent(new CustomEvent('nt:new-playlist'))}><Icon n="plus" s={16} />新建歌单</button></div></div>
     <div className="personal-playlists">
       <PlaylistLink href="/library?collection=likes"><span className="favorites-cover"><Icon n="heart" s={24} /></span><div><b>我喜欢的音乐</b></div></PlaylistLink>
       {app.playlists.map(p => <CanvasSource key={p.id} queue source={{ kind: 'playlist', playlistId: String(p.id), name: p.name, cover: p.cover }}>

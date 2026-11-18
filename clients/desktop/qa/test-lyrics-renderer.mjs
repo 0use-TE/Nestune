@@ -5,7 +5,7 @@ const file = new URL('../overlay/lyrics.html', import.meta.url);
 const script = fs.readFileSync(file, 'utf8').match(/<script>([\s\S]*?)<\/script>/)[1];
 const elements = new Map(), calls = [];
 const get = id => {
-  if (!elements.has(id)) elements.set(id, { textContent: '', hidden: false, attributes: {}, listeners: {}, style: { transform: '' }, scrollWidth:100, clientWidth:100, icon:{innerHTML:''}, querySelector() {return this.icon;}, setAttribute(name, value) { this.attributes[name] = value; }, addEventListener(type, fn) { this.listeners[type] = fn; } });
+  if (!elements.has(id)) elements.set(id, { textContent: '', hidden: false, attributes: {}, listeners: {}, style: { transform: '' }, scrollWidth:100, clientWidth:100, icon:{innerHTML:'', setAttribute() {}}, querySelector() {return this.icon;}, setAttribute(name, value) { this.attributes[name] = value; }, addEventListener(type, fn) { this.listeners[type] = fn; }, dataset: { control: id } });
   return elements.get(id);
 };
 const state = { enabled: true, locked: false, panel: false };
@@ -17,7 +17,12 @@ const window = { NestuneKaraoke: { create: () => ({ clear(text) { get('line-cont
   if (payload.data?.type === 'lyricsEnable') state.enabled = payload.data.enabled;
   return { ...state };
 } } };
-vm.runInNewContext(script, { window, document: { getElementById: get, body: { classList: { toggle() {} } } }, performance: { now: () => 0 }, URLSearchParams, location: {search:''}, setInterval() {} });
+const body = { classList: { toggle() {} }, dataset: {} };
+const controls = ['mode', 'previous', 'toggle', 'next'].map(get);
+let idleCallback;
+vm.runInNewContext(script, { window, document: { getElementById: get, querySelectorAll: () => controls, body },
+  performance: { now: () => 0 }, URLSearchParams, location: {search:''}, setInterval() {},
+  clearTimeout() {}, setTimeout(callback, delay) { assert.equal(delay, 3000); idleCallback = callback; } });
 await Promise.resolve();
 calls.length = 0;
 get('drag').listeners.mousedown({ button: 0, target: { closest: () => null } });
@@ -40,6 +45,18 @@ assert.equal(get('lock').attributes['aria-label'], '解锁歌词位置');
 calls.length = 0;
 get('drag').listeners.mousedown({ button: 0, target: { closest: () => null } });
 assert.equal(calls.length, 0, 'Locked lyrics must not start dragging');
+idleCallback();
+assert.equal(body.dataset.idle, '');
+get('drag').listeners.pointerdown();
+assert.equal(body.dataset.idle, undefined);
+window.nestuneLyricsMedia({ id: 'a', position: .5, playing: true, mode: 'one' });
+assert.equal(get('mode').attributes['aria-label'], '切换播放模式，当前单曲循环');
+assert.equal(get('toggle').attributes['aria-label'], '暂停');
+for (const item of controls) {
+  await item.onclick();
+  assert.equal(calls.at(-1).payload.data.type, 'lyricsPlayback');
+  assert.equal(calls.at(-1).payload.data.action, item.dataset.control);
+}
 await get('panel').onclick();
 assert.equal(state.panel, true, 'Background remains interactive while locked');
 await get('close').onclick();

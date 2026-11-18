@@ -1,8 +1,10 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PointerEvent, ReactNode } from 'react';
 import { Icon } from './Icon';
 import { LyricsClientUpgrade, useDesktopLyrics } from './DesktopLyrics';
+import { useApp } from '@/lib/app';
+import { LYRICS_IDLE_MS, LyricsPlaybackControls } from './PlaybackControls';
 
 type Position = { x: number; y: number };
 const INSET = 8;
@@ -18,10 +20,23 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
   visible: boolean; text: ReactNode; translation?: string; onClose: () => void;
 }) {
   const card = useRef<HTMLDivElement>(null);
+  const app = useApp();
   const desktopLyrics = useDesktopLyrics();
   const drag = useRef<{ id: number; offset: Position } | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
   const [transparent, setTransparent] = useState(false);
+  const [idle, setIdle] = useState(false);
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const wake = useCallback(() => {
+    clearTimeout(idleTimer.current);
+    setIdle(false);
+    idleTimer.current = setTimeout(() => setIdle(true), LYRICS_IDLE_MS);
+  }, []);
+  useEffect(() => {
+    if (!visible) return;
+    wake();
+    return () => clearTimeout(idleTimer.current);
+  }, [visible, wake]);
 
   useEffect(() => {
     try { setTransparent(localStorage.getItem('nt-lyric-transparent') === '1'); } catch { /* storage unavailable */ }
@@ -69,13 +84,21 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
   return (
     <div className="pinned-lyrics">
       <div ref={card} className={`pinned-lyrics-card ${transparent ? 'transparent' : ''}`} aria-label="歌词"
+        onPointerEnter={wake} onPointerMove={wake} onPointerDownCapture={wake} onFocusCapture={wake}
         style={position ? { position: 'fixed', left: position.x, top: position.y } : undefined}>
         <div className="pinned-lyrics-text" title="拖动歌词" onPointerDown={startDrag} onPointerMove={move}
           onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}>
           <div>{text}</div>
           {translation && <small>{translation}</small>}
         </div>
-        <div className="pinned-lyrics-actions">
+        <div className="pinned-lyrics-actions" data-idle={idle || undefined}>
+          <LyricsPlaybackControls mode={app.playbackMode} playing={app.playing}
+            onControl={action => {
+              if (action === 'mode') app.cyclePlaybackMode();
+              else if (action === 'previous') app.prev();
+              else if (action === 'next') app.next();
+              else app.toggle();
+            }} />
           {desktopLyrics.supported && <button type="button" className="ib" aria-label="移到桌面" title="移到桌面" disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(true)}><Icon n="popout" s={16} /></button>}
           <button className={`ib ${transparent ? 'act' : ''}`} aria-label="透明背景" aria-pressed={transparent} title={transparent ? '显示歌词背景' : '透明背景'} onClick={toggleBackground}><Icon n="opacity" s={16} /></button>
           <button className="ib" aria-label="关闭歌词" title="关闭歌词" onClick={onClose}><Icon n="x" s={16} /></button>

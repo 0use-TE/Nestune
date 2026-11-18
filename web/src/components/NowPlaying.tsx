@@ -21,13 +21,7 @@ import { VolumeControl } from './VolumeControl';
 import { useDesktopLyrics } from './DesktopLyrics';
 import { PlaybackSource } from './MusicSources';
 import { overlayLyrics } from '@/lib/overlay-lyrics';
-
-const PLAYBACK_ICONS = {
-  off: ['repeatOff', '不循环'],
-  all: ['repeat', '列表循环'],
-  one: ['repeat', '单曲循环'],
-  shuffle: ['shuffle', '随机播放'],
-} as const;
+import { PlaybackModeButton } from './PlaybackControls';
 const CREDIT = /^\s*(?:作词|作曲|词曲|词\s*[/／]\s*曲|编曲|制作人?|监制|演唱|出品|录音(?:师)?|混音(?:师)?|母带(?:工程师)?|和声|吉他|贝斯|鼓手|lyricist|composer|arranger|producer|written by|produced by)\s*[:：]/i;
 
 export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQueue }: {
@@ -127,8 +121,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
     desktopLyrics.send(overlayLyrics(songId || '', s?.name || '', currentLyrics?.lines || [], currentLyrics?.plainText, app.showTr, lyricFlowSeed, duration));
   }, [songId, s?.name, currentLyrics, app.showTr, desktopLyrics.enabled, desktopLyrics.send, lyricFlowSeed, duration]);
   useEffect(() => {
-    desktopLyrics.send({ type: 'lyricsMedia', id: songId || '', position: time, playing: app.playing && !app.loading });
-  }, [songId, time, app.playing, app.loading, desktopLyrics.enabled, desktopLyrics.send]);
+    desktopLyrics.send({ type: 'lyricsMedia', id: songId || '', position: time, playing: app.playing && !app.loading, mode: app.playbackMode });
+  }, [songId, time, app.playing, app.loading, app.playbackMode, desktopLyrics.enabled, desktopLyrics.send]);
   useEffect(() => {
     if (app.ready && !songId && desktopLyrics.enabled) void desktopLyrics.setEnabled(false);
   }, [app.ready, songId, desktopLyrics.enabled]);
@@ -141,7 +135,6 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
 
   if (!s) return null;
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
-  const [modeIcon, modeLabel] = PLAYBACK_ICONS[app.playbackMode];
   const { quality, source } = app.audioInfo ?? {};
   const sourceLabel = source === 'library' ? '服务器音乐库' : '';
   const audioLabel = quality
@@ -217,9 +210,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
                 <button className="ib" aria-label="上一首" onClick={app.prev}><Icon n="prev" s={22} /></button>
                 <button className="ib play" aria-busy={app.loading} aria-label="播放/暂停" onClick={app.toggle}>{app.loading ? <Loading inline label="正在缓冲歌曲" /> : <Icon n={app.playing ? 'pause' : 'play'} />}</button>
                 <button className="ib" aria-label="下一首" onClick={app.next}><Icon n="next" s={22} /></button>
-                <button className={`ib mode-control ${app.playbackMode !== 'off' ? 'act' : ''}`} aria-label={`切换播放模式，当前${modeLabel}`} onClick={app.cyclePlaybackMode} title={modeLabel}>
-                  <Icon n={modeIcon} />{app.playbackMode === 'one' && <span className="mode-count" aria-hidden="true">1</span>}
-                </button>
+                <PlaybackModeButton mode={app.playbackMode} onChange={app.cyclePlaybackMode} />
                 <span className="np-mobile-queue">{queueButton}</span>
               </div>
               <div className="np-tools">

@@ -35,6 +35,7 @@ export type AppCtx = {
   volume: number; setVolume: (value: number) => void; toggleMute: () => void;
   play: (songs: Song[], start?: number, mode?: PlaybackMode) => void; toggle: () => void; next: () => void; prev: () => void; seek: (t: number) => void;
   playbackPosition: () => number; followPlayback: (song: Song | null, position: number, playing: boolean) => void; setFollowingRoom: (following: boolean) => void;
+  suspendForPreview: () => (() => void);
   playbackRunning: () => boolean; setRoomTransport: (handler: ((playing?: boolean) => boolean) | null) => void;
   playNow: (s: Song) => void; enqueue: (s: Song) => void; appendMany: (songs: Song[], canvasId?: string) => Promise<CanvasState | null>; playNext: (s: Song) => void; removeFromQueue: (i: number) => void; jumpTo: (i: number) => void;
   clearQueue: () => void; sharedQueue: boolean;
@@ -427,19 +428,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go(i > 0 ? i - 1 : q.length - 1);
   }, [go]);
   const prevRef = useRef(prev); prevRef.current = prev;
-  useEffect(() => {
-    const receive = (event: Event) => {
-      const command = (event as CustomEvent<unknown>).detail;
-      if (command === 'toggle') toggle();
-      else if (command === 'previous') prevRef.current();
-      else if (command === 'next') next();
-    };
-    window.addEventListener('nt:desktop-control', receive);
-    return () => window.removeEventListener('nt:desktop-control', receive);
-  }, [toggle, next]);
 
   const seek = useCallback((t: number) => { if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'seek', position: t }); return; } const a = audio.current; if (a) { a.currentTime = Math.max(0, t); setClock(a.currentTime, clock.duration); } }, []);
   const playbackPosition = useCallback(() => audio.current?.currentTime || 0, []);
+  const suspendForPreview = useCallback(() => {
+    const element = audio.current;
+    if (!element) return () => {};
+    const wasPlaying = !element.paused, src = element.src, index = live.current.index;
+    let interrupted = false;
+    const manualPlay = () => { interrupted = true; };
+    element.pause(); element.addEventListener('play', manualPlay);
+    const position = element.currentTime;
+    return () => {
+      element.removeEventListener('play', manualPlay);
+      if (wasPlaying && !interrupted && element === audio.current && element.src === src && live.current.index === index && element.paused && Math.abs(element.currentTime - position) < .5) {
+        element.play().catch(() => {});
+      }
+    };
+  }, []);
   const playbackRunning = useCallback(() => !!audio.current && !audio.current.paused && !audio.current.ended && audio.current.readyState >= 2, []);
   const setRoomTransport = useCallback((handler: ((playing?: boolean) => boolean) | null) => { roomTransport.current = handler; }, []);
   const setFollowingRoom = useCallback((following: boolean) => { followingRoom.current = following; }, []);
@@ -601,6 +607,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'mode' }); return; }
     setPlaybackMode(mode => PLAYBACK_MODES[(PLAYBACK_MODES.indexOf(mode) + 1) % PLAYBACK_MODES.length]);
   }, []);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const command = event.type === 'nt:lyrics-control' ? detail?.action : detail;
+      if (command === 'toggle') toggle();
+      else if (command === 'previous') prev();
+      else if (command === 'next') next();
+      else if (command === 'mode') cyclePlaybackMode();
+    };
+    window.addEventListener('nt:desktop-control', receive);
+    window.addEventListener('nt:lyrics-control', receive);
+    return () => {
+      window.removeEventListener('nt:desktop-control', receive);
+      window.removeEventListener('nt:lyrics-control', receive);
+    };
+  }, [toggle, prev, next, cyclePlaybackMode]);
 
   /* ----- favourites ----- */
   const toggleFav = useCallback((s: Song) => {
@@ -620,13 +642,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     saveDialog, openSave: (s: Song) => setSaveDialog(s), closeSave: () => setSaveDialog(null), audioInfo,
     sourcePreference, setSourcePreference, playbackSource, setPlaybackSource,
     queue, index, current, playing, loading, error, playbackMode, volume, setVolume, toggleMute,
-    play, toggle, next: () => next(), prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport,
+    play, toggle, next: () => next(), prev, seek, playbackPosition, playbackRunning, suspendForPreview, followPlayback, setFollowingRoom, setRoomTransport,
     cyclePlaybackMode, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler,
     playNow, enqueue, appendMany, playNext, removeFromQueue, jumpTo,
     nowOpen, setNowOpen, menu, openMenu: (song, e) => setMenu({ song, x: e.clientX, y: e.clientY }), closeMenu: () => setMenu(null),
     toast, toasts, theme, setTheme, showTr, setShowTr, tint,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [sourcePreference, setSourcePreference, playbackSource, setPlaybackSource, volume, setVolume, toggleMute, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, appendMany, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
+  }), [sourcePreference, setSourcePreference, playbackSource, setPlaybackSource, volume, setVolume, toggleMute, clearQueue, sharedQueue, queueSeed, beginSharedQueue, endSharedQueue, applyRoomQueue, setRoomQueueHandler, cyclePlaybackMode, jumpTo, ready, me, favIds, deviceMusic, playlists, saveDialog, audioInfo, queue, index, current, playing, loading, error, playbackMode, nowOpen, menu, toasts, theme, showTr, tint, toggleFav, play, toggle, prev, seek, playbackPosition, playbackRunning, suspendForPreview, followPlayback, setFollowingRoom, setRoomTransport, playNow, enqueue, appendMany, playNext, removeFromQueue, go, toast, next, logout, loadSession, reloadPlaylists]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
