@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { isCanvasMusic } from '@/lib/canvas-types';
+import { CANVAS_MOMENT_FONTS, isCanvasMusic } from '@/lib/canvas-types';
 
 vi.mock('@/server/netease', () => {
   const track = (id: string) => ({ id, name: 'Song ' + id, duration: 180, artists: [{ id: '1', name: 'Artist' }], album: { id: '7', name: 'Album' }, cover: null });
@@ -87,6 +87,26 @@ it('stores notes and emoji on the same board and allows another user to take the
   expect(canvas.readCanvas().records.map(r => r.kind)).toEqual(['emoji']);
   expect(() => canvas.addCanvasTool(1, { kind: 'note', text: '', x: 100, y: 100 })).toThrow();
 });
+it('captures a fixed server timestamp and font only for an opted-in note', () => {
+  const now = Date.parse('2026-11-18T03:04:05Z');
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+  try {
+    const note = { kind: 'note', text: '把此刻留下', x: 100, y: 100, moment: { timestamp: 1, font: 'invalid' } };
+    const stamped = canvas.addCanvasTool(1, { ...note, captureMoment: true }).records[0];
+    expect(stamped.kind).toBe('note');
+    if (stamped.kind !== 'note') throw new Error('Missing note');
+    expect(stamped.moment?.timestamp).toBe(now);
+    expect(CANVAS_MOMENT_FONTS).toContain(stamped.moment?.font);
+
+    clock.mockReturnValue(now + 60000);
+    const plain = canvas.addCanvasTool(2, { ...note, captureMoment: false }).records.at(-1);
+    expect(plain).not.toHaveProperty('moment');
+    canvas.moveRecord(2, { id: stamped.id, x: 200, y: 200 });
+    expect(canvas.readCanvas().records.at(-1)).toMatchObject({ id: stamped.id, moment: stamped.moment });
+  } finally {
+    clock.mockRestore();
+  }
+});
 it('serves only referenced raster images and stops serving an image after someone takes it', async () => {
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6km8AAAAASUVORK5CYII=', 'base64');
   const state = canvas.addCanvasImage(1, png, { x: 300, y: 200 });
@@ -96,6 +116,28 @@ it('serves only referenced raster images and stops serving an image after someon
   expect(() => canvas.canvasImage('../app.db')).toThrow();
   await canvas.takeCanvasItem(2, item.id);
   expect(() => canvas.canvasImage(item.imageFile)).toThrow('已被取走');
+});
+it('keeps graffiti as a fixed paint mark that can be covered but never moved or taken', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6km8AAAAASUVORK5CYII=', 'base64');
+  const large = Buffer.from(png);
+  large.writeUInt32BE(99999, 16);
+  const placement = { x: 200, y: 200, graffiti: true };
+  expect(() => canvas.addCanvasImage(1, large, placement)).toThrow('涂鸦尺寸无效');
+  expect(() => canvas.addCanvasImage(1, Buffer.from('GIF89a'), placement)).toThrow('涂鸦需要 PNG');
+  expect(() => canvas.addCanvasImage(1, png, { ...placement, boardWidth: '40001' })).toThrow('涂鸦放置尺寸无效');
+  const item = canvas.addCanvasImage(1, png, placement).records[0];
+  expect(item).toMatchObject({ kind: 'image', name: '涂鸦', rotation: 0, graffiti: { width: 1, height: 1 } });
+  expect(canvas.readCanvas().records[0]).toEqual(item);
+  if (item.kind !== 'image') throw new Error('Missing image');
+  expect(Buffer.from(await canvas.canvasImage(item.imageFile).arrayBuffer())).toEqual(png);
+  expect(() => canvas.removeRecord(1, item.id)).toThrow('涂鸦固定在墙面上');
+  await expect(canvas.takeCanvasItem(2, item.id)).rejects.toThrow('涂鸦固定在墙面上');
+  expect(() => canvas.moveRecord(2, { id: item.id, x: 490, y: 140 })).toThrow('涂鸦固定在墙面上');
+  const higherResolution = Buffer.from(png);
+  higherResolution.writeUInt32BE(1280, 16);
+  const fitted = canvas.addCanvasImage(1, higherResolution, { ...placement, boardWidth: '377.25' }).records.at(-1)!;
+  expect(canvas.readCanvas().records.map(record => record.id)).toEqual([item.id, fitted.id]);
+  expect(canvas.readCanvas().records[1]).toMatchObject({ x: 200, y: 200, graffiti: { width: 1280, height: 1, boardWidth: 377.25 } });
 });
 it('hides uploads which are no longer public', async () => {
   const state = await canvas.addRecord(1, { songId: '101', x: 100, y: 100 });

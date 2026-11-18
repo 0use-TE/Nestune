@@ -18,6 +18,9 @@ const upload = async (req: Request, owner: number) => {
   try { form = await new Response(Buffer.concat(chunks), { headers: { 'Content-Type': req.headers.get('content-type') || '' } }).formData(); }
   catch { throw fail(400, '图片表单无效'); }
   const file = form.get('file'); if (!(file instanceof File)) throw fail(400, '请选择图片');
-  return addCanvasImage(owner, Buffer.from(await file.arrayBuffer()), { x: Number(form.get('x') ?? 500), y: Number(form.get('y') ?? 300) });
+  return addCanvasImage(owner, Buffer.from(await file.arrayBuffer()), {
+    x: Number(form.get('x') ?? 500), y: Number(form.get('y') ?? 300), graffiti: form.get('graffiti') === '1',
+    boardWidth: form.get('boardWidth') ?? undefined,
+  });
 };
 export const POST = userRoute((req, _ctx, user) => upload(req, user.id));

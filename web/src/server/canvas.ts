@@ -1,8 +1,9 @@
 import { WORLD_LIMIT } from '@/lib/canvas-camera';
-import { randomUUID } from 'node:crypto';
+import { GRAFFITI_PNG_MAX_BYTES, MAX_GRAFFITI_SIDE, MAX_GRAFFITI_WORLD_WIDTH } from '@/lib/canvas-graffiti';
+import { randomInt, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import type { CanvasBase, CanvasItem, CanvasRecord, CanvasState } from '@/lib/canvas-types';
-import { isCanvasMusic } from '@/lib/canvas-types';
+import { CANVAS_MOMENT_FONTS, isCanvasGraffiti, isCanvasMusic } from '@/lib/canvas-types';
 import type { Song } from '@/lib/types';
 import { isUploadSong } from '@/lib/upload-types';
 import { db, kvGet, kvSet, one, all } from './db';
@@ -51,8 +52,13 @@ function base(ownerId: number, input: Record<string, unknown>): CanvasBase {
 }
 function store(item: CanvasItem) {
   return mutate(state => {
-    if (state.records.length >= 200) throw fail(400, '画布已满');
-    if (state.records.filter(r => r.ownerId === item.ownerId).length >= 30) throw fail(400, '每人最多放置 30 个物件');
+    if (isCanvasGraffiti(item)) {
+      if (state.records.filter(isCanvasGraffiti).length >= 400) throw fail(409, '墙面涂鸦已达上限');
+    } else {
+      const objects = state.records.filter(record => !isCanvasGraffiti(record));
+      if (objects.length >= 200) throw fail(400, '画布已满');
+      if (objects.filter(record => record.ownerId === item.ownerId).length >= 30) throw fail(400, '每人最多放置 30 个物件');
+    }
     state.records.push(item);
   });
 }
@@ -111,7 +117,10 @@ export function addCanvasTool(ownerId: number, input: Record<string, unknown>) {
   if (input.kind === 'note') {
     const text = str(input.text, 1, 800, '便签');
     const color = ['butter', 'rose', 'mint'].includes(String(input.color)) ? input.color as 'butter' | 'rose' | 'mint' : 'paper';
-    return store({ ...position, kind: 'note', name: '便签', text, color });
+    const moment = input.captureMoment === true
+      ? { timestamp: Date.now(), font: CANVAS_MOMENT_FONTS[randomInt(CANVAS_MOMENT_FONTS.length)] }
+      : undefined;
+    return store({ ...position, kind: 'note', name: '便签', text, color, ...(moment && { moment }) });
   }
   if (input.kind === 'emoji') {
     const emoji = str(input.emoji, 1, 32, '表情');
@@ -125,6 +134,7 @@ export function moveRecord(_viewer: number, input: Record<string, unknown>) {
   return mutate(state => {
     const item = state.records.find(r => r.id === input.id);
     if (!item) throw fail(409, '这个物件已经被拿走了');
+    if (isCanvasGraffiti(item)) throw fail(409, '涂鸦固定在墙面上');
     item.x = x; item.y = y;
     // The shared array is painted back to front; a completed move remains on top.
     state.records = [...state.records.filter(r => r.id !== item.id), item];
@@ -134,6 +144,7 @@ export async function takeCanvasItem(viewer: number, id: unknown, accept?: (item
   // Resolve legacy albums before claiming; the transaction below still selects exactly one taker.
   const existing = readCanvas().records.find(item => item.id === id);
   if (!existing) throw fail(409, '这个物件已经被别人拿走了');
+  if (isCanvasGraffiti(existing)) throw fail(409, '涂鸦固定在墙面上');
   if (isCanvasMusic(existing) && (existing.tracks ?? [existing.song]).every(song => song.access?.playable === false)) throw fail(400, '这些歌曲暂时无法播放');
   let music: Awaited<ReturnType<typeof resolveCanvasMusic>> | undefined;
   if (isCanvasMusic(existing) && existing.kind === 'album' && existing.albumId && existing.tracks?.length === 1) {
@@ -156,12 +167,13 @@ export function removeRecord(_viewer: number, recordId: unknown) {
   const state = mutate(state => {
     const found = state.records.find(r => r.id === recordId);
     if (!found) throw fail(409, '这个物件已经被拿走了');
+    if (isCanvasGraffiti(found)) throw fail(409, '涂鸦固定在墙面上');
     taken = found;
     state.records = state.records.filter(r => r.id !== recordId);
   });
   discardImage(taken); return state;
 }
-export const CANVAS_IMAGE_MAX = 3 * 1024 * 1024;
+export const CANVAS_IMAGE_MAX = GRAFFITI_PNG_MAX_BYTES;
 const imagePattern = /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/;
 function discardImage(item: CanvasItem) {
   if (item.kind === 'image' && imagePattern.test(item.imageFile)) {
@@ -172,7 +184,26 @@ export function addCanvasImage(owner: number, bytes: Buffer, input: Record<strin
   if (!bytes.length || bytes.length > CANVAS_IMAGE_MAX) throw fail(413, '图片不能超过 3 MB');
   const ext = sniffImage(bytes) ?? (/^GIF8[79]a$/.test(bytes.subarray(0, 6).toString('ascii')) ? 'gif' : null);
   if (!ext) throw fail(400, '支持 PNG、JPG、WebP 或 GIF 图片');
-  const item = { ...base(owner, input), kind: 'image' as const, name: '图片', imageFile: `${randomUUID()}.${ext}` };
+  let graffiti: { width: number; height: number; boardWidth?: number } | undefined;
+  if (input.graffiti === true) {
+    if (ext !== 'png' || bytes.length < 33 || bytes.readUInt32BE(8) !== 13 || bytes.toString('ascii', 12, 16) !== 'IHDR') {
+      throw fail(400, '涂鸦需要 PNG 图片');
+    }
+    const width = bytes.readUInt32BE(16), height = bytes.readUInt32BE(20);
+    if (!width || !height || width > MAX_GRAFFITI_SIDE || height > MAX_GRAFFITI_SIDE) throw fail(400, '涂鸦尺寸无效');
+    graffiti = { width, height };
+    if (input.boardWidth !== undefined) {
+      const boardWidth = Number(input.boardWidth);
+      if (!Number.isFinite(boardWidth) || boardWidth <= 0 || boardWidth > MAX_GRAFFITI_WORLD_WIDTH) {
+        throw fail(400, '涂鸦放置尺寸无效');
+      }
+      graffiti.boardWidth = boardWidth;
+    }
+  }
+  const item = {
+    ...base(owner, input), kind: 'image' as const, name: graffiti ? '涂鸦' : '图片',
+    imageFile: `${randomUUID()}.${ext}`, ...(graffiti && { graffiti, rotation: 0 }),
+  };
   fs.mkdirSync(dir('canvas-images'), { recursive: true });
   fs.writeFileSync(dir('canvas-images', item.imageFile), bytes, { mode: 0o600 });
   try { return store(item); } catch (error) { fs.rmSync(dir('canvas-images', item.imageFile), { force: true }); throw error; }

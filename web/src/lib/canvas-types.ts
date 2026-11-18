@@ -7,8 +7,13 @@ export type CanvasBase = {
 export type CanvasRecord = CanvasBase & {
   kind: 'song' | 'album' | 'playlist' | 'queue'; song: Song; tracks?: Song[]; albumId: string | null;
 };
-export type CanvasNote = CanvasBase & { kind: 'note'; text: string; color: 'paper' | 'butter' | 'rose' | 'mint' };
-export type CanvasImage = CanvasBase & { kind: 'image'; imageFile: string };
+export const CANVAS_MOMENT_FONTS = ['handwritten', 'brush', 'serif'] as const;
+type CanvasMoment = { timestamp: number; font: typeof CANVAS_MOMENT_FONTS[number] };
+export type CanvasNote = CanvasBase & {
+  kind: 'note'; text: string; color: 'paper' | 'butter' | 'rose' | 'mint'; moment?: CanvasMoment;
+};
+type CanvasPaint = { width: number; height: number; boardWidth?: number };
+export type CanvasImage = CanvasBase & { kind: 'image'; imageFile: string; graffiti?: CanvasPaint };
 export type CanvasEmoji = CanvasBase & { kind: 'emoji'; emoji: string };
 export type CanvasItem = CanvasRecord | CanvasNote | CanvasImage | CanvasEmoji;
 export type CanvasState = { revision: number; records: CanvasItem[] };
@@ -18,4 +23,5 @@ export type CanvasSource = {
   songId?: string; albumId?: string; playlistId?: string; songIds?: string[]; previewSong?: Song;
 };
 export const isCanvasMusic = (item: { kind: string }): item is CanvasRecord => ['song', 'album', 'playlist', 'queue'].includes(item.kind);
+export const isCanvasGraffiti = (item: CanvasItem): item is CanvasImage & { graffiti: CanvasPaint } => item.kind === 'image' && !!item.graffiti;
 export const CANVAS_DRAG_TYPE = 'application/x-nestune-canvas';

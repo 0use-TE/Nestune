@@ -6,7 +6,7 @@ import { WORLD_LIMIT } from '@/lib/canvas-camera';
 import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { api, get, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
-import { CANVAS_DRAG_TYPE, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
+import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
 import type { Song } from '@/lib/types';
 import { RecordPlayerAudio, RECORD_INSERT_MS } from '@/lib/record-player-audio';
 import { Cover } from './Cover';
@@ -14,6 +14,8 @@ import { Icon } from './Icon';
 import { Loading } from './Loading';
 import { Sheet } from './Sheet';
 import { CanvasGuide } from './CanvasGuide';
+import { CanvasGraffiti, type GraffitiEditorHandle } from './CanvasGraffiti';
+import { MAX_GRAFFITI_SIDE, type GraffitiArea, type Point } from '@/lib/canvas-graffiti';
 
 type Drag = { pointer: number; startX: number; startY: number; x: number; y: number; active: boolean; cancelled: boolean; timer: ReturnType<typeof setTimeout>; item: CanvasItem; source?: CanvasSource; size: number };
 type Ghost = { item: CanvasItem; x: number; y: number; size: number };
@@ -51,7 +53,8 @@ export function Square() {
   }, [guideKey, playGuideKey]);
   const [picker, setPicker] = useState(false);
   const [tools, setTools] = useState(false);
-  const [note, setNote] = useState<{ text: string; color: string } | null>(null);
+  const [note, setNote] = useState<{ text: string; color: string; captureMoment: boolean } | null>(null);
+  const [graffiti, setGraffiti] = useState<GraffitiArea | null>(null);
   const [emojiPicker, setEmojiPicker] = useState(false);
   const [collection, setCollection] = useState('favorites');
   const [kind, setKind] = useState<'song' | 'album'>('song');
@@ -68,6 +71,8 @@ export function Square() {
   const [dropOver, setDropOver] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const board = useRef<HTMLDivElement>(null);
+  const graffitiDock = useRef<HTMLDivElement>(null);
+  const graffitiEditor = useRef<GraffitiEditorHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const emptyPlayer = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
@@ -113,7 +118,10 @@ export function Square() {
       .catch(error => live.current.toast(error.message)).finally(() => { if (active) setBusy(false); });
     return () => { active = false; };
   }, [collection, picker]);
-  const camera = useCanvasCamera(board, app.me?.id, cancel);
+  const camera = useCanvasCamera(board, app.me?.id, () => {
+    if (graffitiEditor.current) graffitiEditor.current.cancelGesture();
+    else cancel();
+  });
   const point = camera.point;
   const onBoard = useCallback((x: number, y: number) => { const rect = board.current?.getBoundingClientRect(); return !!rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom; }, []);
   const receiver = useCallback(() => (document.getElementById('bar') ?? emptyPlayer.current)?.getBoundingClientRect(), []);
@@ -121,6 +129,26 @@ export function Square() {
     const rect = receiver(); return !!rect && x >= rect.left - 12 && x <= rect.right + 12 && y >= rect.top - 28 && y <= rect.bottom + 15;
   }, [receiver]);
   const positionForNewItem = useCallback(() => { const rect = board.current!.getBoundingClientRect(), centre = point(rect.left + rect.width / 2, rect.top + rect.height / 2); const n = stateRef.current.records.length; return { x: centre.x + (n % 3 - 1) * 35, y: centre.y + (n % 5 - 2) * 20 }; }, [point]);
+  const graffitiView = useCallback((): GraffitiArea | null => {
+    const rect = board.current?.getBoundingClientRect();
+    if (!rect?.width || !rect.height) return null;
+    const origin = point(rect.left, rect.top);
+    const farEdge = point(rect.right, rect.bottom);
+    const resolution = Math.min(window.devicePixelRatio || 1, 1.6, MAX_GRAFFITI_SIDE / Math.max(rect.width, rect.height));
+    return {
+      ...origin, width: farEdge.x - origin.x, height: farEdge.y - origin.y,
+      rasterWidth: Math.max(1, Math.round(rect.width * resolution)),
+      rasterHeight: Math.max(1, Math.round(rect.height * resolution)),
+    };
+  }, [point]);
+  function startGraffiti() {
+    if (graffiti) return;
+    const view = graffitiView();
+    if (!view) return;
+    setGraffiti(view);
+    setTools(false);
+    setSelected(null);
+  }
   const add = useCallback(async (source: CanvasSource, position?: { x: number; y: number }) => {
     setAdding(true);
     try {
@@ -132,13 +160,20 @@ export function Square() {
     }
     catch { /* The error is reported by change. */ } finally { if (mounted.current) setAdding(false); }
   }, [change, dismissGuide, positionForNewItem, showGuide]);
-  const upload = useCallback(async (file: File, position?: { x: number; y: number }) => {
-    if (file.size > 3 * 1024 * 1024) { live.current.toast('图片不能超过 3 MB'); return; }
+  const upload = useCallback(async (file: File, position?: Point, boardWidth?: number) => {
     setAdding(true); pending.current++;
     try {
+      if (file.size > 3 * 1024 * 1024) throw new Error('图片不能超过 3 MB');
       const at = position ?? positionForNewItem(), form = new FormData(); form.set('file', file); form.set('x', String(at.x)); form.set('y', String(at.y));
+      if (boardWidth !== undefined) {
+        form.set('graffiti', '1');
+        form.set('boardWidth', String(boardWidth));
+      }
       apply(await api<CanvasState>('/api/canvas/images', { method: 'POST', body: form })); setTools(false);
-    } catch (error) { live.current.toast((error as Error).message); }
+    } catch (error) {
+      if (boardWidth !== undefined) throw error;
+      live.current.toast((error as Error).message);
+    }
     finally { pending.current--; if (mounted.current) setAdding(false); }
   }, [apply, positionForNewItem]);
   const insert = useCallback((item: CanvasRecord, x: number, y: number, size: number, source?: CanvasSource) => {
@@ -238,7 +273,14 @@ export function Square() {
       const raw = event.dataTransfer.getData(CANVAS_DRAG_TYPE), file = event.dataTransfer.files[0];
       if (!raw && !file) return; event.preventDefault(); setDropOver(false); setOverPlayer(false); nativeRef.current = null; setNativeSource(null);
       window.dispatchEvent(new Event('nt:canvas-source-dropped'));
-      if (file && !raw) { if (onBoard(event.clientX, event.clientY)) void upload(file, point(event.clientX, event.clientY)); return; }
+      if (file && !raw) {
+        if (onBoard(event.clientX, event.clientY)) {
+          const position = point(event.clientX, event.clientY);
+          if (graffitiEditor.current) void graffitiEditor.current.importImage(file, position);
+          else void upload(file, position);
+        }
+        return;
+      }
       try {
         const source = JSON.parse(raw) as CanvasSource;
         if (!['song','album','playlist','queue'].includes(source.kind)) return;
@@ -269,14 +311,34 @@ export function Square() {
   const receivingItem = ghost?.item ?? insertion?.item ?? (nativeSource ? sourceItem(nativeSource) : null);
   const receivingCollection = receivingItem && isCanvasMusic(receivingItem) && receivingItem.kind !== 'song';
   return <div className={`music-canvas ${dropOver ? 'nc-drop-over' : ''}`} aria-label="画布">
-    <div className={`nc-board ${camera.moving ? 'nc-panning' : ''}`} ref={board} {...camera.handlers} aria-label="共享音乐画布" aria-busy={!loaded} onPointerDown={event => { if (event.target === event.currentTarget) { setSelected(null); setTools(false); setEmojiPicker(false); } }}>
+    <div className="nc-wall" aria-hidden="true" style={{
+      backgroundSize: `${920 * camera.camera.zoom}px`,
+      backgroundPosition: `${camera.camera.x}px ${camera.camera.y}px`,
+    }} />
+    <div className={`nc-board ${camera.moving ? 'nc-panning' : ''} ${camera.spaceDown ? 'nc-space-pan' : ''}`} ref={board} {...camera.handlers} aria-label="共享音乐画布" aria-busy={!loaded} onPointerDown={event => { if (event.target === event.currentTarget) { setSelected(null); setTools(false); setEmojiPicker(false); } }}>
       {!loaded && <div className="nc-loading"><Loading label="正在加载画布" /></div>}
-      <div className="nc-world" style={{ transform: `translate(${camera.camera.x}px,${camera.camera.y}px) scale(${camera.camera.zoom})` }}>
-      {state.records.map((item, index) => <div key={item.id} data-canvas-item={item.id} className={`nc-record nc-kind-${item.kind} ${draggingId === item.id || insertion?.item.id === item.id ? 'nc-lifted' : ''} ${selected === item.id ? 'nc-selected' : ''} ${preview.active?.id === item.id && !preview.active.loading ? 'nc-auditioning' : ''}`} style={{ zIndex: index + 1, left: item.x, top: item.y, '--record-angle': `${item.rotation}deg` } as React.CSSProperties}
-        role="button" tabIndex={0} aria-label={`${item.name}，${isCanvasMusic(item) ? item.kind === 'song' ? '单曲' : item.kind === 'album' ? '专辑封套' : '歌单文件夹' : '画布物件'}，${item.ownerName ?? '用户'}放置`} title={item.kind === 'note' ? item.text : item.name}
+      <div className={`nc-world${graffiti ? ' nc-painting' : ''}`} style={{ transform: `translate(${camera.camera.x}px,${camera.camera.y}px) scale(${camera.camera.zoom})` }}>
+      <div className="nc-wall-paint-layer" aria-label="墙面涂鸦">
+        {state.records.filter(isCanvasGraffiti).map(item =>
+          <div key={item.id} data-canvas-paint={item.id} className="nc-wall-paint" style={{
+            left: item.x, top: item.y, width: item.graffiti.boardWidth ?? Math.max(12, item.graffiti.width / 2),
+          }}>
+            <img src={`/api/canvas/images/${item.imageFile}`} alt={`${item.ownerName ?? '用户'}的墙面涂鸦`}
+              width={item.graffiti.width} height={item.graffiti.height} loading="lazy" decoding="async" draggable={false} />
+          </div>)}
+      </div>
+      {graffiti && <CanvasGraffiti key={app.me?.id} ref={graffitiEditor} accountId={app.me?.id} initialArea={graffiti} dock={graffitiDock.current}
+        guideDepth={state.records.length + 1}
+        camera={camera.camera} movingView={camera.moving} getView={graffitiView} onZoom={camera.zoom}
+        onClose={() => setGraffiti(null)} onPublish={async (file, placed) => {
+          await upload(file, placed, placed.width);
+          setGraffiti(null);
+        }} />}
+      {state.records.filter(item => !isCanvasGraffiti(item)).map((item, index) => <div key={item.id} data-canvas-item={item.id} className={`nc-record nc-kind-${item.kind} ${draggingId === item.id || insertion?.item.id === item.id ? 'nc-lifted' : ''} ${selected === item.id ? 'nc-selected' : ''} ${preview.active?.id === item.id && !preview.active.loading ? 'nc-auditioning' : ''}`} style={{ zIndex: index + 1, left: item.x, top: item.y, '--record-angle': `${item.rotation}deg` } as React.CSSProperties}
+        role="button" tabIndex={graffiti ? -1 : 0} aria-label={`${item.name}，${isCanvasMusic(item) ? item.kind === 'song' ? '单曲' : item.kind === 'album' ? '专辑封套' : '歌单文件夹' : '画布物件'}，${item.ownerName ?? '用户'}放置`} title={item.kind === 'note' ? item.text : item.name}
         onContextMenu={event => event.preventDefault()} onPointerDown={event => begin(event, item)}
         onKeyDown={event => {
-          if (event.target !== event.currentTarget) return;
+          if (graffiti || event.target !== event.currentTarget) return;
           if ((event.key === 'Enter' || event.key === ' ') && isCanvasMusic(item)) { event.preventDefault(); void preview.play(item); }
           if (event.key === 'Delete' || event.key === 'Backspace') { event.preventDefault(); remove(item.id); }
           const delta = ({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] } as Record<string, number[]>)[event.key];
@@ -288,10 +350,11 @@ export function Square() {
       </div>)}
       </div>
     </div>
-    <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit(state.records)}><Icon n="refresh" s={17} /></button></div>
+    <div ref={graffitiDock} />
+    {!graffiti && <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit(state.records)}><Icon n="refresh" s={17} /></button></div>}
     {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
-    {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter' }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setPicker(true); setTools(false); }}><Icon n="note" />从歌单选音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
+    {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />涂鸦</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setPicker(true); setTools(false); }}><Icon n="note" />从歌单选音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
     <input type="file" ref={fileInput} hidden accept="image/png,image/jpeg,image/webp,image/gif" aria-label="选择画布图片" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ''; }} />
     {emojiPicker && <div className="nc-emoji-picker panel" role="dialog" aria-label="选择表情"><button className="ib nc-emoji-close" aria-label="关闭表情" onClick={() => setEmojiPicker(false)}><Icon n="x" s={16} /></button>{EMOJI.map(emoji => <button key={emoji} disabled={adding} aria-label={`贴上${emoji}`} onClick={() => void tool({ kind: 'emoji', emoji })}>{emoji}</button>)}</div>}
     {adding && <div className="nc-saving"><Loading inline label="正在放到画布" /></div>}
@@ -308,13 +371,44 @@ export function Square() {
         <div className="nc-music-list">{busy ? <Loading /> : sources.map(source => <div className="nc-music-row" key={source.kind + source.songId} onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) begin(event, sourceItem(source), source); }} onContextMenu={event => event.preventDefault()}><ItemArtwork item={sourceItem(source)} /><span><b className="t1">{source.name}</b><small className="sub t1">{source.previewSong!.artists.map(a => a.name).join(' / ')}</small></span><button className="ib" disabled={adding} aria-label={`贴上${source.name}`} onClick={() => void add(source)}><Icon n="plus" s={18} /></button></div>)}{!busy && !sources.length && <p className="center sub sm">暂无音乐</p>}</div>
       </section>
     </div>}
-    {loaded && !note && !picker && !tools && !emojiPicker && !insertion && ((playbackGuideItem && !overPlayer) || (showGuide && !ghost)) && <CanvasGuide board={board} playItem={playbackGuideItem} held={playbackGuideItem && ghost && draggingId && isCanvasMusic(ghost.item) ? ghost : undefined} onDismiss={playbackGuideItem ? dismissPlaybackGuide : dismissGuide} />}
-    {note && <Sheet title="便签" className="nc-note-sheet" onClose={() => setNote(null)}><form className="nc-note-editor" onSubmit={event => { event.preventDefault(); void tool({ kind: 'note', ...note }); }}><textarea aria-label="便签内容" value={note.text} onChange={event => setNote({ ...note, text: event.target.value })} placeholder="留一句话…" maxLength={800} required /><div className="row nc-note-colors" aria-label="便签颜色">{['paper','butter','rose','mint'].map(color => <button type="button" key={color} className={`nc-color-${color} ${note.color === color ? 'on' : ''}`} aria-label={`便签颜色${color}`} aria-pressed={note.color === color} onClick={() => setNote({ ...note, color })} />)}</div><div className="row nc-note-actions"><button type="button" className="btn ghost sm" onClick={() => setNote(null)}>取消</button><button className="btn sm" disabled={adding || !note.text.trim()}>贴上画布</button></div></form></Sheet>}
+    {loaded && !note && !graffiti && !picker && !tools && !emojiPicker && !insertion && ((playbackGuideItem && !overPlayer) || (showGuide && !ghost)) && <CanvasGuide board={board} playItem={playbackGuideItem} held={playbackGuideItem && ghost && draggingId && isCanvasMusic(ghost.item) ? ghost : undefined} onDismiss={playbackGuideItem ? dismissPlaybackGuide : dismissGuide} />}
+    {note && <Sheet title="便签" className="nc-note-sheet" onClose={() => setNote(null)}>
+      <form className="nc-note-editor" onSubmit={event => { event.preventDefault(); void tool({ kind: 'note', ...note }); }}>
+        <textarea aria-label="便签内容" value={note.text} onChange={event => setNote({ ...note, text: event.target.value })} placeholder="留一句话…" maxLength={800} required />
+        <div className="nc-note-options">
+          <div className="row nc-note-colors" aria-label="便签颜色">
+            {['paper', 'butter', 'rose', 'mint'].map(color => <button type="button" key={color} className={`nc-color-${color} ${note.color === color ? 'on' : ''}`} aria-label={`便签颜色${color}`} aria-pressed={note.color === color} onClick={() => setNote({ ...note, color })} />)}
+          </div>
+          <label className="nc-note-moment-option" title="贴上便签时记录时间">
+            <input type="checkbox" checked={note.captureMoment} onChange={event => setNote({ ...note, captureMoment: event.target.checked })} />
+            此时此刻
+          </label>
+        </div>
+        <div className="row nc-note-actions">
+          <button type="button" className="btn ghost sm" onClick={() => setNote(null)}>取消</button>
+          <button className="btn sm" disabled={adding || !note.text.trim()}>贴上画布</button>
+        </div>
+      </form>
+    </Sheet>}
   </div>;
 }
 
+const momentFormat = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+});
+
 function ItemArtwork({ item, spinning = false }: { item: CanvasItem; spinning?: boolean }) {
-  if (item.kind === 'note') return <div className={`nc-paper nc-color-${item.color}`}><span>{item.text}</span><i /></div>;
+  if (item.kind === 'note') {
+    const moment = item.moment;
+    return <div className={`nc-paper nc-color-${item.color}${moment ? ' nc-paper-stamped' : ''}`}>
+      <span>{item.text}</span>
+      {moment && <time className={`nc-note-stamp nc-note-stamp-${moment.font}`} dateTime={new Date(moment.timestamp).toISOString()} title="北京时间">
+        {momentFormat.format(moment.timestamp)}
+      </time>}
+      <i />
+    </div>;
+  }
   if (item.kind === 'image') return <div className="nc-photo"><img src={`/api/canvas/images/${item.imageFile}`} alt="画布图片" draggable={false} /></div>;
   if (item.kind === 'emoji') return <div className="nc-emoji-art">{item.emoji}</div>;
   const count = item.tracks?.length ? `${item.tracks.length} 首` : '';
