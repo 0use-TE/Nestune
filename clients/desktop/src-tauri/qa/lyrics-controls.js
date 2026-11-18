@@ -27,6 +27,14 @@ addEventListener('DOMContentLoaded', async () => {
     const moved = await request({ type: 'lyricsControlsProbe' });
     check(moved.x !== unlocked.x || moved.y !== unlocked.y, 'unlocked lyrics must remain movable');
     report.unlockedNativeMovement = true;
+    for (const edge of ['top', 'bottom']) {
+      await request({ type: 'lyricsMoveProbe', edge });
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const placed = await request({ type: 'lyricsControlsProbe' });
+      check(placed.toolsAligned && placed.toolsBelow === (edge === 'top'), 'tools did not flip at the ' + edge);
+      check(placed.toolsSizeCorrect && placed.toolsWidth >= 255, 'native tools size: ' + JSON.stringify(placed));
+    }
+    report.toolbarPlacementBothHalves = true;
     const locked = await click('lock');
     check(locked.state.locked && locked.clickThrough && !locked.toolsClickThrough, 'lock swallowed input');
     report.lockButton = true;
