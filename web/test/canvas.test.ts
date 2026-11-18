@@ -129,7 +129,9 @@ it('keeps graffiti as a fixed paint mark that can be covered but never moved or 
   expect(item).toMatchObject({ kind: 'image', name: '涂鸦', rotation: 0, graffiti: { width: 1, height: 1 } });
   expect(canvas.readCanvas().records[0]).toEqual(item);
   if (item.kind !== 'image') throw new Error('Missing image');
-  expect(Buffer.from(await canvas.canvasImage(item.imageFile).arrayBuffer())).toEqual(png);
+  const image = canvas.canvasImage(item.imageFile);
+  expect(Buffer.from(await image.arrayBuffer())).toEqual(png);
+  expect(canvas.canvasImage(item.imageFile, image.headers.get('etag')).status).toBe(304);
   expect(() => canvas.removeRecord(1, item.id)).toThrow('涂鸦固定在墙面上');
   await expect(canvas.takeCanvasItem(2, item.id)).rejects.toThrow('涂鸦固定在墙面上');
   expect(() => canvas.moveRecord(2, { id: item.id, x: 490, y: 140 })).toThrow('涂鸦固定在墙面上');
@@ -138,6 +140,30 @@ it('keeps graffiti as a fixed paint mark that can be covered but never moved or 
   const fitted = canvas.addCanvasImage(1, higherResolution, { ...placement, boardWidth: '377.25' }).records.at(-1)!;
   expect(canvas.readCanvas().records.map(record => record.id)).toEqual([item.id, fitted.id]);
   expect(canvas.readCanvas().records[1]).toMatchObject({ x: 200, y: 200, graffiti: { width: 1280, height: 1, boardWidth: 377.25 } });
+});
+it('synchronizes only changed board objects, including order and profile edits at the same revision', async () => {
+  const { readCanvasSync } = await import('@/server/canvas-sync');
+  const first = canvas.addCanvasTool(1, { kind: 'note', text: '第一张', x: 200, y: 200 }).records[0];
+  const initial = readCanvasSync(null);
+  if (initial.kind !== 'snapshot') throw new Error('Missing initial snapshot');
+  expect(readCanvasSync(initial.token)).toEqual({ kind: 'unchanged', token: initial.token });
+  const added = canvas.addCanvasTool(1, { kind: 'note', text: '第二张', x: 220, y: 210 }).records.at(-1)!;
+  const add = readCanvasSync(initial.token);
+  expect(add).toMatchObject({ kind: 'delta', upserts: [added], removed: [], order: [first.id, added.id] });
+  canvas.moveRecord(1, { id: first.id, x: 300, y: 260 });
+  const move = readCanvasSync(add.token);
+  expect(move).toMatchObject({ kind: 'delta', upserts: [{ id: first.id, x: 300, y: 260 }], removed: [], order: [added.id, first.id] });
+  const revision = canvas.readCanvas().revision;
+  database.run('UPDATE users SET display_name=? WHERE id=?', '新名字', 1);
+  try {
+    const profile = readCanvasSync(move.token);
+    expect(profile).toMatchObject({ kind: 'delta', revision, upserts: [{ ownerName: '新名字' }, { ownerName: '新名字' }] });
+    canvas.removeRecord(1, added.id);
+    expect(readCanvasSync(profile.token)).toMatchObject({ kind: 'delta', upserts: [], removed: [added.id], order: [first.id] });
+    expect(readCanvasSync('unknown')).toMatchObject({ kind: 'snapshot', state: { records: [{ id: first.id }] } });
+  } finally {
+    database.run('UPDATE users SET display_name=? WHERE id=?', '小雨', 1);
+  }
 });
 it('hides uploads which are no longer public', async () => {
   const state = await canvas.addRecord(1, { songId: '101', x: 100, y: 100 });

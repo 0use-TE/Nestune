@@ -17,6 +17,10 @@ export type CanvasImage = CanvasBase & { kind: 'image'; imageFile: string; graff
 export type CanvasEmoji = CanvasBase & { kind: 'emoji'; emoji: string };
 export type CanvasItem = CanvasRecord | CanvasNote | CanvasImage | CanvasEmoji;
 export type CanvasState = { revision: number; records: CanvasItem[] };
+export type CanvasSyncReply =
+  | { kind: 'snapshot'; token: string; state: CanvasState }
+  | { kind: 'unchanged'; token: string }
+  | { kind: 'delta'; from: string; token: string; revision: number; upserts: CanvasItem[]; removed: string[]; order?: string[] };
 export type CanvasTake = { state: CanvasState; item: CanvasItem };
 export type CanvasSource = {
   kind: CanvasRecord['kind']; name: string; cover?: string | null;

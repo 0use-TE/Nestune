@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCanvasCamera } from '@/lib/use-canvas-camera';
 import { WORLD_LIMIT } from '@/lib/canvas-camera';
 import { useCanvasPreview } from '@/lib/use-canvas-preview';
+import { useCanvasSync } from '@/lib/use-canvas-sync';
 import { api, get, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
@@ -81,14 +82,19 @@ export function Square() {
   const playerSound = useRef<RecordPlayerAudio | null>(null);
   const playbackGeneration = useRef(0);
   const mounted = useRef(true);
-  const apply = useCallback((next: CanvasState) => {
-    if (!mounted.current || next.revision < stateRef.current.revision) return;
+  const apply = useCallback((next: CanvasState, reset = false) => {
+    if (!mounted.current || next === stateRef.current || (!reset && next.revision < stateRef.current.revision)) return;
     stateRef.current = next; setState(next);
   }, []);
-  const refresh = useCallback(async () => {
-    const next = await get<CanvasState>('/api/canvas');
-    if (!drag.current && !pending.current) { apply(next); if (mounted.current) setLoaded(true); }
-  }, [apply]);
+  const refresh = useCanvasSync(app.me?.id, (next, previous) => {
+    if (!mounted.current || drag.current || pending.current) return false;
+    // Accept a restored server snapshot when the view still displays the older cached baseline.
+    const reset = previous === stateRef.current && next.revision < previous.revision;
+    if (!reset && next.revision < stateRef.current.revision) return false;
+    apply(next, reset);
+    setLoaded(true);
+    return true;
+  }, error => live.current.toast(error.message));
   const change = useCallback(async (input: Record<string, unknown>) => {
     pending.current++;
     try { const next = await post<CanvasState>('/api/canvas', input); apply(next); return next; }
@@ -104,12 +110,8 @@ export function Square() {
   const primeSound = useCallback(() => { playerSound.current ??= new RecordPlayerAudio(); playerSound.current.unlock(); }, []);
   useEffect(() => {
     mounted.current = true;
-    void refresh().catch(error => live.current.toast(error.message));
-    const timer = setInterval(() => { if (!document.hidden) void refresh().catch(() => {}); }, 2000);
-    const focus = () => { void refresh().catch(() => {}); };
-    window.addEventListener('focus', focus);
-    return () => { mounted.current = false; playbackGeneration.current++; clearInterval(timer); window.removeEventListener('focus', focus); if (drag.current) clearTimeout(drag.current.timer); if (finishAnimation.current) clearTimeout(finishAnimation.current); playerSound.current?.dispose(); playerSound.current = null; };
-  }, [refresh]);
+    return () => { mounted.current = false; playbackGeneration.current++; if (drag.current) clearTimeout(drag.current.timer); if (finishAnimation.current) clearTimeout(finishAnimation.current); playerSound.current?.dispose(); playerSound.current = null; };
+  }, []);
   useEffect(() => {
     if (!picker) return;
     let active = true; setBusy(true); setQuery('');

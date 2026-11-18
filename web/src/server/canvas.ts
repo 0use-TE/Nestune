@@ -22,9 +22,12 @@ function poster(ownerId: number) {
   const user = one<{ name: string; avatar: string }>("SELECT COALESCE(NULLIF(display_name,''),username) name,avatar FROM users WHERE id=?", ownerId);
   return { ownerName: user?.name || `用户 ${ownerId}`, ownerAvatar: user?.avatar ? `/api/avatars/${user.avatar}` : null };
 }
-export function readCanvas(): CanvasState {
+function readStoredCanvas(): CanvasState {
   const raw = kvGet(storageKey());
-  const state: CanvasState = raw ? JSON.parse(raw) : { revision: 0, records: [] };
+  return raw ? JSON.parse(raw) : { revision: 0, records: [] };
+}
+export function readCanvas(): CanvasState {
+  const state = readStoredCanvas();
   state.records = state.records.flatMap<CanvasItem>(item => {
     if (isCanvasMusic(item)) {
       if (!publicSong(item.song)) return [];
@@ -208,9 +211,12 @@ export function addCanvasImage(owner: number, bytes: Buffer, input: Record<strin
   fs.writeFileSync(dir('canvas-images', item.imageFile), bytes, { mode: 0o600 });
   try { return store(item); } catch (error) { fs.rmSync(dir('canvas-images', item.imageFile), { force: true }); throw error; }
 }
-export function canvasImage(name: string) {
-  if (!imagePattern.test(name) || !readCanvas().records.some(item => item.kind === 'image' && item.imageFile === name)) throw fail(404, '图片已被取走');
+export function canvasImage(name: string, match?: string | null) {
+  if (!imagePattern.test(name) || !readStoredCanvas().records.some(item => item.kind === 'image' && item.imageFile === name)) throw fail(404, '图片已被取走');
   const file = dir('canvas-images', name);
   if (!fs.existsSync(file)) throw fail(404, '图片不存在');
-  return new Response(new Uint8Array(fs.readFileSync(file)), { headers: { 'Content-Type': name.endsWith('.gif') ? 'image/gif' : avatarMime(name), 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
+  const tag = '"' + name + '"';
+  const headers = { 'Content-Type': name.endsWith('.gif') ? 'image/gif' : avatarMime(name), 'Cache-Control': 'private, no-cache', ETag: tag, 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" };
+  if (match === tag) return new Response(null, { status: 304, headers });
+  return new Response(new Uint8Array(fs.readFileSync(file)), { headers });
 }
