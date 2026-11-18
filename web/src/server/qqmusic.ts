@@ -8,6 +8,7 @@ import { mergeLyrics } from './netease';
 
 type Credential = Record<string, string | number>;
 const fields = ['musicid', 'musickey', 'openid', 'refresh_token', 'access_token', 'expired_at', 'unionid', 'str_musicid', 'refresh_key'] as const;
+const timingFields = { musickey_create_time: 'musickeyCreateTime', key_expires_in: 'keyExpiresIn', login_type: 'loginType' } as const;
 const g = globalThis as unknown as { __qq_meta?: Map<string, { value: any; at: number }>; __qq_refresh?: Promise<void>; __qq_qr?: Map<string, { type: string; expires: number }> };
 export const qqConfigured = () => !!process.env.QQMUSIC_URL;
 function credential(): Credential {
@@ -16,6 +17,10 @@ function credential(): Credential {
 function saveCredential(c: Credential) {
   if (!c.musicid || !c.musickey) throw fail(502, 'QQ 音乐没有返回有效的登录凭据');
   const safe = Object.fromEntries(fields.filter(k => c[k] !== undefined).map(k => [k, c[k]]));
+  for (const [key, alias] of Object.entries(timingFields)) {
+    const value = Number(c[key] ?? c[alias]);
+    if (Number.isFinite(value) && value >= 0) safe[key] = value;
+  }
   cookieHeader(safe);
   fs.mkdirSync(dir(), { recursive: true });
   fs.writeFileSync(dir('qq-session.json.tmp'), JSON.stringify(safe), { mode: 0o600 });
@@ -45,14 +50,49 @@ async function call(path: string, params: Record<string, string | number | boole
     throw fail(502, 'QQ 音乐服务暂时无法连接', 'qq_unreachable');
   }
 }
+function playbackKeyExpiry(c: Credential) {
+  const created = Number(c.musickey_create_time ?? c.musickeyCreateTime);
+  const lifetime = Number(c.key_expires_in ?? c.keyExpiresIn);
+  // expired_at belongs to the longer-lived refresh credential. Old saved
+  // sessions may lack playback-key timing; an upstream 401 handles that case.
+  return created > 0 && lifetime > 0 ? created + lifetime : Number(c.expired_at);
+}
+const sameCredential = (a: Credential, b: Credential) =>
+  String(a.musicid) === String(b.musicid) && a.musickey === b.musickey && a.refresh_token === b.refresh_token;
+
+async function renewCredential(previous: Credential) {
+  if (sameCredential(credential(), previous)) {
+    if (!g.__qq_refresh) g.__qq_refresh = (async () => {
+      const refreshed = await call('/login/refresh_credential', {}, previous);
+      if (String(refreshed?.musicid) !== String(previous.musicid)) throw fail(502, 'QQ 音乐续期返回的账号不一致，请重试', 'qq_refresh_invalid');
+      // A logout, QR login or another process may have changed the bound account
+      // while the network request was in flight. Never overwrite that session.
+      if (sameCredential(credential(), previous)) saveCredential(refreshed);
+    })().finally(() => { g.__qq_refresh = undefined; });
+    await g.__qq_refresh;
+  }
+  const current = credential();
+  if (!current.musicid || !current.musickey) throw fail(503, 'QQ 音乐尚未登录，请联系管理员', 'qq_offline');
+  if (String(current.musicid) !== String(previous.musicid)) throw fail(503, 'QQ 音乐绑定账号已更换，请重试播放', 'qq_session_changed');
+  return current;
+}
+
 async function authenticated(path: string, params: Record<string, string | number | boolean> = {}) {
   let c = credential();
   if (!c.musicid || !c.musickey) throw fail(503, 'QQ 音乐尚未登录，请联系管理员', 'qq_offline');
-  if (Number(c.expired_at) > 0 && Number(c.expired_at) * 1000 < Date.now() + 300_000) {
-    if (!g.__qq_refresh) g.__qq_refresh = call('/login/refresh_credential', {}, c).then(saveCredential).finally(() => { g.__qq_refresh = undefined; });
-    await g.__qq_refresh; c = credential();
+  let renewed = false;
+  const expiry = playbackKeyExpiry(c);
+  if (expiry > 0 && expiry * 1000 < Date.now() + 300_000) {
+    c = await renewCredential(c); renewed = true;
   }
-  return call(path, params, c);
+  try { return await call(path, params, c); }
+  catch (error) {
+    if (renewed || !(error instanceof HttpError) || error.status !== 401) throw error;
+    // The server can revoke a key before its advertised expiry. Refresh once,
+    // sharing concurrent renewals, and retry only the failed authenticated call.
+    c = await renewCredential(c);
+    return call(path, params, c);
+  }
 }
 const mid = (id: string) => { if (!isQqId(id)) throw fail(400, 'QQ 音乐编号无效'); return id.slice(3); };
 const clean = (s: unknown) => String(s || '').replace(/<[^>]*>/g, '').trim().slice(0, 500);

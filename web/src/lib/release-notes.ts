@@ -15,6 +15,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     title: '底栏切换循环，歌词浮窗也能切歌',
     summary: '支持导入网易云公开喜欢列表，修复 iOS 聊天键盘遮挡。',
     sections: [
+      { title: 'QQ 音乐登录自动续期', paragraphs: ['修复长期登录信息仍有效、播放密钥却已到期时无法播放的问题。现在会按播放密钥的实际有效期自动续期，提前失效时也会续期并重试一次；续期成功后直接继续播放。服务端生效，无需重新安装客户端。'] },
       { title: '网页', paragraphs: ['底栏新增循环键。网易云公开喜欢列表可导入，iPhone 打字时发送按钮保持可见。'] },
       { title: '歌词浮窗', paragraphs: ['可切歌、暂停和切换循环。按钮闲置 3 秒淡出。系统浮窗请更新 Windows 或 Android 客户端。'] },
     ],
