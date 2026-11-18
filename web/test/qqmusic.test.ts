@@ -58,3 +58,72 @@ it('reads a complete QQ playlist over multiple pages using the deployed API meta
   expect(result.songs[100].id).toBe('qq-track100');
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+
+const sessionFile = () => path.join(folder, 'qq-session.json');
+const response = (data: unknown) => new Response(JSON.stringify({ code: 0, data }));
+const mediaResponse = () => response({ data: [{ result: 0, ekey: '', purl: 'M500media456.mp3?vkey=test-only' }] });
+it.each(['snake', 'camel'])('renews an expired playback key despite a future long-lived expiry and retains %s timing', async style => {
+  const now = Math.floor(Date.now() / 1000);
+  const old = { musicid: 123, musickey: 'old-key', refresh_token: 'refresh-only', expired_at: now + 60 * 86400,
+    musickey_create_time: now - 3 * 86400 - 30, key_expires_in: 3 * 86400 };
+  fs.writeFileSync(sessionFile(), JSON.stringify(old));
+  const fresh = { musicid: 123, musickey: 'new-key', refresh_token: 'new-refresh-only', expired_at: now + 60 * 86400,
+    ...(style === 'snake' ? { musickey_create_time: now, key_expires_in: 3 * 86400 } : { musickeyCreateTime: now, keyExpiresIn: 3 * 86400 }) };
+  const fetcher = vi.fn(async (url: URL, options: RequestInit) => {
+    if (url.pathname.endsWith('/detail')) return response({ track: raw });
+    if (url.pathname.endsWith('/refresh_credential')) return response(fresh);
+    expect((options.headers as Record<string, string>).Cookie).toContain('musickey=new-key');
+    return mediaResponse();
+  });
+  vi.stubGlobal('fetch', fetcher);
+  await qq.qqMediaUrl('qq-track123', 'standard');
+  await qq.qqMediaUrl('qq-track123', 'standard');
+  expect(fetcher.mock.calls.filter(([url]) => url.pathname.endsWith('/refresh_credential'))).toHaveLength(1);
+  expect(JSON.parse(fs.readFileSync(sessionFile(), 'utf8'))).toMatchObject({ musickey: 'new-key', musickey_create_time: now, key_expires_in: 3 * 86400 });
+});
+it('refreshes once and retries a rejected playback call even without local key timing', async () => {
+  const fetcher = vi.fn(async (url: URL, options: RequestInit) => {
+    if (url.pathname.endsWith('/detail')) return response({ track: raw });
+    if (url.pathname.endsWith('/refresh_credential')) return response({ musicid: 123, musickey: 'renewed-key', expired_at: Math.floor(Date.now() / 1000) + 3600 });
+    return (options.headers as Record<string, string>).Cookie.includes('renewed-key') ? mediaResponse() : new Response('{"code":-1}', { status: 401 });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  await expect(qq.qqMediaUrl('qq-track123', 'standard')).resolves.toMatchObject({ level: 'standard' });
+  expect(fetcher.mock.calls.map(([url]) => url.pathname)).toEqual(['/song/track123/detail', '/song/track123/url', '/login/refresh_credential', '/song/track123/url']);
+});
+it('shares concurrent renewals and reuses a credential already renewed by another request', async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const fetcher = vi.fn(async (url: URL, options: RequestInit) => {
+    if (url.pathname.endsWith('/detail')) return response({ track: raw });
+    if (url.pathname.endsWith('/refresh_credential')) { await gate; return response({ musicid: 123, musickey: 'renewed-key', expired_at: Math.floor(Date.now() / 1000) + 3600 }); }
+    return (options.headers as Record<string, string>).Cookie.includes('renewed-key') ? mediaResponse() : new Response('{"code":-1}', { status: 401 });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const requests = [qq.qqMediaUrl('qq-track123', 'standard'), qq.qqMediaUrl('qq-track456', 'standard')];
+  await vi.waitFor(() => expect(fetcher.mock.calls.filter(([url]) => url.pathname.endsWith('/refresh_credential'))).toHaveLength(1));
+  release();
+  await expect(Promise.all(requests)).resolves.toHaveLength(2);
+  expect(fetcher.mock.calls.filter(([url]) => url.pathname.endsWith('/refresh_credential'))).toHaveLength(1);
+});
+it('does not loop or erase the session when refresh is rejected, and hides upstream secrets', async () => {
+  const before = fs.readFileSync(sessionFile(), 'utf8');
+  const fetcher = vi.fn(async (url: URL) => url.pathname.endsWith('/detail') ? response({ track: raw }) : new Response(JSON.stringify({ code: -1, msg: 'musickey=must-not-leak' }), { status: 401 }));
+  vi.stubGlobal('fetch', fetcher);
+  await expect(qq.qqMediaUrl('qq-track123', 'standard')).rejects.toMatchObject({ status: 401, code: 'qq_login_expired', message: 'QQ 音乐登录已失效，请管理员重新扫码' });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  expect(fs.readFileSync(sessionFile(), 'utf8')).toBe(before);
+});
+it('never overwrites a new QR login with an older in-flight refresh', async () => {
+  const replacement = { musicid: 456, musickey: 'new-account-key', expired_at: Math.floor(Date.now() / 1000) + 3600 };
+  vi.stubGlobal('fetch', vi.fn(async (url: URL) => {
+    if (url.pathname.endsWith('/detail')) return response({ track: raw });
+    if (url.pathname.endsWith('/refresh_credential')) {
+      fs.writeFileSync(sessionFile(), JSON.stringify(replacement));
+      return response({ musicid: 123, musickey: 'old-account-refreshed' });
+    }
+    return new Response('{"code":-1}', { status: 401 });
+  }));
+  await expect(qq.qqMediaUrl('qq-track123', 'standard')).rejects.toMatchObject({ code: 'qq_session_changed' });
+  expect(JSON.parse(fs.readFileSync(sessionFile(), 'utf8'))).toEqual(replacement);
+});
