@@ -1,14 +1,12 @@
 'use client';
-import { clientUpdatesUrl } from '@/lib/client-updates';
+import { ClientUpdatesProvider, ClientUpdatesSettings } from './ClientUpdates';
 import { Loading } from './Loading';
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { ReleaseNotes } from './ReleaseNotice';
 import { LATEST_RELEASE } from '@/lib/release-notes';
 import { VERSION } from '@/lib/version';
-import type { AndroidRelease } from '@/server/client-updates';
 
-type NativeClient = { platform: 'android'; version: string; versionCode: number; canDownload: boolean };
 type NativeBridge = { postMessage: (message: string) => void; onmessage?: (event: { data: string }) => void };
 
 const INSTALL_INTRO_KEY = 'nt-install-intro-v1';
@@ -29,7 +27,6 @@ type PwaState = {
   install: () => Promise<void>;
   available: boolean; updating: boolean; checking: boolean; status: string;
   checkUpdate: () => Promise<void>; update: () => void;
-  android: AndroidRelease | null; client: NativeClient | null; downloadUpdate: () => void;
 };
 const PwaContext = createContext<PwaState | null>(null);
 
@@ -49,40 +46,17 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
   const [showUpdateNotes, setShowUpdateNotes] = useState(false);
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState('');
-  const [android, setAndroid] = useState<AndroidRelease | null>(null);
-  const [client, setClient] = useState<NativeClient | null>(null);
-  const [hideAndroidUpdate, setHideAndroidUpdate] = useState(true);
-
   useEffect(() => {
     const native = (window as Window & { NestuneNative?: NativeBridge }).NestuneNative;
-    let versionReceived = false;
-    if (/Android/.test(navigator.userAgent) && /NestuneDesktop\//.test(navigator.userAgent)) {
-      // Android builds 2 and 3 predate the version-query bridge.
-      const legacy = { platform: 'android' as const, version: /NestuneDesktop\/([\d.]+)/.exec(navigator.userAgent)?.[1] || '1.0.0', versionCode: native ? 3 : 2, canDownload: false };
-      if (native) native.onmessage = event => {
-        try {
-          const data = JSON.parse(event.data);
-          window.dispatchEvent(new CustomEvent('nt:native-message', { detail: data }));
-          if (data.type === 'clientInfo' && Number.isSafeInteger(data.versionCode)) { versionReceived = true; setClient({ ...data, platform: 'android' }); }
-          if (data.type === 'downloadStarted') setStatus('正在下载，完成后点系统通知安装');
-          if (data.type === 'downloadError') setStatus('无法启动下载，请稍后重试');
-        } catch { /* Ignore unrelated native events. */ }
-      };
-      native?.postMessage(JSON.stringify({ type: 'clientInfo' }));
-      const timer = setTimeout(() => { if (!versionReceived) setClient(legacy); }, 700);
-      return () => { clearTimeout(timer); if (native) native.onmessage = undefined; };
-    }
+    if (!native) return;
+    const previous = native.onmessage;
+    native.onmessage = event => {
+      try { window.dispatchEvent(new CustomEvent('nt:native-message', { detail: JSON.parse(event.data) })); }
+      catch { /* Ignore malformed native messages. */ }
+      previous?.(event);
+    };
+    return () => { native.onmessage = previous; };
   }, []);
-  useEffect(() => {
-    if (!client) return;
-    fetch(clientUpdatesUrl(), { cache: 'no-store' }).then(r => r.ok ? r.json() : Promise.reject()).then(data => setAndroid(data.android)).catch(() => {});
-  }, [client?.versionCode]);
-  useEffect(() => {
-    if (!client || !android || android.versionCode <= client.versionCode) { setHideAndroidUpdate(true); return; }
-    let hidden = false;
-    try { hidden = !!localStorage.getItem('nt-client-later-' + android.versionCode); } catch { /* Optional preference. */ }
-    setHideAndroidUpdate(hidden);
-  }, [client, android]);
 
   useEffect(() => {
     const display = matchMedia('(display-mode: standalone)');
@@ -183,9 +157,9 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
     if (checking) return;
     setChecking(true); setStatus('');
     try {
-      const response = await fetch(clientUpdatesUrl(), { cache: 'no-store' });
+      const response = await fetch('/api/version', { cache: 'no-store' });
       if (!response.ok) throw new Error('暂时无法检查更新，请稍后重试');
-      const data = await response.json(); setAndroid(data.android);
+      await response.json();
       const registration = registrationRef.current || (('serviceWorker' in navigator) ? await navigator.serviceWorker.getRegistration('/') : undefined);
       if (registration) {
         await registration.update();
@@ -202,22 +176,14 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
         if (registration.waiting && navigator.serviceWorker.controller) {
           waitingRef.current = registration.waiting; setWaiting(registration.waiting);
           setStatus('网页更新已准备好');
-        } else setStatus('网页已是最新版本');
-      } else setStatus('检查完成，可刷新网页获取最新内容');
+        } else setStatus('网页已是最新版本；客户端请查看下方独立检查结果');
+      } else setStatus('网页检查完成，可刷新获取最新内容');
     } catch (error) { setStatus(error instanceof Error ? error.message : '检查更新失败'); }
     finally { setChecking(false); }
   }
 
-  function downloadUpdate() {
-    if (!android) return;
-    const url = new URL(android.url, location.origin).href;
-    const native = (window as Window & { NestuneNative?: NativeBridge }).NestuneNative;
-    if (client?.canDownload && native) { native.postMessage(JSON.stringify({ type: 'downloadUpdate', url })); return; }
-    navigator.clipboard.writeText(url).then(() => setStatus('下载链接已复制，请在浏览器中打开')).catch(() => setStatus('无法复制，请使用浏览器打开此站点下载'));
-  }
-
-  return <PwaContext.Provider value={{ installed, secure, ios, canInstall: !!prompt, install, available: !!waiting, updating, checking, status, checkUpdate, update, android, client, downloadUpdate }}>
-    {children}
+  return <PwaContext.Provider value={{ installed, secure, ios, canInstall: !!prompt, install, available: !!waiting, updating, checking, status, checkUpdate, update }}>
+    <ClientUpdatesProvider>{children}</ClientUpdatesProvider>
     {showInstallIntro && !installed && <section className="pwa-intro" aria-labelledby="pwa-intro-title">
       <img src="/pwa/icon-192.png" alt="" width={48} height={48} />
       <div className="pwa-intro-copy">
@@ -232,13 +198,13 @@ export function PwaProvider({ children }: { children: React.ReactNode }) {
       <button type="button" className="ib pwa-intro-close" aria-label="关闭安装提醒" onClick={() => setShowInstallIntro(false)}><Icon n="x" s={17} /></button>
     </section>}
     {waiting && !hideWebUpdate && <div className="pwa-update" role="status">
-      <span>新版本已准备好，更新会重新打开页面。</span>
+      <span>网页更新已准备好，刷新页面即可生效，无需安装客户端。</span>
       <button type="button" className="link" onClick={() => setShowUpdateNotes(true)}>查看更新内容</button>
-      <button type="button" className="btn sm" disabled={updating} onClick={update}>{updating ? <Loading inline label="更新中" /> : '立即更新'}</button>
+      <button type="button" className="btn sm" disabled={updating} onClick={update}>{updating ? <Loading inline label="更新中" /> : '刷新网页'}</button>
       {!updating && <button type="button" className="link" onClick={() => setHideWebUpdate(true)}>稍后</button>}
     </div>}
     {showUpdateNotes && <ReleaseNotes onClose={() => setShowUpdateNotes(false)} />}
-    {!hideAndroidUpdate && android && !waiting && <div className="pwa-update" role="status"><span>{status.includes('下载') ? status : 'Android 客户端有新版本'}</span><button className="btn sm" onClick={downloadUpdate}>{client?.canDownload ? '下载更新' : '复制下载链接'}</button><button className="link" onClick={() => { setHideAndroidUpdate(true); try { localStorage.setItem('nt-client-later-' + android.versionCode, '1'); } catch {} }}>稍后</button></div>}
+
     {error && <div className="pwa-update" role="alert"><span>{error}</span><button type="button" className="link" onClick={() => setError('')}>关闭</button></div>}
   </PwaContext.Provider>;
 }
@@ -258,15 +224,14 @@ export function AboutNestune() {
   const [clientVersion, setClientVersion] = useState<string | null>(null);
   useEffect(() => { setClientVersion(/NestuneDesktop\/([\d.]+)/.exec(navigator.userAgent)?.[1] || null); }, []);
   if (!pwa) return null;
-  const clientUpdate = pwa.android && pwa.client && pwa.android.versionCode > pwa.client.versionCode;
   return <section className="panel" aria-label="关于 Nestune">
     <div className="set"><div><b>更新内容</b><p className="sub sm">{LATEST_RELEASE.title} · {LATEST_RELEASE.version}</p></div><button type="button" className="btn ghost sm" onClick={() => setNotes(true)}>查看</button></div>
     {notes && <ReleaseNotes onClose={() => setNotes(false)} />}
-    <div className="set"><div><b>Nestune</b><div className="sub sm">网页 V{VERSION}{(pwa.client?.version || clientVersion) && <> · 客户端 V{pwa.client?.version || clientVersion}</>}</div></div>
+    <div className="set"><div><b>Nestune</b><div className="sub sm">网页 V{VERSION}{clientVersion && <> · 客户端 V{clientVersion}</>}</div></div>
       <button type="button" className="btn ghost sm" disabled={pwa.checking} onClick={() => void pwa.checkUpdate()}>{pwa.checking ? <Loading inline label="正在检查更新" /> : '检查更新'}</button>
     </div>
-    {pwa.available && <div className="set"><b>网页更新</b><button type="button" className="btn sm" disabled={pwa.updating} onClick={pwa.update}>{pwa.updating ? <Loading inline label="正在更新" /> : '立即更新'}</button></div>}
-    {pwa.client && pwa.android && <div className="set"><div><b>Android 客户端</b><div className="sub sm">{clientUpdate ? '有可用更新' : '已是最新版本'}</div></div>{clientUpdate && <button className="btn sm" onClick={pwa.downloadUpdate}>{pwa.client.canDownload ? '下载更新' : '复制下载链接'}</button>}</div>}
+    {pwa.available && <div className="set"><b>网页更新（免安装）</b><button type="button" className="btn sm" disabled={pwa.updating} onClick={pwa.update}>{pwa.updating ? <Loading inline label="正在更新" /> : '刷新网页'}</button></div>}
+    <ClientUpdatesSettings />
     {pwa.status && <p className="update-status sub sm" role="status">{pwa.status}</p>}
   </section>;
 }
