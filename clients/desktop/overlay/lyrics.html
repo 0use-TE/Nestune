@@ -3,7 +3,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; connect-src ipc: http://ipc.localhost; img-src 'none'">
 <title>Nestune · 桌面歌词</title>
 <style>
-*{box-sizing:border-box}html,body{background:transparent;margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,"Microsoft YaHei",sans-serif;user-select:none}body{padding:6px}main{height:100%;border-radius:18px;padding:36px 16px 10px;display:flex;flex-direction:column;justify-content:center;position:relative;cursor:grab;background:rgba(0,0,0,.012)}main:active{cursor:grabbing}body.panel main{background:#181817e6;border:1px solid #ffffff1c;box-shadow:0 3px 15px #0002}#line{font-size:clamp(19px,4.8vw,30px);line-height:1.35;font-weight:650;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000c}#translation{font-size:16px;text-align:center;line-height:1.4;color:#f4f3ef;text-shadow:0 1px 3px #000,0 0 5px #000;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#title{font-size:10px;color:#e8e7e1;text-shadow:0 1px 3px #000;margin-top:7px;text-align:center;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}nav{z-index:2;position:absolute;inset:5px clamp(6px,4.7vw,12px) auto;display:flex;justify-content:flex-end;gap:clamp(2px,1.5vw,4px);opacity:1;transition:opacity .15s}button{display:grid;place-items:center;flex:0 1 27px;min-width:0;width:27px;height:27px;padding:0;border:1px solid #ffffff20;border-radius:8px;background:#181817ed;color:#eee;cursor:pointer}button:hover,button:focus-visible{background:#41413e;outline:1px solid #fff6}svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}#status{position:absolute;inset:auto 12px 2px;font-size:10px;text-align:center;color:#fff;text-shadow:0 1px 3px #000}body.locked main{cursor:default}
+*{box-sizing:border-box}html,body{background:transparent;margin:0;width:100%;height:100%;overflow:hidden;font-family:system-ui,"Microsoft YaHei",sans-serif;user-select:none}body{padding:6px;--lyric-size:clamp(14px,min(4.8vw,22vh),76px)}main{height:100%;border-radius:18px;padding:36px 16px 10px;display:flex;flex-direction:column;justify-content:center;position:relative;cursor:grab;background:rgba(0,0,0,.012)}main:active{cursor:grabbing}body.panel main{background:#181817e6;border:1px solid #ffffff1c;box-shadow:0 3px 15px #0002}#line{font-size:var(--lyric-size);line-height:1.35;font-weight:650;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;text-shadow:0 1px 3px #000,0 0 6px #000c}#translation{font-size:calc(var(--lyric-size) * .54);text-align:center;line-height:1.4;color:#f4f3ef;text-shadow:0 1px 3px #000,0 0 5px #000;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#title{font-size:calc(var(--lyric-size) * .37);color:#e8e7e1;text-shadow:0 1px 3px #000;margin-top:7px;text-align:center;opacity:.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}nav{z-index:2;position:absolute;inset:5px clamp(6px,4.7vw,12px) auto;display:flex;justify-content:flex-end;gap:clamp(2px,1.5vw,4px);opacity:1;transition:opacity .15s}button{display:grid;place-items:center;flex:0 1 27px;min-width:0;width:27px;height:27px;padding:0;border:1px solid #ffffff20;border-radius:8px;background:#181817ed;color:#eee;cursor:pointer}button:hover,button:focus-visible{background:#41413e;outline:1px solid #fff6}svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}#status{position:absolute;inset:auto 12px 2px;font-size:10px;text-align:center;color:#fff;text-shadow:0 1px 3px #000}body.locked main{cursor:default}
 .k-word{display:inline-block;position:relative;white-space:pre}.k-ink{position:absolute;inset:0;color:transparent;background-image:linear-gradient(100deg,#73acf0,#9bbded 22%,#edd083 46%,#f1d78e 54%,#9bbded 78%,#73acf0);background-size:var(--lyric-width,600px) 100%;background-position:calc(var(--lyric-flow,0px) - var(--word-x,0px)) 50%;background-clip:text;-webkit-background-clip:text;clip-path:inset(0 calc(100% - var(--sung,0%)) 0 0);text-shadow:none}
 #line,#translation,#title,#status{pointer-events:none}
 #line-content,#translation-content{display:inline-block;min-width:100%;white-space:nowrap;will-change:transform}#line,#translation{text-overflow:clip}
@@ -12,6 +12,7 @@ body[data-tools-below]:not(.tools) main{padding-block:10px 36px}
 body[data-tools-below] nav{inset-block: auto 5px}
 body[data-tools-below] #status{inset-block:2px auto}
 body[data-idle] nav:not(:has(:focus-visible)){opacity:0;pointer-events:none}
+body.locked .resize-control{display:none}
 .mode-state{position:relative}.mode-state span{position:absolute;font-size:8px;font-weight:bold;pointer-events:none}
 @media(prefers-reduced-motion:reduce){nav{transition:none}}
 </style></head><body><main id="drag"><nav>
@@ -19,6 +20,8 @@ body[data-idle] nav:not(:has(:focus-visible)){opacity:0;pointer-events:none}
 <button data-control="previous" title="上一首" aria-label="上一首"><svg viewBox="0 0 24 24"><path d="M6 5v14m13-14L8 12l11 7Z"/></svg></button>
 <button id="toggle" data-control="toggle" title="播放" aria-label="播放"><svg viewBox="0 0 24 24"><path d="m8 5 12 7-12 7Z"/></svg></button>
 <button data-control="next" title="下一首" aria-label="下一首"><svg viewBox="0 0 24 24"><path d="M18 5v14M5 5l11 7-11 7Z"/></svg></button>
+<button class="resize-control" data-resize="smaller" title="缩小歌词窗口" aria-label="缩小歌词窗口"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button>
+<button class="resize-control" data-resize="larger" title="放大歌词窗口" aria-label="放大歌词窗口"><svg viewBox="0 0 24 24"><path d="M5 12h14m-7-7v14"/></svg></button>
 <button id="panel" title="切换歌词背景" aria-label="切换歌词背景"><svg viewBox="0 0 24 24"><path d="M12 3C8 8 6 11 6 15a6 6 0 0 0 12 0c0-4-2-7-6-12Z"/></svg></button>
 <button id="lock" title="锁定歌词位置" aria-label="锁定歌词位置" aria-pressed="false"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V6a4 4 0 0 1 8 0v4"/></svg></button>
 <button id="close" title="关闭桌面歌词" aria-label="关闭桌面歌词"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
@@ -80,6 +83,9 @@ function wake() {
 window.nestuneLyricsWake = wake;
 for (const event of ['pointerenter', 'pointermove', 'pointerdown', 'focusin']) {
   document.getElementById('drag').addEventListener(event, wake);
+}
+for (const button of document.querySelectorAll('[data-resize]')) {
+  button.onclick = () => request({ type: 'lyricsResize', direction: button.dataset.resize }).catch(error);
 }
 for (const button of document.querySelectorAll('[data-control]')) {
   button.onclick = () => request({ type: 'lyricsPlayback', action: button.dataset.control }).catch(error);

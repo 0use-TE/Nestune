@@ -3,8 +3,12 @@ use serde_json::{json, Value};
 use std::sync::Mutex;
 use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 
-const TOOLS_WIDTH: f64 = 256.0;
+const TOOLS_WIDTH: f64 = 324.0;
 const TOOLS_HEIGHT: f64 = 44.0;
+const DEFAULT_WIDTH: f64 = 620.0;
+const DEFAULT_HEIGHT: f64 = 138.0;
+const MIN_WIDTH: f64 = 280.0;
+const MIN_HEIGHT: f64 = 112.0;
 
 #[derive(Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
@@ -14,6 +18,8 @@ pub struct Preferences {
     panel: bool,
     x: Option<i32>,
     y: Option<i32>,
+    width: Option<f64>,
+    height: Option<f64>,
 }
 
 pub struct Runtime {
@@ -110,6 +116,7 @@ fn lock_input(app: &AppHandle, locked: bool) -> Result<(), String> {
         lyrics.eval("window.nestuneLyricsWake?.()").map_err(|_| "无法唤醒歌词按钮")?;
     }
     lyrics.set_ignore_cursor_events(locked).map_err(|_| "无法调整歌词穿透")?;
+    lyrics.set_resizable(!locked).map_err(|_| "无法调整歌词窗口大小")?;
     if !locked || !lyrics.is_visible().unwrap_or(false) { tools.hide().map_err(|_| "无法隐藏歌词按钮")?; }
     Ok(())
 }
@@ -142,8 +149,10 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
     #[cfg(debug_assertions)]
     if controls_qa { preferences.enabled = true; preferences.locked = true; }
     app.manage(Mutex::new(Runtime { preferences: preferences.clone(), data: Value::Null, media: Value::Null }));
+    let width = preferences.width.unwrap_or(DEFAULT_WIDTH).clamp(MIN_WIDTH, DEFAULT_WIDTH * 3.0);
+    let height = preferences.height.unwrap_or(DEFAULT_HEIGHT).clamp(MIN_HEIGHT, DEFAULT_HEIGHT * 3.0);
     let builder = WebviewWindowBuilder::new(app, "lyrics", WebviewUrl::App("lyrics.html".into()))
-        .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 138.0)
+        .title("Nestune · 桌面歌词").inner_size(width, height).min_inner_size(MIN_WIDTH, MIN_HEIGHT)
         .decorations(false).transparent(true).shadow(false).always_on_top(true)
         .skip_taskbar(true).focused(false).resizable(true).visible(false)
         .background_color(tauri::window::Color(0, 0, 0, 0))
@@ -188,8 +197,8 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
             let scale = monitor.scale_factor();
             let size = monitor.size(); let origin = monitor.position();
             window.set_position(PhysicalPosition::new(
-                origin.x + ((size.width as f64 - 620.0 * scale) / 2.0).max(0.0) as i32,
-                origin.y + (size.height as f64 - 210.0 * scale).max(0.0) as i32,
+                origin.x + ((size.width as f64 - width * scale) / 2.0).max(0.0) as i32,
+                origin.y + (size.height as f64 - (height + 72.0) * scale).max(0.0) as i32,
             ))?;
         }
     }
@@ -211,6 +220,19 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
                         }
                     } else {
                         runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+                    }
+                }
+            }
+        }
+        if let tauri::WindowEvent::Resized(size) = event {
+            if let Some(lyrics) = handle.get_webview_window("lyrics") {
+                if let Ok(scale) = lyrics.scale_factor() {
+                    if let Ok(mut runtime) = handle.state::<Mutex<Runtime>>().try_lock() {
+                        if !runtime.preferences.locked {
+                            let size = size.to_logical::<f64>(scale);
+                            runtime.preferences.width = Some(size.width);
+                            runtime.preferences.height = Some(size.height);
+                        }
                     }
                 }
             }
@@ -401,6 +423,26 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
         "lyricsDrag" if local && !runtime.preferences.locked => {
             drop(runtime);
             overlay.start_dragging().map_err(|_| "无法拖动歌词窗口")?;
+            return Ok(json!({ "ok": true }));
+        },
+        "lyricsResize" if local && !runtime.preferences.locked => {
+            let factor = match data["direction"].as_str() {
+                Some("larger") => 1.15,
+                Some("smaller") => 1.0 / 1.15,
+                _ => return Err("无效的缩放方向".into()),
+            };
+            let scale = overlay.scale_factor().map_err(|_| "无法读取显示缩放")?;
+            let current = overlay.inner_size().map_err(|_| "无法读取歌词窗口大小")?.to_logical::<f64>(scale);
+            let ceiling = overlay.current_monitor().ok().flatten().map(|m| m.work_area().size.to_logical::<f64>(scale));
+            let max_width = ceiling.map_or(DEFAULT_WIDTH * 3.0, |size| size.width).min(DEFAULT_WIDTH * 3.0).max(MIN_WIDTH);
+            let max_height = ceiling.map_or(DEFAULT_HEIGHT * 3.0, |size| size.height).min(DEFAULT_HEIGHT * 3.0).max(MIN_HEIGHT);
+            let width = (current.width * factor).clamp(MIN_WIDTH, max_width);
+            let height = (current.height * factor).clamp(MIN_HEIGHT, max_height);
+            runtime.preferences.width = Some(width);
+            runtime.preferences.height = Some(height);
+            drop(runtime);
+            overlay.set_size(LogicalSize::new(width, height)).map_err(|_| "无法缩放歌词窗口")?;
+            persist(&app);
             return Ok(json!({ "ok": true }));
         },
         _ => return Err("不支持此歌词窗口操作".into()),
