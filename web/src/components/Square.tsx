@@ -1,14 +1,17 @@
 'use client';
 import { Select } from './Select';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useCanvasCamera } from '@/lib/use-canvas-camera';
 import { WORLD_LIMIT } from '@/lib/canvas-camera';
 import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { useCanvasSync } from '@/lib/use-canvas-sync';
-import { api, get, post } from '@/lib/api';
+import { api, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
-import type { Song } from '@/lib/types';
+import type { CollectionFavorite } from '@/lib/collection-types';
+import { personalPlaylistPath } from '@/lib/playlist-queue';
+import type { Artist, Song } from '@/lib/types';
 import { RecordPlayerAudio, RECORD_INSERT_MS } from '@/lib/record-player-audio';
 import { Cover } from './Cover';
 import { Icon } from './Icon';
@@ -21,13 +24,35 @@ import { MAX_GRAFFITI_SIDE, type GraffitiArea, type Point } from '@/lib/canvas-g
 type Drag = { pointer: number; startX: number; startY: number; x: number; y: number; active: boolean; cancelled: boolean; timer: ReturnType<typeof setTimeout>; item: CanvasItem; source?: CanvasSource; size: number };
 type Ghost = { item: CanvasItem; x: number; y: number; size: number };
 type Insertion = { item: CanvasRecord; x: number; slotY: number; size: number; fromX: number; fromY: number; source?: CanvasSource };
+type MusicKind = 'song' | 'album';
+type MusicChoice = { source: CanvasSource; subtitle: string };
+type PickerResult = { path: string; kind: MusicKind; choices: MusicChoice[]; playlistCover?: string | null; warnings?: string[]; error?: string };
+type AlbumSummary = { id: string; name: string; cover: string | null };
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 const EMOJI = ['🎵','🎧','💿','📼','🎸','🎹','❤️','✨','⭐','🌙','☀️','🌈','🌷','🌻','🍀','🍒','☕','🍰','🐱','🐶','🫶','🥹','😎','🤍'];
 function sourceItem(source: CanvasSource): CanvasRecord {
   const song = source.previewSong ?? { id: source.songId ?? '', name: source.name, cover: source.cover ?? null, artists: [], duration: 0, album: { id: source.albumId ?? null, name: source.name } };
   return { id: '', ownerId: 0, x: 500, y: 300, rotation: 0, kind: source.kind, name: source.name, song, albumId: source.albumId ?? null };
 }
-const songSource = (song: Song, kind: 'song' | 'album' = 'song'): CanvasSource => ({ kind, songId: song.id, albumId: kind === 'album' ? song.album.id ?? undefined : undefined, name: kind === 'album' ? song.album.name : song.name, cover: song.cover, previewSong: song });
+const artistNames = (artists: Artist[]) => artists.map(artist => artist.name).join(' / ');
+const songChoice = (song: Song): MusicChoice => ({
+  source: { kind: 'song', songId: song.id, name: song.name, cover: song.cover, previewSong: song },
+  subtitle: artistNames(song.artists),
+});
+const albumChoice = (album: AlbumSummary, subtitle: string): MusicChoice => ({
+  source: { kind: 'album', albumId: album.id, name: album.name, cover: album.cover },
+  subtitle,
+});
+
+function playlistChoices(songs: Song[], kind: MusicKind): MusicChoice[] {
+  if (kind === 'song') return songs.map(songChoice);
+  const albums = new Map<string, MusicChoice>();
+  for (const song of songs) {
+    const { id, name } = song.album;
+    if (id && !albums.has(id)) albums.set(id, albumChoice({ id, name, cover: song.cover }, artistNames(song.artists)));
+  }
+  return [...albums.values()];
+}
 
 export function Square() {
   const app = useApp();
@@ -58,10 +83,13 @@ export function Square() {
   const [graffiti, setGraffiti] = useState<GraffitiArea | null>(null);
   const [emojiPicker, setEmojiPicker] = useState(false);
   const [collection, setCollection] = useState('favorites');
-  const [kind, setKind] = useState<'song' | 'album'>('song');
-  const [songs, setSongs] = useState<Song[]>([]);
+  const [albumCollection, setAlbumCollection] = useState('saved');
+  const [kind, setKind] = useState<MusicKind>('song');
+  const [online, setOnline] = useState(false);
+  const [filter, setFilter] = useState('');
   const [query, setQuery] = useState('');
-  const [busy, setBusy] = useState(false);
+  const [pickerResult, setPickerResult] = useState<PickerResult | null>(null);
+  const [pickerRetry, setPickerRetry] = useState(0);
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [ghost, setGhost] = useState<Ghost | null>(null);
@@ -112,14 +140,42 @@ export function Square() {
     mounted.current = true;
     return () => { mounted.current = false; playbackGeneration.current++; if (drag.current) clearTimeout(drag.current.timer); if (finishAnimation.current) clearTimeout(finishAnimation.current); playerSound.current?.dispose(); playerSound.current = null; };
   }, []);
+  const selectedCollection = kind === 'album' ? albumCollection : collection;
+  const savedAlbums = !online && selectedCollection === 'saved';
+  const keyword = query.trim();
+  const pickerPath = !picker ? null : online
+    ? keyword ? `/api/search?type=${kind}&limit=30&keywords=${encodeURIComponent(keyword)}` : null
+    : savedAlbums ? '/api/me/collections' : personalPlaylistPath(selectedCollection);
   useEffect(() => {
-    if (!picker) return;
-    let active = true; setBusy(true); setQuery('');
-    get<{ songs: Song[] }>(collection === 'favorites' ? '/api/me/favorites' : `/api/me/playlists/${collection}`)
-      .then(data => { if (active) setSongs(data.songs ?? []); })
-      .catch(error => live.current.toast(error.message)).finally(() => { if (active) setBusy(false); });
-    return () => { active = false; };
-  }, [collection, picker]);
+    setPickerResult(null);
+    if (!pickerPath) return;
+    const controller = new AbortController();
+    const options = { signal: controller.signal };
+    const timer = setTimeout(async () => {
+      try {
+        let choices: MusicChoice[], warnings: string[] | undefined, playlistCover: string | null | undefined;
+        if (savedAlbums) {
+          const { items } = await api<{ items: CollectionFavorite[] }>(pickerPath, options);
+          choices = items.filter(item => item.kind === 'album' && item.available).map(item => albumChoice(item, item.sub));
+        } else if (online && kind === 'album') {
+          const { items } = await api<{ items: (AlbumSummary & { artists: Artist[] })[] }>(pickerPath, options);
+          choices = items.map(item => albumChoice(item, artistNames(item.artists)));
+        } else if (online) {
+          const result = await api<{ items: Song[]; warnings?: string[] }>(pickerPath, options);
+          choices = result.items.map(songChoice);
+          warnings = result.warnings;
+        } else {
+          const { songs } = await api<{ songs: Song[] }>(pickerPath, options);
+          choices = playlistChoices(songs, kind);
+          if (songs.length) playlistCover = songs[0].cover ?? null;
+        }
+        if (!controller.signal.aborted) setPickerResult({ path: pickerPath, kind, choices, warnings, playlistCover });
+      } catch (error) {
+        if (!controller.signal.aborted) setPickerResult({ path: pickerPath, kind, choices: [], error: (error as Error).message });
+      }
+    }, online ? 280 : 0);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [app.me?.id, kind, online, pickerPath, pickerRetry, savedAlbums]);
   const camera = useCanvasCamera(board, app.me?.id, () => {
     if (graffitiEditor.current) graffitiEditor.current.cancelGesture();
     else cancel();
@@ -290,7 +346,9 @@ export function Square() {
         else void add(source, point(event.clientX, event.clientY));
       } catch { live.current.toast('无法拖入这个物件'); }
     };
-    const library = (event: Event) => { setCollection(String((event as CustomEvent).detail)); setPicker(true); setTools(false); };
+    const library = (event: Event) => {
+      setCollection(String((event as CustomEvent).detail)); setKind('song'); setOnline(false); setFilter(''); setPicker(true); setTools(false);
+    };
     const leave = (event: DragEvent) => { if (!event.relatedTarget) { setDropOver(false); setOverPlayer(false); } };
     const paste = (event: ClipboardEvent) => { if ((event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) return; const file = event.clipboardData?.files[0]; if (file?.type.startsWith('image/')) { event.preventDefault(); void upload(file); } };
     window.addEventListener('nt:canvas-native', native); window.addEventListener('nt:canvas-library', library); document.addEventListener('dragover', dragging); document.addEventListener('dragleave', leave); document.addEventListener('drop', drop); document.addEventListener('paste', paste);
@@ -300,11 +358,28 @@ export function Square() {
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { audition.current.stop(); cancel(); setPicker(false); setTools(false); setNote(null); setEmojiPicker(false); setSelected(null); } };
     window.addEventListener('keydown', escape); return () => window.removeEventListener('keydown', escape);
   }, [cancel]);
-  const sources = useMemo(() => {
-    const list = songs.map(song => songSource(song, kind));
-    return (kind === 'album' ? [...new Map(list.filter(m => m.albumId).map(m => [m.albumId, m])).values()] : list).filter(m => (m.name + m.previewSong!.artists.map(a => a.name).join(' ')).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  }, [kind, query, songs]);
-  const collectionSource: CanvasSource = { kind: 'playlist', playlistId: collection, name: collection === 'favorites' ? '我喜欢的音乐' : app.playlists.find(p => String(p.id) === collection)?.name ?? '歌单', cover: songs[0]?.cover };
+  const result = pickerResult?.path === pickerPath && pickerResult.kind === kind ? pickerResult : null;
+  const normalizedFilter = filter.trim().toLocaleLowerCase();
+  const choices = useMemo(() => {
+    const rows = result?.choices ?? [];
+    if (online || !normalizedFilter) return rows;
+    return rows.filter(({ source, subtitle }) => `${source.name} ${subtitle}`.toLocaleLowerCase().includes(normalizedFilter));
+  }, [result, online, normalizedFilter]);
+  const playlistOptions = [{ value: 'favorites', label: '我喜欢的音乐' }, ...app.playlists.map(p => ({ value: String(p.id), label: p.name }))];
+  const collectionSource: CanvasSource = {
+    kind: 'playlist', playlistId: selectedCollection,
+    name: playlistOptions.find(option => option.value === selectedCollection)?.label ?? '歌单',
+    cover: result?.playlistCover,
+  };
+  const canAddCollection = !adding && result?.playlistCover !== undefined;
+  const beginSource = (event: React.PointerEvent, source: CanvasSource) => {
+    if (!(event.target as Element).closest('button')) begin(event, sourceItem(source), source);
+  };
+  const selectMusicKind = (value: MusicKind) => {
+    if (kind !== value) setFilter('');
+    setKind(value);
+  };
+  const musicLabel = kind === 'song' ? '歌曲' : '专辑';
   const remove = (id: string) => { void change({ action: 'remove', id }).then(() => setSelected(null)).catch(() => {}); };
   const keyboardPlay = (item: CanvasRecord) => { const rect = receiver(); if (rect) insert(item, rect.left + rect.width / 2, rect.top - 80, clamp(board.current!.clientWidth * .18, 104, 188)); };
   const tool = async (input: Record<string, unknown>) => { setAdding(true); try { await change({ action: 'tool', ...input, ...positionForNewItem() }); setNote(null); setEmojiPicker(false); setTools(false); } catch {} finally { if (mounted.current) setAdding(false); } };
@@ -356,7 +431,7 @@ export function Square() {
     {!graffiti && <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit(state.records)}><Icon n="refresh" s={17} /></button></div>}
     {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
-    {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />涂鸦</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setPicker(true); setTools(false); }}><Icon n="note" />从歌单选音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
+    {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />涂鸦</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setFilter(''); setPicker(true); setTools(false); }}><Icon n="note" />添加音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
     <input type="file" ref={fileInput} hidden accept="image/png,image/jpeg,image/webp,image/gif" aria-label="选择画布图片" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ''; }} />
     {emojiPicker && <div className="nc-emoji-picker panel" role="dialog" aria-label="选择表情"><button className="ib nc-emoji-close" aria-label="关闭表情" onClick={() => setEmojiPicker(false)}><Icon n="x" s={16} /></button>{EMOJI.map(emoji => <button key={emoji} disabled={adding} aria-label={`贴上${emoji}`} onClick={() => void tool({ kind: 'emoji', emoji })}>{emoji}</button>)}</div>}
     {adding && <div className="nc-saving"><Loading inline label="正在放到画布" /></div>}
@@ -364,15 +439,46 @@ export function Square() {
     {(ghost && isCanvasMusic(ghost.item) || insertion || nativeSource) && <div className={`nc-receiver ${receivingCollection ? 'nc-receiver-collection' : ''} ${overPlayer || insertion ? 'nc-receiver-ready' : ''} ${insertion ? 'nc-receiver-loading' : ''}`} aria-label={insertion ? '唱片正在装入播放器' : receivingCollection ? '松开以接到播放列表末尾' : '松开唱片以加入播放列表'}><span className="nc-platter" /><span className="nc-slot" /><i className="nc-machine-light" /><Icon n={receivingCollection ? 'list' : 'play'} s={22} /></div>}
     {ghost && <div className={`nc-ghost nc-kind-${ghost.item.kind} ${preview.active?.id === ghost.item.id && !preview.active.loading ? 'nc-auditioning' : ''} ${overPlayer ? 'nc-ghost-ready' : ''}`} style={{ left: ghost.x, top: ghost.y, width: ghost.size }} aria-hidden="true"><ItemArtwork item={ghost.item} spinning={preview.active?.id === ghost.item.id && !preview.active.loading} /></div>}
     {insertion && <div className="nc-insertion" aria-hidden="true" style={{ '--intake-x': `${insertion.x}px`, '--slot-y': `${insertion.slotY}px`, '--disc-size': `${insertion.size}px`, '--approach-x': `${insertion.fromX - insertion.x}px`, '--approach-y': `${insertion.fromY - (insertion.slotY - insertion.size / 2)}px`, '--intake-duration': `${RECORD_INSERT_MS}ms` } as React.CSSProperties}><div className="nc-intake-clip"><div className="nc-feeding-disc"><ItemArtwork item={insertion.item} /></div></div><div className="nc-intake-lip" /></div>}
-    {picker && <div className={`nc-picker-mask ${ghost ? 'nc-picker-dragging' : ''}`} onPointerDown={event => { if (event.target === event.currentTarget) setPicker(false); }}>
-      <section className="nc-picker panel" role="dialog" aria-modal="true" aria-label="从歌单添加唱片">
-        <header><nav className="chips" aria-label="唱片类型">{(['song', 'album'] as const).map(value => <button key={value} className={`chip ${kind === value ? 'on' : ''}`} onClick={() => setKind(value)}>{value === 'song' ? '歌曲' : '专辑'}</button>)}</nav><button className="ib" aria-label="关闭音乐选择" onClick={() => setPicker(false)}><Icon n="x" s={19} /></button></header>
-        <Select value={collection} onChange={setCollection} aria-label="选择歌单" options={[{ value: 'favorites', label: '我喜欢的音乐' }, ...app.playlists.map(p => ({ value: String(p.id), label: p.name }))]} />
-        <div className="nc-bundle-source" onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) begin(event, sourceItem(collectionSource), collectionSource); }}><span><Icon n="list" s={17} />整张歌单</span><button className="ib" disabled={adding || busy || !songs.length} aria-label="贴上整张歌单" onClick={() => void add(collectionSource)}><Icon n="plus" s={18} /></button></div>
-        <label className="search"><Icon n="search" s={17} /><input value={query} onChange={event => setQuery(event.target.value)} aria-label="搜索唱片" placeholder="搜索音乐" /></label>
-        <div className="nc-music-list">{busy ? <Loading /> : sources.map(source => <div className="nc-music-row" key={source.kind + source.songId} onPointerDown={event => { if (!(event.target as HTMLElement).closest('button')) begin(event, sourceItem(source), source); }} onContextMenu={event => event.preventDefault()}><ItemArtwork item={sourceItem(source)} /><span><b className="t1">{source.name}</b><small className="sub t1">{source.previewSong!.artists.map(a => a.name).join(' / ')}</small></span><button className="ib" disabled={adding} aria-label={`贴上${source.name}`} onClick={() => void add(source)}><Icon n="plus" s={18} /></button></div>)}{!busy && !sources.length && <p className="center sub sm">暂无音乐</p>}</div>
+    {picker && createPortal(<div className={`nc-picker-mask ${ghost ? 'nc-picker-dragging' : ''}`} onPointerDown={event => { if (event.target === event.currentTarget) setPicker(false); }}>
+      <section className="nc-picker panel" role="dialog" aria-modal="true" aria-label="添加音乐">
+        <header>
+          <nav className="chips" aria-label="音乐类型">
+            <button className={`chip ${kind === 'song' ? 'on' : ''}`} aria-pressed={kind === 'song'} onClick={() => selectMusicKind('song')}>歌曲</button>
+            <button className={`chip ${kind === 'album' ? 'on' : ''}`} aria-pressed={kind === 'album'} onClick={() => selectMusicKind('album')}>专辑</button>
+          </nav>
+          <button className="chip nc-search-toggle" onClick={() => setOnline(value => !value)}><Icon n={online ? 'note' : 'search'} s={15} />{online ? '我的音乐' : '在线搜索'}</button>
+          <button className="ib" aria-label="关闭音乐选择" onClick={() => setPicker(false)}><Icon n="x" s={19} /></button>
+        </header>
+        {!online && <Select value={selectedCollection} onChange={value => { setFilter(''); (kind === 'album' ? setAlbumCollection : setCollection)(value); }}
+          aria-label={kind === 'album' ? '专辑来源' : '选择歌单'}
+          options={kind === 'album' ? [{ value: 'saved', label: '收藏的专辑' }, ...playlistOptions] : playlistOptions} />}
+        {!online && !savedAlbums && <div className="nc-bundle-source" onPointerDown={event => { if (canAddCollection) beginSource(event, collectionSource); }}>
+          <span><Icon n="list" s={17} />整张歌单</span>
+          <button className="ib" disabled={!canAddCollection} aria-label="贴上整张歌单" onClick={() => void add(collectionSource)}><Icon n="plus" s={18} /></button>
+        </div>}
+        <label className="search">
+          <Icon n="search" s={17} />
+          <input key={online ? 'online' : 'library'} type="search" value={online ? query : filter}
+            onChange={event => (online ? setQuery : setFilter)(event.target.value)} maxLength={100}
+            aria-label={online ? `在线搜索${musicLabel}` : `筛选${musicLabel}`}
+            placeholder={online ? (kind === 'song' ? '搜索歌名或歌手' : '搜索专辑名或歌手') : `筛选${musicLabel}`} />
+        </label>
+        <div className="nc-music-list">
+          {pickerPath && !result && <Loading label={online ? `正在搜索${musicLabel}` : '正在读取音乐'} />}
+          {result?.error && <div className="center"><p className="sub sm" role="alert">{result.error}</p><button className="btn ghost sm" onClick={() => setPickerRetry(value => value + 1)}>重试</button></div>}
+          {result?.warnings?.map(warning => <p key={warning} className="sub sm" role="status">{warning}</p>)}
+          {choices.map(({ source, subtitle }) => <div className="nc-music-row" key={source.songId ?? source.albumId}
+            onPointerDown={event => { if (!adding) beginSource(event, source); }} onContextMenu={event => event.preventDefault()}>
+            <ItemArtwork item={sourceItem(source)} />
+            <span><b className="t1">{source.name}</b><small className="sub t1">{subtitle}</small></span>
+            <button className="ib" disabled={adding} aria-label={`贴上${source.name}`} onClick={() => void add(source)}><Icon n="plus" s={18} /></button>
+          </div>)}
+          {result && !result.error && !choices.length && <p role="status" className="center sub sm">
+            {online || normalizedFilter ? `没有找到相关${musicLabel}` : savedAlbums ? '暂无收藏的专辑' : `暂无${musicLabel}`}
+          </p>}
+        </div>
       </section>
-    </div>}
+    </div>, document.body)}
     {loaded && !note && !graffiti && !picker && !tools && !emojiPicker && !insertion && ((playbackGuideItem && !overPlayer) || (showGuide && !ghost)) && <CanvasGuide board={board} playItem={playbackGuideItem} held={playbackGuideItem && ghost && draggingId && isCanvasMusic(ghost.item) ? ghost : undefined} onDismiss={playbackGuideItem ? dismissPlaybackGuide : dismissGuide} />}
     {note && <Sheet title="便签" className="nc-note-sheet" onClose={() => setNote(null)}>
       <form className="nc-note-editor" onSubmit={event => { event.preventDefault(); void tool({ kind: 'note', ...note }); }}>
