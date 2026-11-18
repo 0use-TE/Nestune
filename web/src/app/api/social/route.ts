@@ -43,7 +43,7 @@ export const GET = userRoute((req, _ctx, user, sessionId) => {
 }, options);
 
 export const POST = userRoute(async (req, _ctx, user, sessionId) => {
-  const data = await body(req, 65536);
+  const data = await body(req, 131072);
   if (!data || typeof data !== 'object') throw fail(400, '请求无效');
   const listener = { userId: user.id, sessionId };
   switch (data.action) {

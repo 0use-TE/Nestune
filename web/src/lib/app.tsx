@@ -8,6 +8,7 @@ import { isCanvasMusic, type CanvasState, type CanvasTake } from './canvas-types
 import { loadTint, seededTint } from './util';
 import { playbackVolume } from './volume';
 import { PLAYBACK_MODES, type PlaybackMode, type QueueCommand, type QueueSeed, type SharedQueue } from './shared-queue';
+import { createShuffle, emptyShuffle, shuffleNext, shufflePrevious, type ShuffleState } from './shuffle';
 
 /* ---------- playback clock (kept out of React context so ticks do not re-render the app) ---------- */
 type Clock = { time: number; duration: number };
@@ -16,7 +17,7 @@ const subs = new Set<() => void>();
 const setClock = (time: number, duration: number) => { clock = { time, duration }; subs.forEach(f => f()); };
 export const useClock = () => useSyncExternalStore(f => { subs.add(f); return () => { subs.delete(f); }; }, () => clock, () => clock);
 
-type PersonalQueue = { songs: Song[]; index: number; position: number; mode: PlaybackMode };
+type PersonalQueue = { songs: Song[]; index: number; position: number; mode: PlaybackMode; shuffle?: ShuffleState };
 type Theme = 'auto' | 'light' | 'dark';
 type ToastKind = 'message' | 'invite';
 type Toast = { id: number; text: string; kind?: ToastKind };
@@ -101,6 +102,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomTransport = useRef<((playing?: boolean) => boolean) | null>(null);
   const failures = useRef(0);
   const restored = useRef(false);
+  const shuffle = useRef<ShuffleState>(emptyShuffle());
 
   const current = index >= 0 ? queue[index] ?? null : null;
 
@@ -159,6 +161,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (audio.current) audio.current.removeAttribute('src');
     setQueue([]); setIndex(-1); setPlaying(false); setFavIds(new Set()); setPlaylists([]); setNowOpen(false);
     restored.current = false; setClock(0, 0); personalQueue.current = null; roomQueueHandler.current = null; followingRoom.current = false; setSharedQueue(false);
+    shuffle.current = emptyShuffle();
   }, []);
 
   const loadUserData = useCallback(async () => {
@@ -168,7 +171,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (q.status === 'fulfilled' && q.value.songs.length) {
       autoplay.current = false;
       pendingSeek.current = q.value.position || 0;
-      setQueue(q.value.songs); setIndex(Math.min(q.value.index, q.value.songs.length - 1)); setLoadKey(k => k + 1);
+      const at = Math.max(0, Math.min(q.value.index, q.value.songs.length - 1));
+      const mode = PLAYBACK_MODES.includes(q.value.mode) ? q.value.mode : 'off';
+      shuffle.current = createShuffle(q.value.songs, at, q.value.shuffle);
+      live.current = { ...live.current, queue: q.value.songs, index: at, playbackMode: mode };
+      setQueue(q.value.songs); setIndex(at); setPlaybackMode(mode); setLoadKey(k => k + 1);
     }
     restored.current = true;
   }, []);
@@ -195,16 +202,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [resetUserState]);
 
   /* ----- audio element ----- */
-  const go = useCallback((n: number) => { autoplay.current = true; pendingSeek.current = 0; setIndex(n); setLoadKey(k => k + 1); }, []);
+  const go = useCallback((n: number, state?: ShuffleState) => {
+    if (!live.current.queue[n]) return;
+    shuffle.current = state ?? createShuffle(live.current.queue, n, shuffle.current);
+    live.current = { ...live.current, index: n };
+    autoplay.current = true; pendingSeek.current = 0; setIndex(n); setLoadKey(k => k + 1);
+  }, []);
 
   const next = useCallback((fromEnded = false) => {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'next', automatic: fromEnded }); return; }
     const { queue: q, index: i, playbackMode: mode } = live.current;
     if (!q.length) return;
     let n: number;
-    if (mode === 'shuffle' && q.length > 1) {
-      const pick = Math.floor(Math.random() * (q.length - 1));
-      n = pick >= i ? pick + 1 : pick;
+    if (mode === 'shuffle') {
+      const pick = shuffleNext(q, i, shuffle.current);
+      go(pick.index, pick.state); return;
     }
     else {
       n = i + 1;
@@ -227,6 +239,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const left = dur() - a.currentTime;
       if (!preloaded.current && left > 0 && left < 25) {
         preloaded.current = true;
+        if (live.current.playbackMode === 'shuffle') return;
         const { queue: q, index: i } = live.current;
         const nx = q[(i + 1) % q.length];
         if (nx && !isDeviceSong(nx.id) && nx.id !== q[i]?.id) fetch(`/api/songs/${nx.id}/stream?prefer=${sourcePreferenceRef.current}`,  { headers: { Range: 'bytes=0-1' } }).catch(() => {});
@@ -389,14 +402,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!me || !restored.current || followingRoom.current || personalQueue.current) return;
     if (queue[index] && isDeviceSong(queue[index].id)) return;
-    const onlineIds = queue.filter(song => !isDeviceSong(song.id)).slice(0, 500).map(song => song.id);
+    const online = queue.filter(song => !isDeviceSong(song.id)).slice(0, 500);
+    const onlineIds = online.map(song => song.id);
     const onlineIndex = queue.slice(0, Math.max(0, index)).filter(song => !isDeviceSong(song.id)).length;
     const t = setTimeout(() => {
       if (followingRoom.current || personalQueue.current) return;
-      put('/api/me/queue', { ids: onlineIds, index: onlineIndex, position: Math.floor(audio.current?.currentTime || 0) }).catch(() => {});
+      put('/api/me/queue', { ids: onlineIds, index: onlineIndex, position: Math.floor(audio.current?.currentTime || 0), mode: playbackMode, shuffle: createShuffle(online, onlineIndex, shuffle.current) }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
-  }, [queue, index, me]);
+  }, [queue, index, me, playbackMode]);
 
   /* ----- controls ----- */
   const play = useCallback((all: Song[], start = 0, mode?: PlaybackMode) => {
@@ -408,7 +422,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const songs = all.filter(s => s.access?.playable !== false);
     if (!songs.length) { toast(all[0]?.access?.reason || '这些歌曲暂时都无法播放'); return; }
     const target = all[Math.max(0, Math.min(start, all.length - 1))];
-    const at = mode === 'shuffle' ? Math.floor(Math.random() * songs.length) : Math.max(0, songs.findIndex(s => s.id === target?.id));
+    const initial = mode === 'shuffle' ? shuffleNext(songs, -1) : undefined;
+    const at = initial?.index ?? Math.max(0, songs.findIndex(s => s.id === target?.id));
+    shuffle.current = initial?.state ?? createShuffle(songs, at);
+    live.current = { ...live.current, queue: songs, index: at, playbackMode: mode ?? live.current.playbackMode };
     if (mode) setPlaybackMode(mode);
     autoplay.current = true; pendingSeek.current = 0;
     setQueue(songs); setIndex(at); setLoadKey(k => k + 1);
@@ -425,6 +442,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const a = audio.current, { queue: q, index: i } = live.current;
     if (!a || !q.length) return;
     if (a.currentTime > 3) { a.currentTime = 0; return; }
+    if (live.current.playbackMode === 'shuffle') { const pick = shufflePrevious(q, i, shuffle.current); go(pick.index, pick.state); return; }
     go(i > 0 ? i - 1 : q.length - 1);
   }, [go]);
   const prevRef = useRef(prev); prevRef.current = prev;
@@ -487,13 +505,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const songs = [...existing];
     if (at < 0) { at = Math.max(0, currentIndex + 1); songs.splice(at, 0, song); }
     autoplay.current = true; pendingSeek.current = 0;
+    shuffle.current = createShuffle(songs, at, shuffle.current);
     live.current = { ...live.current, queue: songs, index: at };
     setQueue(songs); setIndex(at); setLoadKey(key => key + 1);
   }, [toast]);
   const enqueue = useCallback((s: Song) => {
     if (queueSong('append', s)) return;
     if (s.access?.playable === false) { toast(s.access.reason || '这首歌暂时无法播放'); return; }
-    if (!live.current.queue.length) { autoplay.current = false; setQueue([s]); setIndex(0); setLoadKey(k => k + 1); }
+    if (!live.current.queue.length) { shuffle.current = createShuffle([s], 0); autoplay.current = false; setQueue([s]); setIndex(0); setLoadKey(k => k + 1); }
     else setQueue(q => [...q, s]);
     toast('已加入播放队列');
   }, [toast]);
@@ -517,6 +536,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const existing = live.current.queue;
     const combined = [...existing, ...additions];
     live.current = { ...live.current, queue: combined, index: existing.length ? live.current.index : 0 };
+    if (!existing.length) shuffle.current = createShuffle(combined, 0);
     setQueue(combined);
     if (!existing.length) { autoplay.current = true; pendingSeek.current = 0; setIndex(0); setLoadKey(key => key + 1); }
     toast('已接到播放列表末尾');
@@ -535,15 +555,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (i === cur) {
       const rest = q.filter((_, k) => k !== i);
       if (!rest.length) { resetUserStatePlayer(); return; }
-      setQueue(rest); autoplay.current = live.current.playing; setIndex(Math.min(i, rest.length - 1)); setLoadKey(k => k + 1);
+      const pick = live.current.playbackMode === 'shuffle' ? shuffleNext(rest, -1, shuffle.current) : undefined;
+      const at = pick?.index ?? Math.min(i, rest.length - 1);
+      shuffle.current = pick?.state ?? createShuffle(rest, at, shuffle.current);
+      live.current = { ...live.current, queue: rest, index: at };
+      setQueue(rest); autoplay.current = live.current.playing; setIndex(at); setLoadKey(k => k + 1);
     } else { setQueue(q.filter((_, k) => k !== i)); if (i < cur) setIndex(cur - 1); }
-    function resetUserStatePlayer() { audio.current?.pause(); audio.current?.removeAttribute('src'); setQueue([]); setIndex(-1); setPlaying(false); setClock(0, 0); }
+    function resetUserStatePlayer() { shuffle.current = emptyShuffle(); live.current = { ...live.current, queue: [], index: -1 }; audio.current?.pause(); audio.current?.removeAttribute('src'); setQueue([]); setIndex(-1); setPlaying(false); setClock(0, 0); }
   }, []);
 
   const clearQueue = useCallback(() => {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'clear' }); return; }
     audio.current?.pause(); audio.current?.removeAttribute('src');
     autoplay.current = false; pendingSeek.current = 0;
+    shuffle.current = emptyShuffle(); live.current = { ...live.current, queue: [], index: -1 };
     setQueue([]); setIndex(-1); setPlaying(false); setLoading(false); setError(null); setAudioInfo(null); setNowOpen(false); setClock(0, 0);
     toast('播放列表已清空');
   }, [toast]);
@@ -552,11 +577,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const online = songs.filter(song => !isDeviceSong(song.id)).slice(0, 500);
     return { ids: online.map(song => song.id), index: Math.max(0, songs.slice(0, index).filter(song => !isDeviceSong(song.id)).length),
       position: isDeviceSong(songs[index]?.id ?? '') ? 0 : audio.current?.currentTime || 0,
-      playing: !!audio.current && !audio.current.paused, mode: playbackMode };
+      playing: !!audio.current && !audio.current.paused, mode: playbackMode,
+      shuffle: createShuffle(online, Math.max(0, songs.slice(0, index).filter(song => !isDeviceSong(song.id)).length), shuffle.current) };
   }, []);
   const beginSharedQueue = useCallback(() => {
     if (personalQueue.current) return;
-    const snapshot: PersonalQueue = { songs: [...live.current.queue], index: live.current.index, position: audio.current?.currentTime || 0, mode: live.current.playbackMode };
+    const snapshot: PersonalQueue = { songs: [...live.current.queue], index: live.current.index, position: audio.current?.currentTime || 0, mode: live.current.playbackMode, shuffle: createShuffle(live.current.queue, live.current.index, shuffle.current) };
     let saved = snapshot;
     try {
       const existing = sessionStorage.getItem('nt-personal-queue-' + me?.id);
@@ -565,10 +591,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch { /* The in-memory copy still preserves this session. */ }
     personalQueue.current = saved; roomSignature.current = ''; setSharedQueue(true);
     const seed = queueSeed();
-    put('/api/me/queue', { ids: seed.ids, index: seed.index, position: seed.position }).catch(() => {});
+    put('/api/me/queue', { ids: seed.ids, index: seed.index, position: seed.position, mode: seed.mode, shuffle: seed.shuffle }).catch(() => {});
   }, [me?.id, queueSeed]);
   const applyRoomQueue = useCallback((snapshot: SharedQueue, position: number, shouldPlay: boolean) => {
     const songs = snapshot.entries.map(entry => entry.song);
+    shuffle.current = createShuffle(songs, snapshot.index, snapshot.shuffle);
     const song = songs[snapshot.index];
     const signature = snapshot.entries.map(entry => entry.key).join(',') + ':' + snapshot.index + ':' + snapshot.mode;
     const previousKey = roomKeys.current[live.current.index];
@@ -594,6 +621,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     personalQueue.current = null; roomQueueHandler.current = null; roomKeys.current = []; roomSignature.current = ''; followingRoom.current = false; setSharedQueue(false);
     try { sessionStorage.removeItem('nt-personal-queue-' + me?.id); } catch { /* ignore */ }
     audio.current?.pause(); autoplay.current = false; pendingSeek.current = saved.position;
+    shuffle.current = createShuffle(saved.songs, saved.index, saved.shuffle);
+    live.current = { ...live.current, queue: saved.songs, index: saved.index, playbackMode: saved.mode };
     setQueue(saved.songs); setIndex(saved.index); setPlaybackMode(saved.mode); setPlaying(false); setError(null); setLoadKey(key => key + 1);
     if (!saved.songs.length) { audio.current?.removeAttribute('src'); setNowOpen(false); setClock(0, 0); }
     toast('已恢复你的个人列表，播放已暂停');
@@ -605,7 +634,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [go]);
   const cyclePlaybackMode = useCallback(() => {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'mode' }); return; }
-    setPlaybackMode(mode => PLAYBACK_MODES[(PLAYBACK_MODES.indexOf(mode) + 1) % PLAYBACK_MODES.length]);
+    const mode = PLAYBACK_MODES[(PLAYBACK_MODES.indexOf(live.current.playbackMode) + 1) % PLAYBACK_MODES.length];
+    live.current = { ...live.current, playbackMode: mode }; setPlaybackMode(mode);
   }, []);
   useEffect(() => {
     const receive = (event: Event) => {
