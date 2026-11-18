@@ -18,7 +18,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
       { title: '桌面客户端', paragraphs: ['解锁浮窗后，用工具栏的减号和加号调整大小，也可拖动窗口边缘。原歌词、翻译和歌名会随窗口缩放。'] },
       { title: '网页内浮窗', paragraphs: ['打开歌词浮窗后，用加减按钮调整显示大小。'] },
       { title: '安卓客户端', paragraphs: ['解锁后点「−」或「+」调整浮窗及歌词大小。恢复之前的大小设置，无需重新调整。'] },
-      { title: '下载方式', paragraphs: ['本次已提供 Windows x64、Windows ARM64、安卓和 Linux 更新。macOS 安装包验证通过后将补到下载页。'] },
+      { title: '下载方式', paragraphs: ['1.2.9 已提供 Windows、安卓、Linux 和 macOS Universal 安装包。Linux 和 macOS 请从下载页下载并覆盖安装。'] },
       { title: '浮窗按钮', paragraphs: ['浮窗在屏幕上半区时，按钮显示在歌词下方。在下半区时则放到歌词上方。闲置三秒后按钮完全淡出，移动鼠标或轻触浮窗可再次显示。'] },
     ],
   },
