@@ -16,7 +16,7 @@ export const RELEASE_NOTES: ReleaseNote[] = [
     summary: '支持导入网易云公开喜欢列表，修复 iOS 聊天键盘遮挡。',
     sections: [
       { title: '网页', paragraphs: ['底栏新增循环键。网易云公开喜欢列表可导入，iPhone 打字时发送按钮保持可见。'] },
-      { title: '歌词浮窗', paragraphs: ['可切歌、暂停和切换循环。按钮闲置 3 秒淡出。系统浮窗请更新 Windows 或 Android 客户端。'] },
+      { title: '歌词浮窗', paragraphs: ['可切歌、暂停和切换循环，按钮闲置 3 秒淡出。Android 底栏可直接打开系统悬浮歌词，首次使用请允许「显示在其他应用上层」。'] },
     ],
     images: [
       { src: '/release-notes/1.2.7/playback.jpg', alt: '底部播放栏和歌词浮窗的播放控制', width: 866, height: 157 },

@@ -215,7 +215,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
               </div>
               <div className="np-tools">
                 <VolumeControl />
-                {desktopLyrics.supported && <button type="button" className={`ib ${desktopLyrics.enabled ? 'act' : ''}`} aria-label="桌面歌词" aria-pressed={desktopLyrics.enabled} title="桌面歌词" disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(!desktopLyrics.enabled)}><Icon n="popout" s={18} /></button>}
+                {desktopLyrics.supported && <button type="button" className={`ib ${desktopLyrics.enabled ? 'act' : ''}`} aria-label={desktopLyrics.windowLabel} aria-pressed={desktopLyrics.enabled} title={desktopLyrics.windowLabel} disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(!desktopLyrics.enabled)}><Icon n="popout" s={18} /></button>}
                 {!deviceSong && <button className={`ib heartb ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" title="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" s={18} /></button>}
                 {!deviceSong && <button type="button" className="ib" aria-label="下载到设备" title="下载到设备" onClick={() => app.openSave(s)}><Icon n="download" s={18} /></button>}
                 {lines.some(line => line.tr) && <button className={`ib ${app.showTr ? 'act' : ''}`} aria-label="歌词翻译" aria-pressed={app.showTr} title="歌词翻译" onClick={() => app.setShowTr(!app.showTr)}><Icon n="translation" s={18} /></button>}

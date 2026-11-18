@@ -38,9 +38,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const canvasQueueRequested = useRef(false);
   const closeQueue = useCallback(() => { canvasQueueRequested.current = false; setQueueOpen(false); }, []);
   const toggleQueue = () => setQueueOpen(open => !open);
-  const toggleLyrics = () => {
-    if (desktopLyrics.enabled) { void desktopLyrics.setEnabled(false); setLyricsPinned(false); }
-    else setLyricsPinned(pinned => !pinned);
+  const toggleLyrics = async () => {
+    if (desktopLyrics.busy) return;
+    if (desktopLyrics.enabled) {
+      setLyricsPinned(false);
+      await desktopLyrics.setEnabled(false);
+    } else if (desktopLyrics.platform === 'android' && desktopLyrics.supported) {
+      if (lyricsPinned) {
+        setLyricsPinned(false);
+        await desktopLyrics.setEnabled(false);
+      } else {
+        const opened = await desktopLyrics.setEnabled(true);
+        setLyricsPinned(!opened);
+      }
+    } else {
+      setLyricsPinned(pinned => !pinned);
+    }
   };
   const hasSong = !!app.current;
 
@@ -71,6 +84,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [path]);
   useEffect(() => { if (!app.me) setLyricsPinned(false); }, [app.me]);
+  useEffect(() => {
+    if (desktopLyrics.platform === 'android' && desktopLyrics.enabled) setLyricsPinned(false);
+  }, [desktopLyrics.platform, desktopLyrics.enabled]);
   useEffect(() => {
     if (app.ready && !app.me && desktopLyrics.enabled) void desktopLyrics.setEnabled(false);
   }, [app.ready, app.me, desktopLyrics.enabled, desktopLyrics.setEnabled]);
@@ -131,7 +147,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Link key={href} href={href} className={on(href) ? 'on' : ''} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={21} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
         ))}
       </nav>
-      <PlayerBar lyricsPinned={lyricsPinned || desktopLyrics.enabled} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && !app.nowOpen} onToggleQueue={toggleQueue} onDetails={() => { closeQueue(); app.setNowOpen(true); }} />
+      <PlayerBar lyricsPinned={lyricsPinned || desktopLyrics.enabled}
+        lyricsLabel={desktopLyrics.platform === 'android' && desktopLyrics.supported && !lyricsPinned ? desktopLyrics.windowLabel : '歌词'}
+        lyricsBusy={desktopLyrics.busy} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && !app.nowOpen}
+        onToggleQueue={toggleQueue} onDetails={() => { closeQueue(); app.setNowOpen(true); }} />
       <NowPlaying lyricsPinned={lyricsPinned} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && app.nowOpen} onToggleQueue={toggleQueue} />
       {queueOpen && app.current && <QueuePopover inPlayer={app.nowOpen} onClose={closeQueue} />}
       <SongMenu onNewPlaylist={s => setNewPl({ song: s })} />

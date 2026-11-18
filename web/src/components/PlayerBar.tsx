@@ -11,8 +11,8 @@ import { CanvasSource } from './CanvasSource';
 import { VolumeControl } from './VolumeControl';
 import { PlaybackModeButton } from './PlaybackControls';
 
-export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQueue, onDetails }: {
-  lyricsPinned: boolean; onToggleLyrics: () => void; queueOpen: boolean; onToggleQueue: () => void; onDetails: () => void;
+export function PlayerBar({ lyricsPinned, lyricsLabel = '歌词', lyricsBusy = false, onToggleLyrics, queueOpen, onToggleQueue, onDetails }: {
+  lyricsPinned: boolean; lyricsLabel?: string; lyricsBusy?: boolean; onToggleLyrics: () => void; queueOpen: boolean; onToggleQueue: () => void; onDetails: () => void;
 }) {
   const app = useApp();
   const { time, duration } = useClock();
@@ -41,7 +41,7 @@ export function PlayerBar({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQue
         <VolumeControl />
         <span className="sub sm">{mmss(time)} / {mmss(duration || s.duration)}</span>
         {!isDeviceSong(s.id) && <button className={`ib heartb ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" /></button>}
-        <button className={`ib bar-lyrics ${lyricsPinned ? 'act' : ''}`} aria-label="歌词" aria-pressed={lyricsPinned} title="歌词" onClick={onToggleLyrics}><Icon n={lyricsPinned ? 'lyricsOn' : 'lyrics'} /></button>
+        <button className={`ib bar-lyrics ${lyricsPinned ? 'act' : ''}`} aria-label={lyricsLabel} aria-pressed={lyricsPinned} aria-busy={lyricsBusy} title={lyricsLabel} disabled={lyricsBusy} onClick={onToggleLyrics}><Icon n={lyricsPinned ? 'lyricsOn' : 'lyrics'} /></button>
         <button className={`ib bar-queue queue-toggle ${queueOpen ? 'act' : ''}`} aria-label="播放列表" aria-expanded={queueOpen} aria-controls={queueOpen ? 'player-queue' : undefined} title="播放列表" onClick={onToggleQueue}><Icon n="list" /></button>
       </div>
       <div className="prog">

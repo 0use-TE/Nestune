@@ -81,6 +81,7 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
   }
 
   if (!visible) return null;
+  const popoutLabel = desktopLyrics.platform === 'android' ? '在其他应用上显示歌词' : '移到桌面';
   return (
     <div className="pinned-lyrics">
       <div ref={card} className={`pinned-lyrics-card ${transparent ? 'transparent' : ''}`} aria-label="歌词"
@@ -99,7 +100,7 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
               else if (action === 'next') app.next();
               else app.toggle();
             }} />
-          {desktopLyrics.supported && <button type="button" className="ib" aria-label="移到桌面" title="移到桌面" disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(true)}><Icon n="popout" s={16} /></button>}
+          {desktopLyrics.supported && <button type="button" className="ib" aria-label={popoutLabel} title={popoutLabel} disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(true)}><Icon n="popout" s={16} /></button>}
           <button className={`ib ${transparent ? 'act' : ''}`} aria-label="透明背景" aria-pressed={transparent} title={transparent ? '显示歌词背景' : '透明背景'} onClick={toggleBackground}><Icon n="opacity" s={16} /></button>
           <button className="ib" aria-label="关闭歌词" title="关闭歌词" onClick={onClose}><Icon n="x" s={16} /></button>
         </div>
