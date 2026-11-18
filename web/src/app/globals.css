@@ -741,16 +741,18 @@ main{overflow-y:auto;padding:38px 48px 150px}
 @keyframes library-loading{from{opacity:.5}to{opacity:1}}
 @media(prefers-reduced-motion:reduce){.library-skeleton i,.library-skeleton span{animation:none}}
 .song-album-cell{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
-.music-sources{color:var(--sub);font-size:11px;white-space:nowrap}
+.music-sources{display:inline-flex;align-items:center;gap:5px;color:var(--sub);font-size:11px;white-space:nowrap;vertical-align:middle}
+.music-provider{display:inline-flex;align-items:center;justify-content:center;flex:none;width:18px;height:18px;border-radius:50%}
+.music-provider.netease{color:#e34c43;background:#e34c4312}.music-provider.qq{color:#239c64;background:#239c6412}
 .music-sources-mobile{display:none}
-.playback-source-label,.playback-source-button{white-space:nowrap}
+.playback-source-label,.playback-source-button{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .playback-source-button{display:inline-flex;align-items:center;gap:5px;border-radius:8px;padding:4px 8px;color:var(--text);background:var(--soft)}
 .playback-source-button:hover{background:var(--line)}
 .playback-source-choices{display:grid;gap:8px}
 .playback-source-choices .btn{justify-content:space-between}
 .playback-source-choices .selected{border-color:var(--sub);background:var(--soft)}
 .source-preference .row{justify-content:flex-end;flex-wrap:wrap;gap:6px}
-@media(max-width:860px){.music-sources-mobile{display:block;margin-top:2px}.music-sources-desktop{display:none}}
+@media(max-width:860px){.music-sources-mobile{display:inline-flex;margin-top:2px}.music-sources-desktop{display:none}}
 @media(max-width:520px){.source-preference{align-items:flex-start;flex-wrap:wrap;gap:10px}.source-preference .row{justify-content:flex-start}}
 
 /* Shared themed selects, portaled above sheets, menus and clipped canvas panels. */
@@ -766,3 +768,7 @@ main{overflow-y:auto;padding:38px 48px 150px}
 @media(prefers-reduced-motion:reduce){.select-options{animation:none}.select-trigger,.select-trigger>svg{transition:none}}
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+.client-update-progress{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;width:100%;margin-top:8px}.client-update-progress progress{width:min(240px,100%);height:7px;accent-color:var(--blue,#6899ce)}.client-update-notice{flex-wrap:wrap}.client-update-progress .sub{overflow-wrap:anywhere}
+
+.client-update-manual{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.client-update-manual .sub{overflow-wrap:anywhere}

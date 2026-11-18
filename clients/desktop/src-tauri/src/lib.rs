@@ -10,6 +10,8 @@ const HOME: &str = "https://nestune.0use.net:8443/";
 mod lyrics;
 #[cfg(desktop)]
 mod tray;
+#[cfg(desktop)]
+mod updates;
 
 fn trusted(url: &Url) -> bool {
     url.scheme() == "https"
@@ -52,7 +54,7 @@ pub fn run() {
     let smoke_test = std::env::args().any(|arg| matches!(arg.as_str(), "--smoke-test" | "--lyrics-qa" | "--lyrics-controls-qa")) || tray::qa_mode();
     let builder = tauri::Builder::default();
     #[cfg(desktop)]
-    let builder = builder.invoke_handler(tauri::generate_handler![lyrics::lyrics_command]);
+    let builder = builder.manage(updates::Updates::default()).invoke_handler(tauri::generate_handler![lyrics::lyrics_command]);
     #[cfg(desktop)]
     let builder = if smoke_test { builder } else { builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
         tray::show_main(app);

@@ -25,12 +25,31 @@ fn info(preferences: &Preferences) -> Value {
 }
 
 fn notify(app: &AppHandle, preferences: &Preferences) {
-    if let Some(overlay) = app.get_webview_window("lyrics") {
+    for overlay in [app.get_webview_window("lyrics"), app.get_webview_window("lyrics-tools")].into_iter().flatten() {
         let _ = overlay.eval(format!("window.nestuneLyricsState && window.nestuneLyricsState({})", info(preferences)));
     }
     if let Some(main) = app.get_webview_window("main") {
         let _ = main.eval(format!("window.dispatchEvent(new CustomEvent('nt:lyrics-state',{{detail:{}}}))", info(preferences)));
     }
+}
+
+fn position_tools(app: &AppHandle) -> tauri::Result<()> {
+    if let (Some(lyrics), Some(tools)) = (app.get_webview_window("lyrics"), app.get_webview_window("lyrics-tools")) {
+        let origin = lyrics.outer_position()?;
+        tools.set_position(PhysicalPosition::new(origin.x + lyrics.inner_size()?.width as i32 - tools.inner_size()?.width as i32, origin.y))?;
+    }
+    Ok(())
+}
+
+fn lock_input(app: &AppHandle, locked: bool) -> Result<(), String> {
+    let lyrics = app.get_webview_window("lyrics").ok_or("歌词窗口不可用")?;
+    let tools = app.get_webview_window("lyrics-tools").ok_or("歌词按钮不可用")?;
+    position_tools(app).map_err(|_| "无法定位歌词按钮")?;
+    // Keep the small recovery toolbar interactive while the text window passes through.
+    if locked && lyrics.is_visible().unwrap_or(false) { tools.show().map_err(|_| "无法显示解锁按钮")?; }
+    lyrics.set_ignore_cursor_events(locked).map_err(|_| "无法调整歌词穿透")?;
+    if !locked || !lyrics.is_visible().unwrap_or(false) { tools.hide().map_err(|_| "无法隐藏歌词按钮")?; }
+    Ok(())
 }
 
 pub fn persist(app: &AppHandle) {
@@ -62,7 +81,7 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
     if controls_qa { preferences.enabled = true; preferences.locked = true; }
     app.manage(Mutex::new(Runtime { preferences: preferences.clone(), data: Value::Null, media: Value::Null }));
     let builder = WebviewWindowBuilder::new(app, "lyrics", WebviewUrl::App("lyrics.html".into()))
-        .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 100.0)
+        .title("Nestune · 桌面歌词").inner_size(620.0, 138.0).min_inner_size(280.0, 138.0)
         .decorations(false).transparent(true).shadow(false).always_on_top(true)
         .skip_taskbar(true).focused(false).resizable(true).visible(false)
         .background_color(tauri::window::Color(0, 0, 0, 0))
@@ -112,15 +131,29 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
             ))?;
         }
     }
+    let position = window.outer_position()?;
+    if let Ok(mut runtime) = app.state::<Mutex<Runtime>>().lock() {
+        runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+    }
     let handle = app.clone();
     window.on_window_event(move |event| {
         if let tauri::WindowEvent::Moved(position) = event {
             if let Some(state) = handle.try_state::<Mutex<Runtime>>() {
                 if let Ok(mut runtime) = state.lock() {
-                    runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+                    if runtime.preferences.locked {
+                        let restore = runtime.preferences.x.zip(runtime.preferences.y)
+                            .filter(|(x, y)| *x != position.x || *y != position.y);
+                        drop(runtime);
+                        if let (Some((x, y)), Some(window)) = (restore, handle.get_webview_window("lyrics")) {
+                            let _ = window.set_position(PhysicalPosition::new(x, y));
+                        }
+                    } else {
+                        runtime.preferences.x = Some(position.x); runtime.preferences.y = Some(position.y);
+                    }
                 }
             }
         }
+        if matches!(event, tauri::WindowEvent::Moved(_) | tauri::WindowEvent::Resized(_)) { let _ = position_tools(&handle); }
         if let tauri::WindowEvent::CloseRequested { api, .. } = event {
             api.prevent_close();
             if let Some(window) = handle.get_webview_window("lyrics") { let _ = window.hide(); }
@@ -128,15 +161,22 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
                 if let Ok(mut runtime) = state.lock() { runtime.preferences.enabled = false; notify(&handle, &runtime.preferences); }
             }
             persist(&handle);
+            if let Some(tools) = handle.get_webview_window("lyrics-tools") { let _ = tools.hide(); }
         }
     });
-    // Locking fixes the position. Keep the toolbar interactive, including after
-    // restoring a lock saved by an older click-through implementation.
-    window.set_ignore_cursor_events(false)?;
+    WebviewWindowBuilder::new(app, "lyrics-tools", WebviewUrl::App("lyrics.html?tools=1".into()))
+        .title("Nestune · 歌词控制").inner_size(114.0, 44.0)
+        .decorations(false).transparent(true).shadow(false).always_on_top(true)
+        .skip_taskbar(true).focused(false).resizable(false).visible(false)
+        .background_color(tauri::window::Color(0, 0, 0, 0))
+        .on_navigation(|url| local_lyrics_url(url))
+        .on_permission_request(|_, _| tauri::webview::PermissionResponse::Deny)
+        .build()?;
     let show = preferences.enabled;
     #[cfg(debug_assertions)]
     let show = show && !controls_qa;
     if show { window.show()?; }
+    lock_input(app, preferences.locked).map_err(std::io::Error::other)?;
     Ok(())
 }
 
@@ -167,9 +207,12 @@ fn set_enabled(app: &AppHandle, runtime: &mut Runtime, enabled: bool) -> Result<
     let overlay = app.get_webview_window("lyrics").ok_or("歌词窗口不可用")?;
     if enabled {
         overlay.eval(format!("window.nestuneLyricsData && window.nestuneLyricsData({});window.nestuneLyricsMedia && window.nestuneLyricsMedia({})", runtime.data, runtime.media)).map_err(|_| "无法更新歌词")?;
-        overlay.set_ignore_cursor_events(false).map_err(|_| "无法恢复歌词按钮")?;
         overlay.show().map_err(|_| "无法显示歌词窗口")?;
-    } else { overlay.hide().map_err(|_| "无法关闭歌词窗口")?; }
+        lock_input(app, runtime.preferences.locked)?;
+    } else {
+        overlay.hide().map_err(|_| "无法关闭歌词窗口")?;
+        if let Some(tools) = app.get_webview_window("lyrics-tools") { tools.hide().map_err(|_| "无法关闭歌词按钮")?; }
+    }
     runtime.preferences.enabled = enabled;
     Ok(())
 }
@@ -189,9 +232,14 @@ pub fn toggle(app: &AppHandle) -> Result<(), String> {
 pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) -> Result<Value, String> {
     let url = window.url().map_err(|_| "无法读取窗口来源")?;
     let main = window.label() == "main" && super::trusted(&url);
-    let local = window.label() == "lyrics" && local_lyrics_url(&url);
+    let local = matches!(window.label(), "lyrics" | "lyrics-tools") && local_lyrics_url(&url);
     if !main && !local { return Err("不允许此来源操作歌词窗口".into()) }
     let kind = data.get("type").and_then(Value::as_str).ok_or("无效操作")?;
+    if kind.starts_with("update") {
+        if !main { return Err("仅主窗口可更新客户端".into()); }
+        return super::updates::request(&app, kind);
+    }
+
     let state = app.state::<Mutex<Runtime>>();
     let mut runtime = state.lock().map_err(|_| "歌词窗口繁忙")?;
     let overlay = app.get_webview_window("lyrics").ok_or("歌词窗口不可用")?;
@@ -204,8 +252,20 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             extern "system" { fn GetWindowLongW(hwnd: *mut std::ffi::c_void, index: i32) -> i32; }
             let hwnd = overlay.hwnd().map_err(|_| "Probe window missing")?;
             let style = unsafe { GetWindowLongW(hwnd.0, -20) };
-            return Ok(json!({ "state": info(&runtime.preferences), "clickThrough": style & 0x20 != 0,
+            let tools = app.get_webview_window("lyrics-tools").ok_or("Missing tools window")?;
+            let tools_hwnd = tools.hwnd().map_err(|_| "Missing tools handle")?;
+            let tools_style = unsafe { GetWindowLongW(tools_hwnd.0, -20) };
+            let position = overlay.outer_position().map_err(|_| "Probe position failed")?;
+            return Ok(json!({ "state": info(&runtime.preferences), "clickThrough": style & 0x20 != 0, "toolsClickThrough": tools_style & 0x20 != 0,
+                "x": position.x, "y": position.y,
                 "visible": overlay.is_visible().map_err(|_| "Probe visibility failed")? }));
+        },
+        #[cfg(debug_assertions)]
+        "lyricsMoveProbe" if local && std::env::args().any(|arg| arg == "--lyrics-controls-qa") => {
+            drop(runtime);
+            let position = overlay.outer_position().map_err(|_| "Probe position failed")?;
+            overlay.set_position(PhysicalPosition::new(position.x + 50, position.y - 30)).map_err(|_| "Probe movement failed")?;
+            return Ok(json!({ "ok": true }));
         },
         #[cfg(debug_assertions)]
         "lyricsProbe" if main && std::env::args().any(|arg| arg == "--lyrics-qa") => {
@@ -226,8 +286,9 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             set_enabled(&app, &mut runtime, enabled)?;
         },
         "lyricsLock" => {
-            runtime.preferences.locked = data.get("locked").and_then(Value::as_bool).ok_or("缺少锁定状态")?;
-            overlay.set_ignore_cursor_events(false).map_err(|_| "无法恢复歌词按钮")?;
+            let locked = data.get("locked").and_then(Value::as_bool).ok_or("缺少锁定状态")?;
+            lock_input(&app, locked)?;
+            runtime.preferences.locked = locked;
         },
         "lyricsPanel" if local => {
             runtime.preferences.panel = data.get("panel").and_then(Value::as_bool).ok_or("缺少背景状态")?;
