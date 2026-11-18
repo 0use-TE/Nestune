@@ -23,6 +23,8 @@ import { CanvasSource } from './CanvasSource';
 import { useDesktopLyrics } from './DesktopLyrics';
 import { ReleaseNotice } from './ReleaseNotice';
 import { PlaylistQueueDrop } from './PlaylistQueueDrop';
+import { FriendSongDrop } from './FriendSongDrop';
+import { UsageGuide } from './UsageGuide';
 
 const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/square', '画布', 'dash']] as const;
 
@@ -117,6 +119,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <>
       <ReleaseNotice userId={app.me.id} />
       <PlaylistQueueDrop />
+      <FriendSongDrop />
+      <UsageGuide key={app.me.id} userId={app.me.id} queueOpen={queueOpen && hasSong} hasSong={hasSong} blocked={app.nowOpen} />
       <KeyboardViewport />
       <div id="app">
         <aside>

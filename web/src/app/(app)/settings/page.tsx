@@ -12,6 +12,7 @@ import { ManageUploads } from '@/components/ManageUploads';
 import { PwaInstall, AboutNestune } from '@/components/Pwa';
 import { VolumeControl } from '@/components/VolumeControl';
 import { DesktopLyricsSettings } from '@/components/DesktopLyrics';
+import { GuideDirectory } from '@/components/UsageGuide';
 
 const SECTIONS = ['资料', '我的上传', '偏好', '账号与安全', '关于'] as const;
 
@@ -109,6 +110,7 @@ export default function SettingsPage() {
           <div className="set"><b>公开个人主页</b><button className={`switch ${me.profilePublic ? 'on' : ''}`} role="switch" aria-label="公开个人主页" aria-checked={!!me.profilePublic} disabled={busy} onClick={async () => { setBusy(true); try { const r = await patch('/api/me', { profilePublic: !me.profilePublic }); app.setMe(r.user); } catch (e) { app.toast(e instanceof Error ? e.message : '保存失败'); } finally { setBusy(false); } }} /></div>
           <PwaInstall />
           <DesktopLyricsSettings />
+          <GuideDirectory />
           <div className="set source-preference"><div><b>优先音源</b><p className="sub sm">首选来源无法完整播放时，尝试同一录音的其他来源</p></div>
             <div className="row" role="group" aria-label="优先音源">{([['auto', '自动'], ['netease', '网易云'], ['qq', 'QQ 音乐']] as const).map(([value, label]) =>
               <button key={value} type="button" className={`chip ${app.sourcePreference === value ? 'on' : ''}`} aria-pressed={app.sourcePreference === value} onClick={() => app.setSourcePreference(value)}>{label}</button>)}</div>

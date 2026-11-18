@@ -55,7 +55,7 @@ function ChatView({ userId, initialPeer, restore }: { userId: number; initialPee
             const summary = summaries.get(person.id);
             const sent = summary?.latest.senderId === userId;
             return (
-              <Link key={person.id} href={`/social?peer=${person.id}`} prefetch={false} className={`chat-thread ${peer?.id === person.id ? 'on' : ''}`} aria-current={peer?.id === person.id ? 'true' : undefined}>
+              <Link key={person.id} href={`/social?peer=${person.id}`} prefetch={false} data-song-recipient={person.id} className={`chat-thread ${peer?.id === person.id ? 'on' : ''}`} aria-current={peer?.id === person.id ? 'true' : undefined}>
                 <Avatar src={person.avatar} name={person.name} />
                 <span className="chat-thread-info">
                   <span className="chat-thread-title"><b className="t1">{person.name}</b>{summary && <time dateTime={new Date(summary.latest.sentAt).toISOString()}>{messageAge(summary.latest.sentAt)}</time>}</span>

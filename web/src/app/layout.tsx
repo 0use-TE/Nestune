@@ -7,6 +7,7 @@ import './brand-flow.css';
 import './square.css';
 import './client-features.css';
 import './playlist-queue.css';
+import './listen-ux.css';
 
 export const metadata: Metadata = {
   title: 'Nestune', description: '私人音乐库', applicationName: 'Nestune',
