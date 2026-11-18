@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeAll, beforeEach, afterAll, expect, it, vi } from 'vitest';
 const song = (id: string) => ({ id, name: 'Song ' + id, duration: 180, artists: [{ id: '1', name: 'Singer' }], album: { id: '7', name: 'Album' }, cover: null });
-vi.mock('@/server/netease', () => ({ songs: vi.fn(async (ids: string[]) => ids.map(song)), songMeta: vi.fn(async (id: string) => song(id)), album: vi.fn(async () => ({ album: { id: '7', name: 'Album', cover: null }, songs: [song('101'), song('102')] })), playlist: vi.fn(async () => ({ playlist: { name: 'Imported', cover: null, trackCount: 2 }, songs: [song('101'), song('102')] })) }));
+vi.mock('@/server/netease', () => ({ songs: vi.fn(async (ids: string[]) => ids.map(song)), songMeta: vi.fn(async (id: string) => song(id)), album: vi.fn(async () => ({ album: { id: '7', name: 'Album', cover: null }, songs: [song('101'), song('102')] })), importablePlaylist: vi.fn(async () => ({ playlist: { name: 'Imported', cover: null, trackCount: 2 }, songs: [song('101'), song('102')], skipped: 0 })) }));
 vi.mock('@/server/qqmusic', () => ({ qqPlaylist: vi.fn(async (id: string) => ({ id, provider: 'qq', name: 'QQ playlist', cover: null, songs: [song('qq-first'), song('qq-second'), song('qq-first')] })) }));
 let folder: string, database: typeof import('@/server/db'), playlists: typeof import('@/server/playlists'), folders: typeof import('@/server/playlist-folders'), imports: typeof import('@/server/playlist-import');
 beforeAll(async () => {

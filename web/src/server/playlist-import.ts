@@ -1,6 +1,5 @@
 import { playlistLink, shareUrl, type ExternalPlaylist } from '@/lib/playlist-link';
-import type { Song } from '@/lib/types';
-import { playlist } from './netease';
+import { importablePlaylist } from './netease';
 import { qqPlaylist } from './qqmusic';
 import { fail } from './http';
 import { uniqueRecordings, rememberSongs } from './recordings';
@@ -27,19 +26,12 @@ export async function resolvePlaylistLink(text: string): Promise<ExternalPlaylis
   throw fail(400, '无法解析短链接，请复制歌单完整分享链接');
 }
 export async function externalPlaylist(source: ExternalPlaylist) {
-  if (source.provider === 'qq') { const data = await qqPlaylist(source.id); return { ...data, songs: uniqueRecordings(data.songs) }; }
-  const songs: Song[] = []; let meta: Awaited<ReturnType<typeof playlist>>['playlist'] | undefined;
-  for (let offset = 0; offset < 1000; offset += 100) {
-    const page = await playlist(source.id, 100, offset); meta ??= page.playlist;
-    if (!Number.isSafeInteger(meta.trackCount) || meta.trackCount < 0) throw fail(502, '无法确认歌单的完整曲目数量，请稍后重试');
-    if (meta.trackCount > 1000) throw fail(400, '一个歌单最多导入 1000 首，请拆分后再导入');
-    songs.push(...page.songs);
-    if (offset + page.songs.length >= page.playlist.trackCount) break;
-    if (!page.songs.length) throw fail(502, '歌单只返回了部分内容，请检查访问权限后重试');
+  if (source.provider === 'qq') {
+    const data = await qqPlaylist(source.id);
+    return { ...data, songs: uniqueRecordings(data.songs), skipped: 0 };
   }
-  if (!meta || meta.trackCount > 1000) throw fail(400, '一个歌单最多导入 1000 首，请拆分后再导入');
-  if (songs.length < meta.trackCount) throw fail(502, '歌单内容不完整，本次没有导入');
-  return { name: meta.name, cover: meta.cover, songs: uniqueRecordings(songs), provider: source.provider, id: source.id };
+  const { playlist, songs, skipped } = await importablePlaylist(source.id);
+  return { name: playlist.name, cover: playlist.cover, songs: uniqueRecordings(songs), provider: source.provider, id: source.id, skipped };
 }
 export async function importPlaylist(user: number, text: string, name?: string) {
   const source = await resolvePlaylistLink(text), data = await externalPlaylist(source);
@@ -53,6 +45,7 @@ export async function importPlaylist(user: number, text: string, name?: string) 
       const song = data.songs[index];
       run('INSERT INTO playlist_songs(playlist_id,song_id,meta,added_at) VALUES(?,?,?,?)', target.id, song.id, JSON.stringify(song), at + index);
     }
-    connection.exec('COMMIT'); return { playlist: { ...target, trackCount: data.songs.length }, imported: data.songs.length };
+    connection.exec('COMMIT');
+    return { playlist: { ...target, trackCount: data.songs.length }, imported: data.songs.length, skipped: data.skipped };
   } catch (error) { connection.exec('ROLLBACK'); throw error; }
 }

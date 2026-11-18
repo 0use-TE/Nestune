@@ -23,14 +23,15 @@ class NativeMediaService : Service() {
         var webView: WeakReference<WebView>? = null
         private const val CHANNEL = "nestune_playback"
         private const val NOTIFICATION = 1001
-        fun dispatch(action: String, position: Long? = null) {
+        fun dispatch(action: String, position: Long? = null, lyrics: Boolean = false) {
             val view = webView?.get() ?: return
             val data = JSONObject().put("action", action)
+            val event = if (lyrics) "nt:lyrics-control" else "nt:media"
             if (position != null) data.put("position", position / 1000.0)
             view.post {
                 val url = Uri.parse(view.url ?: "")
                 if (NestuneOrigin.allows(url))
-                    view.evaluateJavascript("window.dispatchEvent(new CustomEvent('nt:media', {detail: $data}))", null)
+                    view.evaluateJavascript("window.dispatchEvent(new CustomEvent('$event', {detail: $data}))", null)
             }
         }
     }

@@ -205,18 +205,46 @@ export async function collectionMetadata(kind: 'album' | 'playlist', id: string)
   return { name: a.name, cover: cover(a.picUrl), sub: a.artist?.name || '' };
 }
 
-export async function playlist(id: string, limit: number, offset: number) {
+async function playlistSnapshot(id: string, allowPublicLikes = false) {
   const b = await call('playlist_detail', { id, s: 0 });
   const p = b.playlist;
-  if (!p || Number(p.privacy || 0) !== 0 || Number(p.specialType) === 5) throw fail(403, '不提供私人歌单或喜欢列表');
+  const isLikes = Number(p?.specialType) === 5;
+  if (!p || Number(p.privacy ?? -1) !== 0 || (isLikes && !allowPublicLikes)) {
+    throw fail(403, allowPublicLikes ? '这个网易云歌单未公开。请分享公开歌单，或将想导入的歌曲复制到一个公开歌单' : '不提供私人歌单或喜欢列表');
+  }
   const owner = session().ownerId;
   if (owner && String(p.creator?.userId) === String(owner)) throw fail(403, '不提供绑定账号的个人歌单');
-  const ids = (p.trackIds || []).slice(offset, offset + limit).map((x: any) => String(x.id));
+  const trackIds: { id: number }[] = Array.isArray(p.trackIds) ? p.trackIds : [];
   return {
     playlist: { id: String(p.id), name: p.name, cover: cover(p.coverImgUrl), description: p.description || '', creator: p.creator?.nickname || '', trackCount: p.trackCount, playCount: p.playCount, tags: p.tags || [] },
-    songs: ids.length ? await songs(ids) : [],
-    limit, offset,
+    ids: trackIds.map(track => String(track.id)),
+    isLikes,
   };
+}
+
+export async function playlist(id: string, limit: number, offset: number) {
+  const snapshot = await playlistSnapshot(id);
+  return { playlist: snapshot.playlist, songs: await songs(snapshot.ids.slice(offset, offset + limit)), limit, offset };
+}
+
+export async function importablePlaylist(id: string) {
+  const { playlist, ids, isLikes } = await playlistSnapshot(id, true);
+  const count = Number(playlist.trackCount);
+  if (!Number.isSafeInteger(count) || count < 0) throw fail(502, '无法确认歌单的曲目数量，请稍后重试');
+  if (Math.max(ids.length, count) > 1000) throw fail(400, '一个歌单最多导入 1000 首，请拆分后再导入');
+  if (!isLikes && ids.length !== count) throw fail(502, '歌单内容不完整，本次没有导入');
+
+  const tracks: Song[] = [];
+  // Resolve public IDs from one snapshot so a playlist edit between pages cannot shift their order.
+  for (let offset = 0; offset < ids.length; offset += 300) {
+    const batches = [0, 100, 200].map(start => ids.slice(offset + start, offset + start + 100));
+    const pages = await Promise.all(batches.filter(batch => batch.length > 0).map(songs));
+    tracks.push(...pages.flat());
+  }
+  if (!isLikes && tracks.length !== count) throw fail(502, '歌单内容不完整，本次没有导入');
+  if (isLikes && !tracks.length) throw fail(400, '这份喜欢列表没有可读取的歌曲。可以将歌曲复制到一个公开歌单再分享');
+  const skipped = isLikes ? Math.max(0, count - tracks.length, ids.length - tracks.length) : 0;
+  return { playlist, songs: tracks, skipped };
 }
 
 export async function artist(id: string) {

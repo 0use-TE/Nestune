@@ -165,7 +165,7 @@ pub fn setup(app: &AppHandle, smoke_test: bool) -> tauri::Result<()> {
         }
     });
     WebviewWindowBuilder::new(app, "lyrics-tools", WebviewUrl::App("lyrics.html?tools=1".into()))
-        .title("Nestune · 歌词控制").inner_size(114.0, 44.0)
+        .title("Nestune · 歌词控制").inner_size(240.0, 44.0)
         .decorations(false).transparent(true).shadow(false).always_on_top(true)
         .skip_taskbar(true).focused(false).resizable(false).visible(false)
         .background_color(tauri::window::Color(0, 0, 0, 0))
@@ -198,7 +198,8 @@ fn bounded_data(data: &Value) -> bool {
             })),
         Some("lyricsMedia") => data.get("id").and_then(Value::as_str).is_some_and(|s| s.len() <= 640)
             && data.get("position").and_then(Value::as_f64).is_some_and(|t| t.is_finite() && (0.0..=86400.0).contains(&t))
-            && data.get("playing").and_then(Value::as_bool).is_some(),
+            && data.get("playing").and_then(Value::as_bool).is_some()
+            && data.get("mode").is_none_or(|mode| matches!(mode.as_str(), Some("off" | "all" | "one" | "shuffle"))),
         _ => false,
     }
 }
@@ -246,6 +247,19 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
     match kind {
         "lyricsInfo" => {},
         "lyricsSnapshot" if local => return Ok(json!({ "state": info(&runtime.preferences), "data": runtime.data, "media": runtime.media })),
+        "lyricsPlayback" if local && runtime.preferences.enabled => {
+            let action = data.get("action").and_then(Value::as_str).ok_or("缺少播放操作")?;
+            if !matches!(action, "mode" | "previous" | "toggle" | "next") {
+                return Err("不支持此播放操作".into());
+            }
+            let main = app.get_webview_window("main").ok_or("播放器未打开")?;
+            if !main.url().is_ok_and(|url| super::trusted(&url)) {
+                return Err("播放器未打开".into());
+            }
+            main.eval(format!("window.dispatchEvent(new CustomEvent('nt:desktop-control',{{detail:{}}}))", json!(action)))
+                .map_err(|_| "无法控制播放器")?;
+            return Ok(json!({ "ok": true }));
+        },
         #[cfg(all(debug_assertions, target_os = "windows"))]
         "lyricsControlsProbe" if local && std::env::args().any(|arg| arg == "--lyrics-controls-qa") => {
             #[link(name = "user32")]
@@ -278,6 +292,11 @@ pub async fn lyrics_command(app: AppHandle, window: WebviewWindow, data: Value) 
             if runtime.preferences.enabled {
                 let handler = if kind == "lyricsData" { "nestuneLyricsData" } else { "nestuneLyricsMedia" };
                 overlay.eval(format!("window.{handler} && window.{handler}({data})")).map_err(|_| "无法更新歌词")?;
+                if kind == "lyricsMedia" {
+                    if let Some(tools) = app.get_webview_window("lyrics-tools") {
+                        let _ = tools.eval(format!("window.nestuneLyricsMedia && window.nestuneLyricsMedia({data})"));
+                    }
+                }
             }
         },
         "lyricsEnable" => {

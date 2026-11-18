@@ -1,7 +1,8 @@
 import type { LyricLine } from './types';
+import type { PlaybackMode } from './shared-queue';
 
 export type OverlayData = { type: 'lyricsData'; id: string; title: string; lines: LyricLine[]; plainText: string; flowSeed?: number; duration?: number };
-export type OverlayMedia = { type: 'lyricsMedia'; id: string; position: number; playing: boolean };
+export type OverlayMedia = { type: 'lyricsMedia'; id: string; position: number; playing: boolean; mode?: PlaybackMode };
 export function overlayLyrics(id: string, title: string, lines: LyricLine[], plainText = '', translation = true, flowSeed = 0, duration = 0): OverlayData {
   let remaining = 240000;
   const encoder = new TextEncoder();

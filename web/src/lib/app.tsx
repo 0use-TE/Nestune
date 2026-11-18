@@ -428,16 +428,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     go(i > 0 ? i - 1 : q.length - 1);
   }, [go]);
   const prevRef = useRef(prev); prevRef.current = prev;
-  useEffect(() => {
-    const receive = (event: Event) => {
-      const command = (event as CustomEvent<unknown>).detail;
-      if (command === 'toggle') toggle();
-      else if (command === 'previous') prevRef.current();
-      else if (command === 'next') next();
-    };
-    window.addEventListener('nt:desktop-control', receive);
-    return () => window.removeEventListener('nt:desktop-control', receive);
-  }, [toggle, next]);
 
   const seek = useCallback((t: number) => { if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'seek', position: t }); return; } const a = audio.current; if (a) { a.currentTime = Math.max(0, t); setClock(a.currentTime, clock.duration); } }, []);
   const playbackPosition = useCallback(() => audio.current?.currentTime || 0, []);
@@ -617,6 +607,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'mode' }); return; }
     setPlaybackMode(mode => PLAYBACK_MODES[(PLAYBACK_MODES.indexOf(mode) + 1) % PLAYBACK_MODES.length]);
   }, []);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      const command = event.type === 'nt:lyrics-control' ? detail?.action : detail;
+      if (command === 'toggle') toggle();
+      else if (command === 'previous') prev();
+      else if (command === 'next') next();
+      else if (command === 'mode') cyclePlaybackMode();
+    };
+    window.addEventListener('nt:desktop-control', receive);
+    window.addEventListener('nt:lyrics-control', receive);
+    return () => {
+      window.removeEventListener('nt:desktop-control', receive);
+      window.removeEventListener('nt:lyrics-control', receive);
+    };
+  }, [toggle, prev, next, cyclePlaybackMode]);
 
   /* ----- favourites ----- */
   const toggleFav = useCallback((s: Song) => {

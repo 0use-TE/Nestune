@@ -5,6 +5,7 @@ import { overlayCurrent, overlayLine, type OverlayData, type OverlayMedia } from
 import { createRoot } from 'react-dom/client';
 import { KaraokeText } from './KaraokeText';
 import { lyricsNativeBridge, lyricsOpenFailure, lyricsTransport } from '@/lib/lyrics-capability';
+import { LYRICS_IDLE_MS, LyricsPlaybackControls } from './PlaybackControls';
 
 type State = { supported: boolean; enabled: boolean; locked: boolean; permission: boolean; platform: 'desktop' | 'android' | 'browser' };
 type Command = { type: string; [key: string]: unknown } | OverlayData | OverlayMedia;
@@ -57,7 +58,7 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
   const [upgradeRequired, setUpgradeRequired] = useState(false);
   const pip = useRef<Window | null>(null);
   const content = useRef<OverlayData | null>(null);
-  const media = useRef({ id: '', position: 0, playing: false, at: 0 });
+  const media = useRef<OverlayMedia & { at: number }>({ type: 'lyricsMedia', id: '', position: 0, playing: false, at: 0 });
   const stateRef = useRef(state); stateRef.current = state;
   const accept = useCallback((next: State) => {
     if (next?.supported === true && typeof next.enabled === 'boolean') setState(next);
@@ -96,7 +97,7 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
       if (kind === 'pip') {
         if (!enabled) { pip.current?.close(); pip.current = null; setState(previous => ({ ...previous, enabled: false })); return; }
         if (!host.documentPictureInPicture) throw Error('此浏览器暂不支持桌面歌词，请使用新版客户端');
-        const child = await host.documentPictureInPicture.requestWindow({ width: 560, height: 150 });
+        const child = await host.documentPictureInPicture.requestWindow({ width: 560, height: 185 });
         pip.current = child;
         child.document.title = 'Nestune · 歌词';
         const style = child.document.createElement('style');
@@ -104,8 +105,24 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
         for (const sheet of document.querySelectorAll('link[rel=stylesheet],style')) child.document.head.append(sheet.cloneNode(true));
         child.document.head.append(style);
         const text = child.document.createElement('h1'), translation = child.document.createElement('p'), title = child.document.createElement('small');
-        child.document.body.replaceChildren(text, translation, title);
+        const controls = child.document.createElement('div');
+        controls.className = 'pinned-lyrics-actions';
+        child.document.body.replaceChildren(text, translation, title, controls);
         const lyricsRoot = createRoot(text);
+        const controlsRoot = createRoot(controls);
+        let controlsKey = '';
+        let idleTimer = 0;
+        const wake = () => {
+          delete controls.dataset.idle;
+          child.clearTimeout(idleTimer);
+          idleTimer = child.setTimeout(() => { controls.dataset.idle = ''; }, LYRICS_IDLE_MS);
+        };
+        const onControl = (action: string) => {
+          wake();
+          window.dispatchEvent(new CustomEvent('nt:desktop-control', { detail: action }));
+        };
+        for (const event of ['pointermove', 'pointerdown', 'focusin']) child.document.addEventListener(event, wake);
+        wake();
         const update = () => {
           const current = media.current;
           const position = current.position + (current.playing ? (Date.now() - current.at) / 1000 : 0);
@@ -114,9 +131,21 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
           lyricsRoot.render(vocal ? <KaraokeText line={vocal.line} nextTime={vocal.nextTime} position={position} playing={current.playing} flowSeed={content.current?.flowSeed} duration={content.current?.duration} /> : line.text);
           translation.textContent = line.tr; title.textContent = content.current?.title || 'Nestune';
           translation.hidden = !line.tr;
+          const mode = current.mode ?? 'off';
+          const key = `${mode}:${current.playing}`;
+          if (controlsKey !== key) {
+            controlsKey = key;
+            controlsRoot.render(<LyricsPlaybackControls mode={mode} playing={current.playing} onControl={onControl} />);
+          }
         };
         update(); const timer = child.setInterval(update, 120);
-        child.addEventListener('pagehide', () => { child.clearInterval(timer); lyricsRoot.unmount(); if (pip.current === child) { pip.current = null; setState(previous => ({ ...previous, enabled: false })); } }, { once: true });
+        child.addEventListener('pagehide', () => {
+          child.clearInterval(timer);
+          child.clearTimeout(idleTimer);
+          lyricsRoot.unmount();
+          controlsRoot.unmount();
+          if (pip.current === child) { pip.current = null; setState(previous => ({ ...previous, enabled: false })); }
+        }, { once: true });
         setState(previous => ({ ...previous, enabled: true }));
       } else {
         const next = await nativeRequest({ type: 'lyricsEnable', enabled }); accept(next);
@@ -134,7 +163,7 @@ export function DesktopLyricsProvider({ children }: { children: React.ReactNode 
   }, [accept]);
   const send = useCallback((data: OverlayData | OverlayMedia) => {
     if (data.type === 'lyricsData') content.current = data;
-    else media.current = { id: data.id, position: data.position, playing: data.playing, at: Date.now() };
+    else media.current = { ...data, at: Date.now() };
     if (!stateRef.current.enabled || stateRef.current.platform === 'browser') return;
     const host = window as NativeWindow;
     const kind = nativeBridge(host);
