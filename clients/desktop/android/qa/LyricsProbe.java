@@ -5,6 +5,7 @@ import android.app.Instrumentation;
 import android.app.Instrumentation.ActivityMonitor;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -69,6 +70,27 @@ public class LyricsProbe extends Instrumentation {
         for(int i=0;i<60;i++){AccessibilityNodeInfo node=visible(text);if(node!=null){Rect result=new Rect();node.getBoundsInScreen(result);return result;}Rect nativeBounds=nativeTextBounds(text);if(nativeBounds!=null)return nativeBounds;SystemClock.sleep(150);}
         throw new AssertionError("Overlay text absent: "+text);
     }
+    private void assertPainted(String text) throws Exception {
+        Rect bounds = waitText(text);
+        for (int attempt = 0; attempt < 5; attempt++) {
+            Bitmap screenshot = getUiAutomation().takeScreenshot();
+            if (screenshot != null) {
+                Rect crop = new Rect(bounds);
+                int brightPixels = 0;
+                if (crop.intersect(0, 0, screenshot.getWidth(), screenshot.getHeight())) {
+                    int[] pixels = new int[crop.width() * crop.height()];
+                    screenshot.getPixels(pixels, 0, crop.width(), crop.left, crop.top, crop.width(), crop.height());
+                    for (int color : pixels) {
+                        if (((color >> 8) & 255) > 120) brightPixels++;
+                    }
+                }
+                screenshot.recycle();
+                if (brightPixels > 24) return;
+            }
+            SystemClock.sleep(150);
+        }
+        throw new AssertionError("Overlay text was present but no glyphs were visible: " + text + " at " + bounds);
+    }
     private void pointer(int action,float x,float y,long down,long at) {sendPointerSync(MotionEvent.obtain(down,at,action,x,y,0));}
     private void tap(Rect rect){long t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,rect.centerX(),rect.centerY(),t,t);pointer(MotionEvent.ACTION_UP,rect.centerX(),rect.centerY(),t,t+100);}
     private void showTools() throws Exception { if(visible("锁定")==null && visible("解锁")==null)tap(waitText("Native first line")); }
@@ -79,7 +101,7 @@ public class LyricsProbe extends Instrumentation {
             activity=startActivitySync(new Intent().setClassName("net.ouse.nestune","net.ouse.nestune.MainActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             for(int i=0;i<80&&web==null;i++){runOnMainSync(()->web=find(activity.getWindow().getDecorView()));SystemClock.sleep(150);}
             if(web==null)throw new AssertionError("Missing WebView");
-            runOnMainSync(()->web.loadDataWithBaseURL("https://nestune.0use.net:8443/", "<!doctype html><html><body>Isolated native lyrics test</body></html>", "text/html", "UTF-8", "https://nestune.0use.net:8443/"));
+            runOnMainSync(()->web.loadDataWithBaseURL("https://nestune.0use.net:8443/", "<!doctype html><html style='background:#111'><body></body></html>", "text/html", "UTF-8", "https://nestune.0use.net:8443/"));
             expect("location.origin==='https://nestune.0use.net:8443' && document.readyState==='complete' && typeof NestuneNative!=='undefined'");
             js("window.__lyricsReplies={};const old=NestuneNative.onmessage;NestuneNative.onmessage=e=>{try{const d=JSON.parse(e.data);if(d.requestId)window.__lyricsReplies[d.requestId]=d}catch{};old?.(e)};window.__overlayEvents=[];window.addEventListener('nt:lyrics-state',e=>__overlayEvents.push(e.detail));true");
             ActivityMonitor prompt=addMonitor(new IntentFilter(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),null,true);
@@ -102,10 +124,24 @@ public class LyricsProbe extends Instrumentation {
             AccessibilityServiceInfo service=getUiAutomation().getServiceInfo();service.flags|=AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;getUiAutomation().setServiceInfo(service);
             state=request(type("lyricsEnable").put("enabled",true));if(!state.optBoolean("enabled"))throw new AssertionError("Overlay did not enable");
             JSONObject data=new JSONObject("{\"type\":\"lyricsData\",\"id\":\"qa\",\"title\":\"Nestune QA\",\"plainText\":\"\",\"lines\":[{\"t\":0,\"text\":\"Native first line\",\"tr\":\"Translation one\"},{\"t\":2,\"text\":\"Native second line\",\"tr\":\"Translation two\"},{\"t\":4,\"text\":\"Native third line\"}]}");
-            post(data);post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));waitText("Native first line");post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",true));
+            JSONObject lyricsOnly = new JSONObject(data.toString()).put("title", "");
+            for (int i = 0; i < lyricsOnly.getJSONArray("lines").length(); i++) {
+                lyricsOnly.getJSONArray("lines").getJSONObject(i).remove("tr");
+            }
+            request(lyricsOnly);
+            request(type("lyricsMedia").put("id","qa").put("position",0.6).put("playing",false));
+            assertPainted("Native first line");
+            if (visible("Translation one") != null || visible("Nestune QA") != null)
+                throw new AssertionError("Optional lyrics labels were present in lyrics-only mode");
+            request(data);
+            assertPainted("Translation one");
+            assertPainted("Nestune QA");
+            tap(waitText("背景")); // The dark panel makes glyphs distinguishable from the launcher.
+            post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",true));
             post(new JSONObject("{\"type\":\"media\",\"id\":\"qa\",\"title\":\"Nestune QA\",\"artist\":\"QA\",\"duration\":60,\"position\":0,\"playing\":true}"));
             activity.startActivity(new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            waitText("Native second line");waitText("Native third line");
+            assertPainted("Native second line");
+            assertPainted("Native third line");
             post(type("lyricsMedia").put("id","qa").put("position",2.2).put("playing",false));waitText("Native second line");SystemClock.sleep(2300);waitText("Native second line");waitText("Translation two");
             post(type("lyricsMedia").put("id","qa").put("position",0.1).put("playing",false));Rect before=waitText("Native first line");
             long t=SystemClock.uptimeMillis();pointer(MotionEvent.ACTION_DOWN,before.centerX(),before.centerY(),t,t);SystemClock.sleep(150);
@@ -140,11 +176,14 @@ public class LyricsProbe extends Instrumentation {
             for(java.lang.reflect.Field field:overlayClass.getDeclaredFields())if(java.lang.reflect.Modifier.isStatic(field.getModifiers())&&field.getType()==overlayClass){field.setAccessible(true);overlay=field.get(null);}
             android.widget.TextView scrolling=null;
             for(java.lang.reflect.Field field:overlayClass.getDeclaredFields()){field.setAccessible(true);Object value=field.get(overlay);if(value instanceof android.widget.TextView&&((android.widget.TextView)value).getText().toString().equals(longText))scrolling=(android.widget.TextView)value;}
-            if(scrolling==null||scrolling.getScrollX()!=0)throw new AssertionError("Long lyric did not start at beginning");
+            if(scrolling==null)throw new AssertionError("Long lyric view missing");
+            int scrollStart = scrolling.getScrollX();
+            if(Math.abs(scrollStart - scrolling.getLayout().getLineLeft(0)) > 2)
+                throw new AssertionError("Long lyric did not start at beginning");
             post(type("lyricsMedia").put("id","qa").put("position",19).put("playing",false));SystemClock.sleep(500);
-            if(scrolling.getScrollX()<=0)throw new AssertionError("Long lyric did not scroll");
+            if(scrolling.getScrollX()<=scrollStart)throw new AssertionError("Long lyric did not scroll");
             int pausedScroll=scrolling.getScrollX();SystemClock.sleep(450);if(scrolling.getScrollX()!=pausedScroll)throw new AssertionError("Paused lyric still scrolling");
-            post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));SystemClock.sleep(350);if(scrolling.getScrollX()!=0)throw new AssertionError("Seek did not reset scrolling");
+            post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));SystemClock.sleep(350);if(scrolling.getScrollX()!=scrollStart)throw new AssertionError("Seek did not reset scrolling");
             post(data);post(type("lyricsMedia").put("id","qa").put("position",0).put("playing",false));SystemClock.sleep(250);
             showTools();tap(waitText("锁定"));tap(waitText("关闭"));SystemClock.sleep(400);
             state=request(type("lyricsInfo"));if(state.optBoolean("enabled")||visible("Native first line")!=null)throw new AssertionError("Close failed");

@@ -116,10 +116,13 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   for (let i = 0; i < lines.length && lines[i].t <= time; i++) active = i;
   const currentLine = lines[active];
   const lyricStatus = !currentLyrics ? <Loading inline label="正在加载歌词" /> : !lines.length && !currentLyrics.plainText ? '暂无歌词' : '';
+  const androidOverlay = desktopLyrics.platform === 'android';
+  const overlayTitle = !androidOverlay || desktopLyrics.androidContent.title ? s?.name || '' : '';
+  const overlayTranslation = androidOverlay ? desktopLyrics.androidContent.translation : app.showTr;
 
   useEffect(() => {
-    desktopLyrics.send(overlayLyrics(songId || '', s?.name || '', currentLyrics?.lines || [], currentLyrics?.plainText, app.showTr, lyricFlowSeed, duration));
-  }, [songId, s?.name, currentLyrics, app.showTr, desktopLyrics.enabled, desktopLyrics.send, lyricFlowSeed, duration]);
+    desktopLyrics.send(overlayLyrics(songId || '', overlayTitle, currentLyrics?.lines || [], currentLyrics?.plainText, overlayTranslation, lyricFlowSeed, duration));
+  }, [songId, overlayTitle, currentLyrics, overlayTranslation, desktopLyrics.enabled, desktopLyrics.send, lyricFlowSeed, duration]);
   useEffect(() => {
     desktopLyrics.send({ type: 'lyricsMedia', id: songId || '', position: time, playing: app.playing && !app.loading, mode: app.playbackMode });
   }, [songId, time, app.playing, app.loading, app.playbackMode, desktopLyrics.enabled, desktopLyrics.send]);
@@ -245,7 +248,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
         </div>}
       </div>
       {creditsOpen && app.nowOpen && currentLyrics?.credits.length ? <Sheet title="制作信息" onClose={() => setCreditsOpen(false)}><ul className="credits-list">{currentLyrics.credits.map((credit, index) => <li key={index}>{credit}</li>)}</ul></Sheet> : null}
-      <FloatingLyrics visible={lyricsPinned && !app.nowOpen && !desktopLyrics.enabled} text={currentLine ? <KaraokeText line={currentLine} flowSeed={lyricFlowSeed} position={time} playing={app.playing && !app.loading} nextTime={lines[active + 1]?.t} duration={duration} /> : lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'} translation={app.showTr ? currentLine?.tr : undefined} onClose={onToggleLyrics} />
+      <FloatingLyrics visible={lyricsPinned && !app.nowOpen && !desktopLyrics.enabled} text={currentLine ? <KaraokeText line={currentLine} flowSeed={lyricFlowSeed} position={time} playing={app.playing && !app.loading} nextTime={lines[active + 1]?.t} duration={duration} /> : lyricStatus || currentLyrics?.plainText?.split('\n')[0] || '前奏'}
+        translation={overlayTranslation ? currentLine?.tr : undefined} title={androidOverlay ? overlayTitle : undefined} onClose={onToggleLyrics} />
     </>
   );
 }

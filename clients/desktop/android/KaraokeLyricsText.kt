@@ -13,6 +13,7 @@ import android.widget.TextView
 import org.json.JSONObject
 import java.text.BreakIterator
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /** Draws the original text once, then clips a shared flowing gradient to sung words. */
 class KaraokeLyricsText(context: Context) : TextView(context) {
@@ -66,11 +67,18 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val textWidth = layout?.getLineWidth(0) ?: 0f
-        val overflow = (textWidth - width + compoundPaddingLeft + compoundPaddingRight).coerceAtLeast(0f)
-        val progress = if (current == null) 0.0 else ((seconds - scrollStart) / (scrollEnd - scrollStart).coerceAtLeast(.2) - .12) / .76
-        val target = (overflow * progress.coerceIn(0.0, 1.0)).toInt()
-        if (scrollX != target) scrollTo(target, 0)
+        layout?.takeIf { it.lineCount > 0 }?.let { lineLayout ->
+            // TextView centers a horizontally scrolling line within its virtual layout.
+            val left = lineLayout.getLineLeft(0)
+            val lineWidth = lineLayout.getLineRight(0) - left
+            val available = width - compoundPaddingLeft - compoundPaddingRight
+            val overflow = (lineWidth - available).coerceAtLeast(0f)
+            val progress = if (current == null) 0.0 else ((seconds - scrollStart) / (scrollEnd - scrollStart).coerceAtLeast(.2) - .12) / .76
+            val offset = progress.coerceIn(0.0, 1.0)
+            val scroll = if (lineLayout.getParagraphDirection(0) < 0) 1.0 - offset else offset
+            val target = (left - (available - lineWidth).coerceAtLeast(0f) / 2 + overflow * scroll).roundToInt()
+            if (scrollX != target) scrollTo(target, 0)
+        }
 
         if (width != gradientWidth) {
             gradientWidth = width

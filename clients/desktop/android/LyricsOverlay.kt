@@ -50,7 +50,7 @@ class LyricsOverlay private constructor(private val context: Context) : android.
     private var lockButton: Button? = null
     private var layout: WindowManager.LayoutParams? = null
     private var track = ""
-    private var title = "Nestune"
+    private var title = ""
     private var lines = emptyList<Line>()
     private var plainText = ""
     private var flowSeed = 0L
@@ -236,8 +236,8 @@ class LyricsOverlay private constructor(private val context: Context) : android.
             ellipsize = null; setTypeface(typeface, Typeface.BOLD)
             setShadowLayer(dp(2).toFloat(), 0f, dp(1).toFloat(), Color.BLACK)
         }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2)) }
-        translationView = label(14f, 0xffeeede7.toInt()).apply { setSingleLine(true); ellipsize = android.text.TextUtils.TruncateAt.MARQUEE; marqueeRepeatLimit = -1; isSelected = true }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
-        titleView = label(10f, 0xffc5c3bc.toInt()).also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
+        translationView = label(14f, 0xffeeede7.toInt()).apply { setSingleLine(true); ellipsize = android.text.TextUtils.TruncateAt.MARQUEE; marqueeRepeatLimit = -1; isSelected = true; visibility = View.GONE }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
+        titleView = label(10f, 0xffc5c3bc.toInt()).apply { visibility = View.GONE }.also { view.addView(it, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) }) }
         val width = min(metrics.widthPixels - dp(20), dp(560)).coerceAtLeast(dp(200))
         val params = WindowManager.LayoutParams(width, -2,
             if (Build.VERSION.SDK_INT >= 26) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
@@ -324,13 +324,17 @@ class LyricsOverlay private constructor(private val context: Context) : android.
             line = lines.getOrNull(low - 1); nextTime = lines.getOrNull(low)?.time ?: 0.0
         }
         val text = if (mediaTrack.isEmpty()) "暂无播放" else if (track != mediaTrack) "正在加载歌词" else
-            line?.text?.ifEmpty { "间奏" } ?: if (lines.isNotEmpty()) "前奏" else plainText.lineSequence().firstOrNull { it.isNotBlank() } ?: "暂无歌词"
-        if (line != null) textView?.render(line.timing, seconds, nextTime, trackDuration, flowSeed)
+            line?.text?.ifBlank { "间奏" } ?: if (lines.isNotEmpty()) "前奏" else plainText.lineSequence().firstOrNull { it.isNotBlank() } ?: "暂无歌词"
+        if (line != null && line.text.isNotBlank()) textView?.render(line.timing, seconds, nextTime, trackDuration, flowSeed)
         else textView?.clear(text)
-        val translation = line?.translation ?: ""
-        if (translationView?.text?.toString() != translation) translationView?.text = translation
-        translationView?.visibility = if (translation.isEmpty()) View.GONE else View.VISIBLE
-        if (titleView?.text?.toString() != title) titleView?.text = title
+        updateLabel(translationView, line?.translation.orEmpty())
+        updateLabel(titleView, if (track == mediaTrack && mediaTrack.isNotEmpty()) title else "")
+    }
+
+    private fun updateLabel(view: TextView?, value: String) {
+        if (view == null) return
+        if (view.text.toString() != value) view.text = value
+        view.visibility = if (value.isBlank()) View.GONE else View.VISIBLE
     }
 
     private fun remove() {

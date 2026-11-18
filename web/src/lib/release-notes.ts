@@ -12,6 +12,18 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 18 日',
+    title: 'Android 悬浮歌词修复',
+    summary: '切到其他应用时也能看到原歌词，歌名和翻译可以分别开启。',
+    sections: [
+      { title: '歌词浮窗', paragraphs: ['更新 Android 客户端后，浮窗默认只显示原歌词。在「我的 → 设置 → 偏好」可开启显示歌名、显示翻译。'] },
+    ],
+    images: [
+      { src: '/release-notes/1.2.8/android-lyrics-settings.jpg', alt: '悬浮歌词的显示歌名和显示翻译开关', width: 684, height: 252 },
+    ],
+  },
+  {
+    version: '1.2.7',
+    date: '2026 年 11 月 18 日',
     title: '底栏切换循环，歌词浮窗也能切歌',
     summary: '支持导入网易云公开喜欢列表，修复 iOS 聊天键盘遮挡。',
     sections: [

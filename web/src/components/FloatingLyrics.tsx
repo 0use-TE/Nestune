@@ -16,8 +16,8 @@ function keepInViewport(position: Position, card: HTMLElement): Position {
   };
 }
 
-export function FloatingLyrics({ visible, text, translation, onClose }: {
-  visible: boolean; text: ReactNode; translation?: string; onClose: () => void;
+export function FloatingLyrics({ visible, text, translation, title, onClose }: {
+  visible: boolean; text: ReactNode; translation?: string; title?: string; onClose: () => void;
 }) {
   const card = useRef<HTMLDivElement>(null);
   const app = useApp();
@@ -91,6 +91,7 @@ export function FloatingLyrics({ visible, text, translation, onClose }: {
           onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}>
           <div>{text}</div>
           {translation && <small>{translation}</small>}
+          {title && <small>{title}</small>}
         </div>
         <div className="pinned-lyrics-actions" data-idle={idle || undefined}>
           <LyricsPlaybackControls mode={app.playbackMode} playing={app.playing}
