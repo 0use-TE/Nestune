@@ -25,6 +25,7 @@ export function FloatingLyrics({ visible, text, translation, title, onClose }: {
   const drag = useRef<{ id: number; offset: Position } | null>(null);
   const [position, setPosition] = useState<Position | null>(null);
   const [transparent, setTransparent] = useState(false);
+  const [sizeStep, setSizeStep] = useState(0);
   const [idle, setIdle] = useState(false);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const wake = useCallback(() => {
@@ -39,7 +40,11 @@ export function FloatingLyrics({ visible, text, translation, title, onClose }: {
   }, [visible, wake]);
 
   useEffect(() => {
-    try { setTransparent(localStorage.getItem('nt-lyric-transparent') === '1'); } catch { /* storage unavailable */ }
+    try {
+      setTransparent(localStorage.getItem('nt-lyric-transparent') === '1');
+      const size = Number(localStorage.getItem('nt-lyric-size') ?? 0);
+      if (Number.isInteger(size)) setSizeStep(Math.max(-2, Math.min(3, size)));
+    } catch { /* storage unavailable */ }
   }, []);
 
   useEffect(() => {
@@ -80,13 +85,24 @@ export function FloatingLyrics({ visible, text, translation, title, onClose }: {
     try { localStorage.setItem('nt-lyric-transparent', next ? '1' : '0'); } catch { /* storage unavailable */ }
   }
 
+  function resize(direction: number) {
+    const next = Math.max(-2, Math.min(3, sizeStep + direction));
+    setSizeStep(next);
+    try { localStorage.setItem('nt-lyric-size', String(next)); } catch { /* storage unavailable */ }
+  }
+
   if (!visible) return null;
   const popoutLabel = desktopLyrics.platform === 'android' ? '在其他应用上显示歌词' : '移到桌面';
+  const toolsBelow = position && position.y + (card.current?.offsetHeight ?? 0) / 2 < window.innerHeight / 2;
+  const cardStyle = {
+    '--lyric-scale': 1 + sizeStep * .16,
+    ...(position ? { position: 'fixed', left: position.x, top: position.y } : {}),
+  } as React.CSSProperties;
   return (
     <div className="pinned-lyrics">
       <div ref={card} className={`pinned-lyrics-card ${transparent ? 'transparent' : ''}`} aria-label="歌词"
         onPointerEnter={wake} onPointerMove={wake} onPointerDownCapture={wake} onFocusCapture={wake}
-        style={position ? { position: 'fixed', left: position.x, top: position.y } : undefined}>
+        data-tools-below={toolsBelow || undefined} style={cardStyle}>
         <div className="pinned-lyrics-text" title="拖动歌词" onPointerDown={startDrag} onPointerMove={move}
           onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}>
           <div>{text}</div>
@@ -101,6 +117,8 @@ export function FloatingLyrics({ visible, text, translation, title, onClose }: {
               else if (action === 'next') app.next();
               else app.toggle();
             }} />
+          <button type="button" className="ib" aria-label="缩小歌词浮窗" title="缩小歌词浮窗" disabled={sizeStep <= -2} onClick={() => resize(-1)}>−</button>
+          <button type="button" className="ib" aria-label="放大歌词浮窗" title="放大歌词浮窗" disabled={sizeStep >= 3} onClick={() => resize(1)}><Icon n="plus" s={16} /></button>
           {desktopLyrics.supported && <button type="button" className="ib" aria-label={popoutLabel} title={popoutLabel} disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(true)}><Icon n="popout" s={16} /></button>}
           <button className={`ib ${transparent ? 'act' : ''}`} aria-label="透明背景" aria-pressed={transparent} title={transparent ? '显示歌词背景' : '透明背景'} onClick={toggleBackground}><Icon n="opacity" s={16} /></button>
           <button className="ib" aria-label="关闭歌词" title="关闭歌词" onClick={onClose}><Icon n="x" s={16} /></button>
