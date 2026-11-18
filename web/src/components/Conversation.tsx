@@ -36,6 +36,16 @@ export function Conversation({ person, userId, onClose, compact = false, visible
   const path = `/api/social?peer=${person.id}`;
   const peerRoom = state?.rooms.find(room => room.hostId === person.id || room.guestId === person.id);
   const canInvite = person.friendship === 'friend' && !inviteBusy && !peerRoom && !state?.rooms.some(room => room.active);
+  useEffect(() => {
+    const sent = (event: Event) => {
+      const detail = (event as CustomEvent<{ peerId: number; message: Message }>).detail;
+      if (detail?.peerId !== person.id) return;
+      followBottom.current = true; setMessages(current => mergeMessages(current, [detail.message])); setPickingSong(false);
+    };
+    const finish = (event: Event) => { if ((event as CustomEvent).detail?.success) setPickingSong(false); };
+    window.addEventListener('nt:friend-song-sent', sent); window.addEventListener('nt:friend-song-finish', finish);
+    return () => { window.removeEventListener('nt:friend-song-sent', sent); window.removeEventListener('nt:friend-song-finish', finish); };
+  }, [person.id]);
 
   async function changeInvite(payload: Record<string, unknown>) {
     if (inviteBusy) return;
@@ -158,7 +168,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
   }
 
   return (
-    <section className={`social-chat ${compact ? 'compact' : ''}`} aria-label={`与 ${person.name} 聊天`}>
+    <section className={`social-chat ${compact ? 'compact' : ''}`} aria-label={`与 ${person.name} 聊天`} data-song-recipient={person.friendship === 'friend' ? person.id : undefined}>
       {!compact && (
         <header>
           <div className="chat-contact">

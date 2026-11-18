@@ -2,11 +2,13 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import type { CanvasSource as Source } from '@/lib/canvas-types';
+import { isDeviceSong } from '@/lib/device-music';
 
 /** Consistent pointer dragging, including buttons in the playback queue and touch holds. */
 export function CanvasSource({ source, children, className = '', queue = false }: { source: Source; children: React.ReactNode; className?: string; queue?: boolean }) {
-  const canvas = usePathname() === '/square';
-  const enabled = canvas || queue;
+  const path = usePathname(), canvas = path === '/square';
+  const friend = path === '/social' && source.kind === 'song' && !!source.songId && !isDeviceSong(source.songId);
+  const enabled = canvas || queue || friend;
   const hold = useRef<ReturnType<typeof setTimeout> | null>(null);
   const origin = useRef<{ x: number; y: number; pointer: number; element: HTMLElement; mouse: boolean } | null>(null);
   const suppressClick = useRef(false);
@@ -15,7 +17,7 @@ export function CanvasSource({ source, children, className = '', queue = false }
   const start = (x?: number, y?: number) => {
     const from = origin.current; if (!from) return; clear(); suppressClick.current = true;
     try { from.element.setPointerCapture(from.pointer); } catch {}
-    window.dispatchEvent(new CustomEvent(canvas ? 'nt:canvas-source' : 'nt:queue-source', { detail: { source, pointer: from.pointer, x: x ?? from.x, y: y ?? from.y } }));
+    window.dispatchEvent(new CustomEvent(canvas ? 'nt:canvas-source' : friend ? 'nt:friend-song-source' : 'nt:queue-source', { detail: { source, pointer: from.pointer, x: x ?? from.x, y: y ?? from.y } }));
   };
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -25,7 +27,7 @@ export function CanvasSource({ source, children, className = '', queue = false }
     };
     document.addEventListener('pointermove', move); document.addEventListener('pointerup', clear); document.addEventListener('pointercancel', clear);
     return () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', clear); document.removeEventListener('pointercancel', clear); };
-  }, [source, canvas]);
+  }, [source, canvas, friend]);
   return <div className={`canvas-source ${className}`} draggable={enabled} data-canvas-source={source.kind}
     onDragStart={event => {
       if (enabled) event.preventDefault();
