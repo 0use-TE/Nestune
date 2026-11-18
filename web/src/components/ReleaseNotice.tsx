@@ -1,8 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { LATEST_RELEASE, RELEASE_NOTES } from '@/lib/release-notes';
+import { LATEST_RELEASE, RELEASE_NOTES, type ReleaseNote } from '@/lib/release-notes';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
+
+function ReleaseImages({ images }: { images: ReleaseNote['images'] }) {
+  if (!images?.length) return null;
+  return <div className="release-images">
+    {images.map(image => <img key={image.src} src={image.src} alt={image.alt}
+      width={image.width} height={image.height} loading="lazy" decoding="async" />)}
+  </div>;
+}
 
 export function ReleaseNotes({ onClose }: { onClose: () => void }) {
   const [releases, setReleases] = useState(RELEASE_NOTES);
@@ -20,16 +28,17 @@ export function ReleaseNotes({ onClose }: { onClose: () => void }) {
       {latest.sections.map(section => <section key={section.title}>
         <h3>{section.title}</h3>{section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
       </section>)}
+      <ReleaseImages images={latest.images} />
       <div className="release-downloads">
         <a className="btn sm" href="/downloads">下载客户端</a>
       </div>
-      <p className="sub sm">网页功能更新无需安装；系统功能需更新客户端。旧版请先用系统浏览器手动下载并覆盖安装，之后可使用支持的平台内置更新。</p>
       {releases.slice(1).map(release => <details key={release.version}>
         <summary>历史更新 · {release.version} · {release.title}</summary>
         <p className="sub sm">{release.date}</p>
         {release.sections.map(section => <section key={section.title}>
           <h3>{section.title}</h3>{section.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}
         </section>)}
+        <ReleaseImages images={release.images} />
       </details>)}
     </div>
   </Sheet>;

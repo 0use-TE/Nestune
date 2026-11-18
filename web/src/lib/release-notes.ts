@@ -1,9 +1,30 @@
 import { VERSION } from './version';
 
-export type ReleaseNote = { version: string; date: string; title: string; summary: string; sections: { title: string; paragraphs: string[] }[] };
+export type ReleaseNote = {
+  version: string;
+  date: string;
+  title: string;
+  summary: string;
+  sections: { title: string; paragraphs: string[] }[];
+  images?: { src: string; alt: string; width: number; height: number }[];
+};
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
+    date: '2026 年 11 月 18 日',
+    title: '底栏切换循环，歌词浮窗也能切歌',
+    summary: '支持导入网易云公开喜欢列表，修复 iOS 聊天键盘遮挡。',
+    sections: [
+      { title: '网页', paragraphs: ['底栏新增循环键。网易云公开喜欢列表可导入，iPhone 打字时发送按钮保持可见。'] },
+      { title: '歌词浮窗', paragraphs: ['可切歌、暂停和切换循环。按钮闲置 3 秒淡出。系统浮窗请更新 Windows 或 Android 客户端。'] },
+    ],
+    images: [
+      { src: '/release-notes/1.2.7/playback.jpg', alt: '底部播放栏和歌词浮窗的播放控制', width: 866, height: 157 },
+      { src: '/release-notes/1.2.7/chat.jpg', alt: '手机聊天输入框和发送按钮', width: 390, height: 254 },
+    ],
+  },
+  {
+    version: '1.2.6',
     date: '2026 年 11 月 18 日',
     title: '无限画布、歌单组合与唱片试听',
     summary: '画布可以平移缩放，专辑和歌单自由组合；支持网易云、QQ 歌单导入与画布试听。',

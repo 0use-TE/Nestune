@@ -1,6 +1,6 @@
 [package]
 name = "nestune"
-version = "1.2.5"
+version = "1.2.7"
 description = "Nestune music player"
 authors = ["Nestune"]
 edition = "2021"
