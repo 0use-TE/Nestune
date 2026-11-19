@@ -80,6 +80,46 @@ it('preserves concurrent paint submissions that touch the same tile', async () =
   expect(canvas.readCanvas().revision).toBe(2);
 });
 
+it('migrates older marks in display order beneath newer paint and preserves other canvas records', async () => {
+  const { wallTileImage } = await import('@/server/canvas-wall');
+  const sprite = (r: number, g: number, b: number, alpha = 1) =>
+    sharp({ create: { width: 40, height: 40, channels: 4, background: { r, g, b, alpha } } }).png().toBuffer();
+  const legacy = { x: 512, y: 100, graffiti: true, boardWidth: 20 };
+  const red = await sprite(255, 0, 0);
+  const first = canvas.addCanvasImage(1, red, legacy);
+  const original = first.records[0];
+  if (original.kind !== 'image') throw new Error('Missing legacy image');
+  canvas.addCanvasImage(2, await sprite(0, 0, 255, .5), legacy);
+  const note = canvas.addCanvasTool(1, { kind: 'note', text: '还在墙上', x: 50, y: 50 }).records.at(-1);
+  await canvas.addCanvasWallPaint(await sprite(0, 255, 0), { x: 515, y: 100, boardWidth: 4 });
+
+  expect(await canvas.migrateLegacyCanvasWall()).toEqual({ migrated: 2, tiles: 2 });
+  const migrated = canvas.readCanvas();
+  expect(migrated.records).toEqual([note]);
+  const rightTile = migrated.wall!.find(tile => tile.x === 1)!;
+  const image = Buffer.from(await wallTileImage(1, 0, rightTile.version).arrayBuffer());
+  const pixel = async (left: number) => [...await sharp(image).extract({ left, top: 200, width: 1, height: 1 }).raw().toBuffer()];
+  expect(await pixel(0)).toEqual([126, 0, 128, 255]);
+  expect(await pixel(6)).toEqual([0, 255, 0, 255]);
+  expect(fs.readFileSync(path.join(folder, 'canvas-images', original.imageFile))).toEqual(red);
+  expect(await canvas.migrateLegacyCanvasWall()).toEqual({ migrated: 0, tiles: 2 });
+  expect(canvas.readCanvas().revision).toBe(migrated.revision);
+});
+
+it('leaves the entire previous wall available when an older image cannot be read', async () => {
+  const png = await sharp({ create: { width: 20, height: 20, channels: 4, background: '#c46f48' } }).png().toBuffer();
+  const first = canvas.addCanvasImage(1, png, { x: 50, y: 50, graffiti: true });
+  const before = canvas.addCanvasImage(2, png, { x: 70, y: 50, graffiti: true });
+  const missing = before.records[1];
+  if (missing.kind !== 'image') throw new Error('Missing fixture image');
+  fs.unlinkSync(path.join(folder, 'canvas-images', missing.imageFile));
+  await expect(canvas.migrateLegacyCanvasWall()).rejects.toThrow('ENOENT');
+  expect(canvas.readCanvas()).toEqual(before);
+  const valid = first.records[0];
+  if (valid.kind !== 'image') throw new Error('Missing fixture image');
+  expect(canvas.canvasImage(valid.imageFile).status).toBe(200);
+});
+
 it('shares one persistent board, preserves concurrent additions and attributes their original posters', async () => {
   await Promise.all([canvas.addRecord(1, { songId: '101', x: 150, y: 200 }), canvas.addRecord(2, { albumId: '7', kind: 'album', x: 550, y: 400 })]);
   const shared = canvas.readCanvas();

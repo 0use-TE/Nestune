@@ -7,6 +7,7 @@ import { all, one, run } from './db';
 import { fail } from './http';
 
 type Position = { x: number; y: number; width?: number };
+type LegacyPaint = { bytes: Buffer; position: Position; dimensions: { width: number; height: number } };
 type Patch = { x: number; y: number; left: number; top: number; width: number; height: number; rgba: Buffer };
 type TileUpdate = CanvasWallTile & { previous?: string; png?: Buffer };
 const MAX_TILES_PER_PAINT = 64;
@@ -22,12 +23,15 @@ function currentTile(x: number, y: number) {
   return one<{ version: string; png: Uint8Array }>('SELECT version,png FROM canvas_wall_tiles WHERE x=? AND y=?', x, y);
 }
 
-async function paintPatches(bytes: Buffer, position: Position): Promise<Patch[]> {
+async function paintPatches(bytes: Buffer, position: Position, expected?: LegacyPaint['dimensions']): Promise<Patch[]> {
   if (!bytes.length || bytes.length > GRAFFITI_PNG_MAX_BYTES) throw fail(413, '图片不能超过 3 MB');
   const source = sharp(bytes, { limitInputPixels: MAX_GRAFFITI_SIDE ** 2 });
   const metadata = await source.metadata().catch(() => { throw fail(400, '涂鸦 PNG 无法读取'); });
   if (metadata.format !== 'png' || metadata.width > MAX_GRAFFITI_SIDE || metadata.height > MAX_GRAFFITI_SIDE) {
     throw fail(400, '涂鸦需要尺寸有效的 PNG 图片');
+  }
+  if (expected && (metadata.width !== expected.width || metadata.height !== expected.height)) {
+    throw fail(400, '历史涂鸦的图片尺寸与记录不符');
   }
   const worldWidth = position.width ?? Math.max(12, metadata.width / 2);
   const worldHeight = worldWidth * metadata.height / metadata.width;
@@ -62,44 +66,81 @@ async function paintPatches(bytes: Buffer, position: Position): Promise<Patch[]>
       }
     }
   }
-  if (!patches.length) throw fail(400, '这张涂鸦没有可合成的喷漆');
   return patches;
+}
+
+function blendPatch(patch: Patch, previous?: Uint8Array) {
+  const { width, height, left, top, rgba } = patch;
+  return (previous ? sharp(previous) : sharp(emptyTile))
+    .composite([{ input: rgba, left, top, raw: { width, height, channels: 4 } }]).png().toBuffer();
+}
+
+function tileUpdate(x: number, y: number, png: Buffer, previous?: string): TileUpdate {
+  const version = createHash('sha256').update(png).digest('hex').slice(0, 32);
+  return { x, y, previous, version, png: version !== previous ? png : undefined };
 }
 
 async function blendPatches(patches: Patch[]): Promise<TileUpdate[]> {
   const updates: TileUpdate[] = [];
-  for (const { x, y, width, height, left, top, rgba } of patches) {
+  for (const patch of patches) {
+    const { x, y } = patch;
     const existing = currentTile(x, y);
-    const base = existing ? sharp(existing.png) : sharp(emptyTile);
-    const png = await base.composite([{ input: rgba, left, top, raw: { width, height, channels: 4 } }]).png().toBuffer();
-    const version = createHash('sha256').update(png).digest('hex').slice(0, 32);
-    updates.push({ x, y, previous: existing?.version, version, png: version !== existing?.version ? png : undefined });
+    updates.push(tileUpdate(x, y, await blendPatch(patch, existing?.png), existing?.version));
   }
   return updates;
+}
+
+function writeTiles(updates: TileUpdate[]) {
+  for (const { x, y, previous } of updates) {
+    const before = one<{ version: string }>('SELECT version FROM canvas_wall_tiles WHERE x=? AND y=?', x, y);
+    if (before?.version !== previous) throw new UpdatedTile();
+  }
+  for (const { x, y, version, png } of updates) {
+    if (!png) continue;
+    run(`INSERT INTO canvas_wall_tiles(x,y,version,png) VALUES(?,?,?,?)
+      ON CONFLICT(x,y) DO UPDATE SET version=excluded.version,png=excluded.png`, x, y, version, png);
+  }
 }
 
 // PNG decoding is asynchronous. Check tile versions inside the transaction immediately before writing.
 export async function compositeWall<T>(bytes: Buffer, position: Position, commit: (apply: () => void) => T): Promise<T> {
   const patches = await paintPatches(bytes, position);
+  if (!patches.length) throw fail(400, '这张涂鸦没有可合成的喷漆');
   for (let attempt = 0; attempt < 4; attempt++) {
     const updates = await blendPatches(patches);
     try {
-      return commit(() => {
-        for (const tile of updates) {
-          const before = one<{ version: string }>('SELECT version FROM canvas_wall_tiles WHERE x=? AND y=?', tile.x, tile.y);
-          if (before?.version !== tile.previous) throw new UpdatedTile();
-        }
-        for (const { x, y, version, png } of updates) {
-          if (!png) continue;
-          run(`INSERT INTO canvas_wall_tiles(x,y,version,png) VALUES(?,?,?,?)
-            ON CONFLICT(x,y) DO UPDATE SET version=excluded.version,png=excluded.png`, x, y, version, png);
-        }
-      });
+      return commit(() => writeTiles(updates));
     } catch (error) {
       if (!(error instanceof UpdatedTile)) throw error;
     }
   }
   throw fail(409, '这片墙面正在被其他人涂鸦，请再点一次完成');
+}
+
+export async function stageLegacyWall(paints: AsyncIterable<LegacyPaint>) {
+  const baked = new Map<string, { x: number; y: number; png: Buffer }>();
+  for await (const { bytes, position, dimensions } of paints) {
+    for (const patch of await paintPatches(bytes, position, dimensions)) {
+      const { x, y } = patch;
+      const key = `${x}:${y}`;
+      const png = await blendPatch(patch, baked.get(key)?.png);
+      baked.set(key, { x, y, png });
+    }
+  }
+  const updates: TileUpdate[] = [];
+  for (const { x, y, png } of baked.values()) {
+    // Paint already stored as tiles sits above all legacy marks on the current wall.
+    const latest = currentTile(x, y);
+    const combined = latest ? await sharp(png).composite([{ input: Buffer.from(latest.png) }]).png().toBuffer() : png;
+    updates.push(tileUpdate(x, y, combined, latest?.version));
+  }
+  return () => {
+    try { writeTiles(updates); }
+    catch (error) {
+      if (!(error instanceof UpdatedTile)) throw error;
+      throw fail(409, '迁移期间墙面有更新，请重新开始迁移');
+    }
+  };
 }
 
 class UpdatedTile extends Error {}

@@ -2,6 +2,7 @@ import { WORLD_LIMIT } from '@/lib/canvas-camera';
 import { GRAFFITI_PNG_MAX_BYTES, MAX_GRAFFITI_SIDE, MAX_GRAFFITI_WORLD_WIDTH } from '@/lib/canvas-graffiti';
 import { randomInt, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import type { CanvasBase, CanvasItem, CanvasRecord, CanvasState } from '@/lib/canvas-types';
 import { CANVAS_MOMENT_FONTS, isCanvasGraffiti, isCanvasMusic } from '@/lib/canvas-types';
 import type { Song } from '@/lib/types';
@@ -15,7 +16,7 @@ import { enrichSong } from './recordings';
 import { dir } from './config';
 import { sniffImage, avatarMime } from './avatar';
 import { fail, str } from './http';
-import { compositeWall, wallTiles } from './canvas-wall';
+import { compositeWall, stageLegacyWall, wallTiles } from './canvas-wall';
 
 const storageKey = () => 'canvas:shared:v1';
 const publicSong = (song: Song) => !isUploadSong(song.id) || !!one("SELECT 1 FROM uploaded_songs s JOIN users u ON u.id=s.owner_id WHERE s.id=? AND s.visibility='public' AND u.status='active'", song.id);
@@ -42,12 +43,20 @@ export function readCanvas(): CanvasState {
   if (wall.length) state.wall = wall;
   return state;
 }
-function mutate(change: (state: CanvasState) => void) {
+function canvasTransaction<T>(update: () => T) {
   const database = db(); database.exec('BEGIN IMMEDIATE');
   try {
-    const state = readCanvas(); change(state); state.revision++;
-    kvSet(storageKey(), JSON.stringify({ revision: state.revision, records: state.records })); database.exec('COMMIT'); return state;
+    const result = update();
+    database.exec('COMMIT');
+    return result;
   } catch (error) { database.exec('ROLLBACK'); throw error; }
+}
+function mutate(change: (state: CanvasState) => void) {
+  return canvasTransaction(() => {
+    const state = readCanvas(); change(state); state.revision++;
+    kvSet(storageKey(), JSON.stringify({ revision: state.revision, records: state.records }));
+    return state;
+  });
 }
 function coordinate(value: unknown) {
   if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > WORLD_LIMIT) throw fail(400, '物件位置无效');
@@ -181,6 +190,31 @@ export function removeRecord(_viewer: number, recordId: unknown) {
 }
 export const CANVAS_IMAGE_MAX = GRAFFITI_PNG_MAX_BYTES;
 const imagePattern = /^[a-f0-9-]{36}\.(png|jpg|webp|gif)$/;
+export async function migrateLegacyCanvasWall() {
+  const before = kvGet(storageKey());
+  const state = readStoredCanvas();
+  const legacy = state.records.filter(isCanvasGraffiti);
+  if (!legacy.length) return { migrated: 0, tiles: wallTiles().length };
+  async function* sources() {
+    for (const { imageFile, x, y, graffiti } of legacy) {
+      if (!imagePattern.test(imageFile)) throw new Error(`历史涂鸦文件名无效：${imageFile}`);
+      yield {
+        bytes: await readFile(dir('canvas-images', imageFile)),
+        position: { x, y, width: graffiti.boardWidth ?? Math.max(12, graffiti.width / 2) },
+        dimensions: { width: graffiti.width, height: graffiti.height },
+      };
+    }
+  }
+  const writeWall = await stageLegacyWall(sources());
+  return canvasTransaction(() => {
+    if (kvGet(storageKey()) !== before) throw fail(409, '迁移期间画布有更新，请重新开始迁移');
+    writeWall();
+    const records = state.records.filter(item => !isCanvasGraffiti(item));
+    kvSet(storageKey(), JSON.stringify({ revision: state.revision + 1, records }));
+    return { migrated: legacy.length, tiles: wallTiles().length };
+  });
+}
+
 function discardImage(item: CanvasItem) {
   if (item.kind === 'image' && imagePattern.test(item.imageFile)) {
     try { fs.rmSync(dir('canvas-images', item.imageFile), { force: true }); } catch { /* Unreferenced files cannot be served. */ }
