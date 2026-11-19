@@ -1,13 +1,18 @@
 package net.ouse.nestune
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.app.DownloadManager
+import android.graphics.Color
 import android.os.Environment
 import android.net.Uri
 import android.os.Build
 import android.webkit.WebView
+import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import android.widget.FrameLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -30,6 +35,24 @@ internal object NestuneOrigin {
 class MainActivity : TauriActivity() {
     private val clientUpdates by lazy { ClientUpdates(this) }
     private val musicDownloads by lazy { MusicDownloads(this) }
+    private var darkStatusBar: Boolean? = null
+    private var statusBackdrop: View? = null
+    private var statusInset = 0
+
+    @Suppress("DEPRECATION")
+    private fun syncStatusBar() {
+        val dark = darkStatusBar ?: ((resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES)
+        val color = if (dark) Color.rgb(15, 15, 14) else Color.rgb(251, 250, 248)
+        if (Build.VERSION.SDK_INT >= 29) window.isStatusBarContrastEnforced = false
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.statusBarColor = Color.TRANSPARENT
+            statusBackdrop?.setBackgroundColor(color)
+        } else {
+            window.statusBarColor = color
+        }
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !dark
+    }
+
     override fun onWebViewCreate(webView: WebView) {
         super.onWebViewCreate(webView)
         if (Build.VERSION.SDK_INT >= 30) {
@@ -38,6 +61,12 @@ class MainActivity : TauriActivity() {
             ViewCompat.setOnApplyWindowInsetsListener(webView) { view, insets ->
                 val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
                 val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+                statusInset = bars.top
+                statusBackdrop?.let { backdrop ->
+                    if (backdrop.layoutParams.height != statusInset) {
+                        backdrop.layoutParams = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, statusInset, Gravity.TOP)
+                    }
+                }
                 val layout = view.layoutParams as? ViewGroup.MarginLayoutParams
                 val bottom = maxOf(bars.bottom, ime.bottom)
                 if (layout != null && (layout.leftMargin != bars.left || layout.topMargin != bars.top || layout.rightMargin != bars.right || layout.bottomMargin != bottom)) {
@@ -46,8 +75,19 @@ class MainActivity : TauriActivity() {
                 }
                 insets
             }
+            webView.post {
+                val content = findViewById<View>(android.R.id.content) as? FrameLayout
+                if (content != null && statusBackdrop == null) {
+                    val backdrop = View(this)
+                    backdrop.importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    content.addView(backdrop, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, statusInset, Gravity.TOP))
+                    statusBackdrop = backdrop
+                    syncStatusBar()
+                }
+            }
             ViewCompat.requestApplyInsets(webView)
         } else window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        syncStatusBar()
         NativeMediaService.webView = WeakReference(webView)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             WebViewCompat.addWebMessageListener(webView, "NestuneNative", setOf(NestuneOrigin.URL)) { _, message, origin, mainFrame, reply ->
@@ -72,6 +112,15 @@ class MainActivity : TauriActivity() {
                         return@addWebMessageListener
                     }
                     if (raw.length > 8192) return@addWebMessageListener
+                    if (data.optString("type") == "statusBarTheme") {
+                        when (data.optString("theme")) {
+                            "light" -> darkStatusBar = false
+                            "dark" -> darkStatusBar = true
+                            else -> return@addWebMessageListener
+                        }
+                        syncStatusBar()
+                        return@addWebMessageListener
+                    }
                     if (data.optString("type") == "clientInfo") {
                         val info = packageManager.getPackageInfo(packageName, 0)
                         val code = if (Build.VERSION.SDK_INT >= 28) info.longVersionCode else info.versionCode.toLong()

@@ -2,7 +2,7 @@
 .together-tabs.tabs{margin-top:0;flex:none}.friends-content{display:flex;flex-direction:column;flex:1;min-height:0}.together-users{min-height:0;flex:1;overflow:auto}.together-users .social-page{max-width:1000px}.friends-content>.note{margin-bottom:14px}
 #main:has(>.wrap>.music-canvas){padding:0;overflow:hidden}
 #main>.wrap:has(>.music-canvas){height:100%;max-width:none;padding:0}
-.music-canvas{height:100%;position:relative;overflow:hidden;background:#f1eadb}
+.music-canvas{height:100%;position:relative;overflow:hidden;background:#bdbab4 url('/canvas-walls/concrete.webp') 0 0 / 920px repeat}
 .nc-board{position:absolute;inset:24px 24px 132px;user-select:none;-webkit-user-select:none;z-index:0;isolation:isolate}
 .nc-loading{position:absolute;inset:0;display:grid;place-items:center}
 .nc-record{--object-size:clamp(104px,16vw,188px);position:absolute;width:var(--object-size);aspect-ratio:1;transform:translate(-50%,-50%) rotate(var(--record-angle));cursor:grab;touch-action:none;-webkit-touch-callout:none;outline:none}
@@ -123,34 +123,16 @@
   src: url('/fonts/canvas-graffiti/zcool-qingke-huangyou.woff2') format('woff2');
   font-display: swap;
 }
-.nc-wall-clip {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
 .nc-wall {
+  display: block;
   position: absolute;
   inset: 0;
-  background: #bdbab4 url('/canvas-walls/concrete.webp') repeat;
-}
-.nc-wall-paint-layer {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
-.nc-wall-paint {
-  position: absolute;
-  transform: translate(-50%, -50%);
-}
-.nc-wall-tile {
-  position: absolute;
-}
-:is(.nc-wall-paint, .nc-wall-tile) img {
-  display: block;
-  width: 100%;
-  height: auto;
+.nc-wall:not([data-ready]) {
+  visibility: hidden;
 }
 .nc-canvas-image {
   position: relative;
@@ -188,7 +170,7 @@
 .nc-world.nc-painting > .nc-record {
   pointer-events: none;
 }
-.nc-world:has([data-graffiti-practice]) :is(.nc-record, .nc-wall-paint, .nc-wall-tile) {
+.nc-world:has([data-graffiti-practice]) .nc-record {
   visibility: hidden;
 }
 .nc-graffiti-custom-color,

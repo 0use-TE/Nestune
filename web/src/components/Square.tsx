@@ -1,12 +1,13 @@
 'use client';
 import { Select } from './Select';
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useCanvasCamera } from '@/lib/use-canvas-camera';
-import { CANVAS_DRAG_THRESHOLD, WORLD_LIMIT } from '@/lib/canvas-camera';
+import { CANVAS_DRAG_THRESHOLD, WORLD_LIMIT, type Camera } from '@/lib/canvas-camera';
 import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { useCanvasSync } from '@/lib/use-canvas-sync';
-import { LEGACY_WALL_TILE_PIXELS, WALL_TILE_SIZE } from '@/lib/canvas-wall';
+import { WALL_TILE_SIZE } from '@/lib/canvas-wall';
+import { CanvasWallPainter } from '@/lib/canvas-wall-painter';
 import { api, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
@@ -103,7 +104,9 @@ export function Square() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const board = useRef<HTMLDivElement>(null);
   const world = useRef<HTMLDivElement>(null);
-  const wall = useRef<HTMLDivElement>(null);
+  const wall = useRef<HTMLCanvasElement>(null);
+  const wallPainter = useRef<CanvasWallPainter | null>(null);
+  const [wallFailed, setWallFailed] = useState(false);
   const graffitiDock = useRef<HTMLDivElement>(null);
   const graffitiEditor = useRef<GraffitiEditorHandle>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -186,8 +189,29 @@ export function Square() {
     }, online ? 280 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [app.me?.id, kind, online, pickerPath, pickerRetry, savedAlbums]);
+  useLayoutEffect(() => {
+    if (!wall.current || !board.current) return;
+    const painter = new CanvasWallPainter(wall.current, board.current, setWallFailed);
+    wallPainter.current = painter;
+    return () => { painter.dispose(); wallPainter.current = null; };
+  }, []);
+  useLayoutEffect(() => {
+    const legacy = state.records.filter(isCanvasGraffiti).map(item => {
+      const width = item.graffiti.boardWidth ?? Math.max(12, item.graffiti.width / 2);
+      const height = width * item.graffiti.height / item.graffiti.width;
+      return { key: item.id, src: `/api/canvas/images/${item.imageFile}`,
+        left: item.x - width / 2, top: item.y - height / 2, width, height };
+    });
+    const tiles = (state.wall ?? []).map(tile => ({
+      key: `${tile.x}:${tile.y}`, src: `/api/canvas/wall/${tile.x}/${tile.y}?v=${tile.version}`,
+      left: tile.x * WALL_TILE_SIZE, top: tile.y * WALL_TILE_SIZE, width: WALL_TILE_SIZE, height: WALL_TILE_SIZE,
+    }));
+    wallPainter.current?.setMarks([...legacy, ...tiles]);
+  }, [state.records, state.wall]);
+  const paintWall = useCallback((view: Camera) => wallPainter.current?.setView(view), []);
+  const practiceWall = useCallback((practicing: boolean) => wallPainter.current?.setPractice(practicing), []);
   const camera = useCanvasCamera({
-    board, world, wall, user: app.me?.id,
+    board, world, onFrame: paintWall, user: app.me?.id,
     isDragging: () => !!drag.current?.active,
     onGesture: () => {
       if (graffitiEditor.current) graffitiEditor.current.cancelGesture();
@@ -416,32 +440,6 @@ export function Square() {
   useEffect(() => { if (loaded && playGuideId && !playbackGuideItem) setPlayGuideId(null); }, [loaded, playGuideId, playbackGuideItem]);
   const receivingItem = ghost?.item ?? insertion?.item ?? (nativeSource ? sourceItem(nativeSource) : null);
   const receivingCollection = receivingItem && isCanvasMusic(receivingItem) && receivingItem.kind !== 'song';
-  const visibleWall = useMemo(() => {
-    if (!board.current || !state.wall?.length) return [];
-    const { x, y, zoom } = camera.camera;
-    const left = -x / zoom, top = -y / zoom;
-    const right = left + board.current.clientWidth / zoom, bottom = top + board.current.clientHeight / zoom;
-    // Keep the adjacent tiles available while the camera tracks a pan.
-    const minX = Math.floor(left / WALL_TILE_SIZE) - 1, maxX = Math.floor(right / WALL_TILE_SIZE) + 1;
-    const minY = Math.floor(top / WALL_TILE_SIZE) - 1, maxY = Math.floor(bottom / WALL_TILE_SIZE) + 1;
-    return state.wall.filter(tile => tile.x >= minX && tile.x <= maxX && tile.y >= minY && tile.y <= maxY);
-  }, [camera.camera, state.wall]);
-  const paintLayer = useMemo(() => (
-    <div className="nc-wall-paint-layer" aria-label="墙面涂鸦">
-      {state.records.filter(isCanvasGraffiti).map(item =>
-          <div key={item.id} data-canvas-paint={item.id} className="nc-wall-paint" style={{
-            left: item.x, top: item.y, width: item.graffiti.boardWidth ?? Math.max(12, item.graffiti.width / 2),
-          }}>
-            <CanvasImage src={`/api/canvas/images/${item.imageFile}`} alt={`${item.ownerName ?? '用户'}的墙面涂鸦`}
-              width={item.graffiti.width} height={item.graffiti.height} />
-          </div>)}
-      {visibleWall.map(tile => <div key={`${tile.x}:${tile.y}`} data-wall-tile={`${tile.x}:${tile.y}`} className="nc-wall-tile"
-        style={{ left: tile.x * WALL_TILE_SIZE, top: tile.y * WALL_TILE_SIZE, width: WALL_TILE_SIZE, height: WALL_TILE_SIZE }}>
-        <CanvasImage key={tile.version} src={`/api/canvas/wall/${tile.x}/${tile.y}?v=${tile.version}`}
-          alt="墙面涂鸦" width={tile.pixels ?? LEGACY_WALL_TILE_PIXELS} height={tile.pixels ?? LEGACY_WALL_TILE_PIXELS} />
-      </div>)}
-    </div>
-  ), [state.records, visibleWall]);
   const liftedId = draggingId ?? insertion?.item.id;
   const actionItem = ghost || insertion ? null : selected;
   const auditioning = preview.active && !preview.active.loading ? preview.active.id : null;
@@ -464,14 +462,13 @@ export function Square() {
       </div>
   ), [state.records, liftedId, selected, auditioning, painting, actionItem, playingSong, begin, change, keyboardPlay, remove]);
   return <div className={`music-canvas ${dropOver ? 'nc-drop-over' : ''}`} aria-label="画布">
-    <div className="nc-wall-clip" aria-hidden="true"><div className="nc-wall" ref={wall} /></div>
+    <canvas className="nc-wall" ref={wall} role="img" aria-label="墙面涂鸦" />
     <div className={`nc-board ${camera.moving ? 'nc-panning' : ''} ${camera.spaceDown ? 'nc-space-pan' : ''}`} ref={board} {...camera.handlers} aria-label="共享音乐画布" aria-busy={!loaded} onPointerDown={event => { if (event.target === event.currentTarget) { setSelected(null); setTools(false); setEmojiPicker(false); } }}>
       {!loaded && <div className="nc-loading"><Loading label="正在加载画布" /></div>}
       <div className={`nc-world${graffiti ? ' nc-painting' : ''}`} ref={world}>
-      {paintLayer}
       {graffiti && <CanvasGraffiti key={app.me?.id} ref={graffitiEditor} accountId={app.me?.id} initialArea={graffiti} dock={graffitiDock.current}
         guideDepth={state.records.length + 1}
-        camera={camera.camera} movingView={camera.moving} getView={graffitiView} onZoom={camera.zoom}
+        camera={camera.camera} movingView={camera.moving} getView={graffitiView} onZoom={camera.zoom} onPracticeChange={practiceWall}
         onClose={() => setGraffiti(null)} onPublish={async (file, placed, keepEditor) => {
           await upload(file, placed, placed.width);
           if (!keepEditor) setGraffiti(null);
@@ -482,7 +479,8 @@ export function Square() {
     <div ref={graffitiDock} />
     {!graffiti && <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit([
       ...state.records, ...(state.wall ?? []).map(tile => ({ x: (tile.x + .5) * WALL_TILE_SIZE, y: (tile.y + .5) * WALL_TILE_SIZE })),
-    ])}><Icon n="refresh" s={17} /></button></div>}
+    ])}><Icon n="refresh" s={17} /></button>{wallFailed && <button className="ib" aria-label="重试加载墙面涂鸦"
+      title="重试加载墙面涂鸦" onClick={() => wallPainter.current?.retry()}><Icon n="refresh" s={17} /></button>}</div>}
     {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
     {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />涂鸦</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setFilter(''); setPicker(true); setTools(false); }}><Icon n="note" />添加音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}

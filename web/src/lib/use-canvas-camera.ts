@@ -5,17 +5,14 @@ import { CANVAS_DRAG_THRESHOLD, fitCamera, worldPoint, zoomAt, type Camera } fro
 type Point = { x: number; y: number };
 type Contact = Point & { panFrom?: Point };
 type Surface = RefObject<HTMLDivElement | null>;
-const WALL_PADDING = 128;
-
-export function useCanvasCamera({ board, world, wall, user, onGesture, isDragging }: {
-  board: Surface; world: Surface; wall: Surface; user: number | undefined;
+export function useCanvasCamera({ board, world, onFrame, user, onGesture, isDragging }: {
+  board: Surface; world: Surface; onFrame: (view: Camera) => void; user: number | undefined;
   onGesture: () => void; isDragging: () => boolean;
 }) {
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const live = useRef(camera);
   const frame = useRef<number | null>(null);
   const paintedZoom = useRef(1);
-  const wallAnchor = useRef<Camera | null>(null);
   const gesture = useRef(onGesture); gesture.current = onGesture;
   const pointers = useRef(new Map<number, Contact>());
   const pointerType = useRef('');
@@ -29,24 +26,12 @@ export function useCanvasCamera({ board, world, wall, user, onGesture, isDraggin
     frame.current = null;
     const view = live.current;
     if (world.current) world.current.style.transform = `translate3d(${view.x}px, ${view.y}px, 0) scale(${view.zoom})`;
-    if (wall.current) {
-      const style = wall.current.style;
-      let anchor = wallAnchor.current;
-      // Move the rasterized wall within its padding. Repaint only when the buffer runs out or the scale changes.
-      if (!anchor || anchor.zoom !== view.zoom || Math.abs(view.x - anchor.x) >= WALL_PADDING || Math.abs(view.y - anchor.y) >= WALL_PADDING) {
-        const tile = 920 * view.zoom;
-        if (!anchor) style.inset = `-${WALL_PADDING}px`;
-        if (anchor?.zoom !== view.zoom) style.backgroundSize = `${tile}px`;
-        style.backgroundPosition = `${(view.x + WALL_PADDING) % tile}px ${(view.y + WALL_PADDING) % tile}px`;
-        anchor = wallAnchor.current = view;
-      }
-      style.transform = `translate3d(${view.x - anchor.x}px, ${view.y - anchor.y}px, 0)`;
-    }
+    onFrame(view);
     if (paintedZoom.current !== view.zoom) {
       paintedZoom.current = view.zoom;
       setCamera(view);
     }
-  }, [wall, world]);
+  }, [onFrame, world]);
   const commit = useCallback(() => {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     paint();

@@ -143,6 +143,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const r = document.documentElement;
     if (theme === 'auto') r.removeAttribute('data-theme'); else r.dataset.theme = theme;
+    const bridge = (window as Window & { NestuneNative?: { postMessage: (data: string) => void } }).NestuneNative;
+    if (!bridge) return;
+    const colorScheme = window.matchMedia('(prefers-color-scheme: dark)');
+    const syncStatusBar = () => bridge.postMessage(JSON.stringify({
+      type: 'statusBarTheme', theme: theme === 'auto' ? colorScheme.matches ? 'dark' : 'light' : theme,
+    }));
+    syncStatusBar();
+    if (theme !== 'auto') return;
+    colorScheme.addEventListener('change', syncStatusBar);
+    return () => colorScheme.removeEventListener('change', syncStatusBar);
   }, [theme]);
   const setTheme = (t: Theme) => { setThemeState(t); lsSet('nt-theme', t); };
   const setShowTr = (v: boolean) => { setShowTrState(v); lsSet('nt-tr', v ? '1' : '0'); };

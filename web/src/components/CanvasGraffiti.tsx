@@ -81,10 +81,10 @@ const effectControls = [
   { key: 'outlineWidth', label: '描边宽度', min: 1, max: 18, suffix: '%' },
 ] as const;
 
-export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movingView, guideDepth, getView, onZoom, onClose, onPublish }: {
+export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movingView, guideDepth, getView, onZoom, onPracticeChange, onClose, onPublish }: {
   ref: Ref<GraffitiEditorHandle>; accountId?: number; initialArea: GraffitiArea; dock: HTMLElement | null;
   camera: Camera; movingView: boolean; guideDepth: number;
-  getView: () => GraffitiArea | null; onZoom: (factor: number) => void;
+  getView: () => GraffitiArea | null; onZoom: (factor: number) => void; onPracticeChange: (value: boolean) => void;
   onClose: () => void; onPublish: (file: File, placement: GraffitiPlacement, keepEditor: boolean) => Promise<void>;
 }) {
   const [area, setArea] = useState(initialArea);
@@ -114,6 +114,10 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     catch { return 'intro'; }
   });
   const inGuide = guide !== null && guide !== 'intro';
+  useLayoutEffect(() => {
+    onPracticeChange(inGuide);
+    return () => onPracticeChange(false);
+  }, [inGuide, onPracticeChange]);
   const [lessonImage, setLessonImage] = useState<StencilImage | null>(null);
   const [paintedLayers, setPaintedLayers] = useState<ReadonlySet<number>>(() => new Set());
   const [coverage, setCoverage] = useState(0);
