@@ -1,5 +1,3 @@
-import { VERSION } from './version';
-
 export type ReleaseNote = {
   version: string;
   date: string;
@@ -10,7 +8,7 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
-    version: VERSION,
+    version: '1.2.21',
     date: '2026 年 11 月 19 日',
     title: '手机画布缩放与状态栏修复',
     summary: '双指缩放时墙面保持可见，涂鸦分块边缘连成一体。安卓顶部状态栏跟随应用的深浅主题。',

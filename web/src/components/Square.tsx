@@ -8,6 +8,7 @@ import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { useCanvasSync } from '@/lib/use-canvas-sync';
 import { WALL_TILE_SIZE } from '@/lib/canvas-wall';
 import { CanvasWallPainter } from '@/lib/canvas-wall-painter';
+import { CANVAS_WALLPAPERS, DEFAULT_CANVAS_SETTINGS } from '@/lib/canvas-settings';
 import { api, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
@@ -189,12 +190,16 @@ export function Square() {
     }, online ? 280 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [app.me?.id, kind, online, pickerPath, pickerRetry, savedAlbums]);
+  const canvasSettings = state.settings ?? DEFAULT_CANVAS_SETTINGS;
+  const wallpaperId = canvasSettings.wallpaper;
+  const wallpaper = CANVAS_WALLPAPERS[wallpaperId];
   useLayoutEffect(() => {
     if (!wall.current || !board.current) return;
     const painter = new CanvasWallPainter(wall.current, board.current, setWallFailed);
     wallPainter.current = painter;
     return () => { painter.dispose(); wallPainter.current = null; };
   }, []);
+  useLayoutEffect(() => { wallPainter.current?.setWallpaper(wallpaperId); }, [wallpaperId]);
   useLayoutEffect(() => {
     const legacy = state.records.filter(isCanvasGraffiti).map(item => {
       const width = item.graffiti.boardWidth ?? Math.max(12, item.graffiti.width / 2);
@@ -461,7 +466,8 @@ export function Square() {
         {actionItem === item.id && <div className="nc-record-actions">{isCanvasMusic(item) && <button className="ib" aria-label={`拿走并播放${item.name}`} onClick={() => keyboardPlay(item)}><Icon n="play" s={16} /></button>}<button className="ib" aria-label={`取走${item.name}`} onClick={() => remove(item.id)}><Icon n="trash" s={16} /></button></div>}
       </div>
   ), [state.records, liftedId, selected, auditioning, painting, actionItem, playingSong, begin, change, keyboardPlay, remove]);
-  return <div className={`music-canvas ${dropOver ? 'nc-drop-over' : ''}`} aria-label="画布">
+  return <div className={`music-canvas ${dropOver ? 'nc-drop-over' : ''}`} aria-label="画布"
+    style={{ backgroundColor: wallpaper.color, backgroundImage: wallpaper.image ? `url(${wallpaper.image})` : 'none' }}>
     <canvas className="nc-wall" ref={wall} role="img" aria-label="墙面涂鸦" />
     <div className={`nc-board ${camera.moving ? 'nc-panning' : ''} ${camera.spaceDown ? 'nc-space-pan' : ''}`} ref={board} {...camera.handlers} aria-label="共享音乐画布" aria-busy={!loaded} onPointerDown={event => { if (event.target === event.currentTarget) { setSelected(null); setTools(false); setEmojiPicker(false); } }}>
       {!loaded && <div className="nc-loading"><Loading label="正在加载画布" /></div>}
@@ -470,6 +476,7 @@ export function Square() {
         guideDepth={state.records.length + 1}
         camera={camera.camera} movingView={camera.moving} getView={graffitiView} onZoom={camera.zoom} onPracticeChange={practiceWall}
         onClose={() => setGraffiti(null)} onPublish={async (file, placed, keepEditor) => {
+          if (!(stateRef.current.settings ?? DEFAULT_CANVAS_SETTINGS).allowGraffiti) throw new Error('画布暂时关闭了涂鸦发布');
           await upload(file, placed, placed.width);
           if (!keepEditor) setGraffiti(null);
         }} />}
@@ -483,7 +490,15 @@ export function Square() {
       title="重试加载墙面涂鸦" onClick={() => wallPainter.current?.retry()}><Icon n="refresh" s={17} /></button>}</div>}
     {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
-    {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />涂鸦</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setFilter(''); setPicker(true); setTools(false); }}><Icon n="note" />添加音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
+    {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具">
+      <div className="nc-tools-quota sub sm" role="presentation">我的物品 {state.records.filter(item => item.ownerId === app.me?.id && !isCanvasGraffiti(item)).length} / {canvasSettings.personalLimit}</div>
+      <button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button>
+      <button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />{canvasSettings.allowGraffiti ? '涂鸦' : '涂鸦（暂停发布）'}</button>
+      <button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button>
+      <button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button>
+      <button role="menuitem" onClick={() => { setFilter(''); setPicker(true); setTools(false); }}><Icon n="note" />添加音乐</button>
+      <button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button>
+    </div>}
     <input type="file" ref={fileInput} hidden accept="image/png,image/jpeg,image/webp,image/gif" aria-label="选择画布图片" onChange={event => { const file = event.target.files?.[0]; if (file) void upload(file); event.target.value = ''; }} />
     {emojiPicker && <div className="nc-emoji-picker panel" role="dialog" aria-label="选择表情"><button className="ib nc-emoji-close" aria-label="关闭表情" onClick={() => setEmojiPicker(false)}><Icon n="x" s={16} /></button>{EMOJI.map(emoji => <button key={emoji} disabled={adding} aria-label={`贴上${emoji}`} onClick={() => void tool({ kind: 'emoji', emoji })}>{emoji}</button>)}</div>}
     {adding && <div className="nc-saving"><Loading inline label="正在放到画布" /></div>}

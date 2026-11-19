@@ -4,6 +4,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { CANVAS_MOMENT_FONTS, isCanvasMusic } from '@/lib/canvas-types';
+import { DEFAULT_CANVAS_SETTINGS } from '@/lib/canvas-settings';
 
 vi.mock('@/server/netease', () => {
   const track = (id: string) => ({ id, name: 'Song ' + id, duration: 180, artists: [{ id: '1', name: 'Artist' }], album: { id: '7', name: 'Album' }, cover: null });
@@ -25,6 +26,35 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 afterAll(() => { database.db().close(); fs.rmSync(folder, { recursive: true, force: true }); vi.unstubAllEnvs(); });
+
+it('enforces changed personal and shared quotas without removing existing objects', async () => {
+  const { saveCanvasSettings } = await import('@/server/canvas-settings');
+  const { readCanvasSync } = await import('@/server/canvas-sync');
+  const note = { kind: 'note', text: 'QA', x: 1, y: 2 };
+  const initial = readCanvasSync(null);
+  for (let i = 0; i < 30; i++) canvas.addCanvasTool(1, note);
+  expect(() => canvas.addCanvasTool(1, note)).toThrow('每人最多放置 30 个物件');
+  const next = saveCanvasSettings({ ...DEFAULT_CANVAS_SETTINGS, wallpaper: 'plaster', personalLimit: 31, totalLimit: 31 });
+  expect(readCanvasSync(initial.token)).toMatchObject({ kind: 'delta', settings: next });
+  canvas.addCanvasTool(1, note);
+  expect(() => canvas.addCanvasTool(2, note)).toThrow('画布已满');
+  saveCanvasSettings({ ...next, personalLimit: 1, totalLimit: 2 });
+  expect(canvas.readCanvas().records).toHaveLength(31);
+  expect(() => saveCanvasSettings({ ...next, wallpaper: '__proto__' })).toThrow('画布壁纸或涂鸦设置无效');
+  expect(() => saveCanvasSettings({ ...next, personalLimit: 32 })).toThrow('每人上限');
+  canvas.removeRecord(1, canvas.readCanvas().records[0].id);
+  expect(canvas.readCanvas().records).toHaveLength(30);
+});
+
+it('pauses new graffiti while leaving existing paint readable', async () => {
+  const { saveCanvasSettings } = await import('@/server/canvas-settings');
+  const paint = await sharp({ create: { width: 24, height: 24, channels: 4, background: '#e02020' } }).png().toBuffer();
+  const position = { x: 75, y: 80, boardWidth: 12 };
+  const before = await canvas.addCanvasWallPaint(paint, position);
+  saveCanvasSettings({ ...DEFAULT_CANVAS_SETTINGS, allowGraffiti: false });
+  expect(() => canvas.addCanvasWallPaint(paint, position)).toThrow('画布暂时关闭了涂鸦发布');
+  expect(canvas.readCanvas().wall).toEqual(before.wall);
+});
 
 it('updates wall pixels in place across tile boundaries and syncs tile versions', async () => {
   const { readCanvasSync } = await import('@/server/canvas-sync');
@@ -196,7 +226,7 @@ it('rejects invalid coordinates, local files, unavailable queue entries and priv
   await expect(canvas.addRecord(1, { songId: 'device-123', x: 100, y: 100 })).rejects.toThrow();
   await expect(canvas.addRecord(1, { kind: 'queue', songIds: ['101','999'], x: 100, y: 100 })).rejects.toThrow();
   await expect(canvas.addRecord(1, { songId: 'upload-' + 'a'.repeat(32), x: 100, y: 100 })).rejects.toThrow('设为公开');
-  expect(canvas.readCanvas()).toEqual({ revision: 0, records: [] });
+  expect(canvas.readCanvas()).toEqual({ revision: 0, records: [], settings: DEFAULT_CANVAS_SETTINGS });
 });
 it('stores notes and emoji on the same board and allows another user to take them away', () => {
   const withNote = canvas.addCanvasTool(1, { kind: 'note', text: '今天也要好好听歌。', color: 'butter', x: 100, y: 100 });

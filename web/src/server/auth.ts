@@ -11,7 +11,7 @@ export const sha = (s: string) => crypto.createHash('sha256').update(s).digest('
 export type UserRow = {
   id: number; username: string; display_name: string; bio: string; email: string; avatar: string;
   profile_public?: number; pwd_hash: string; status: 'pending' | 'active' | 'disabled'; act_hash: string; act_expires: number;
-  max_quality: string; can_save: number; created_at: number; last_login_at: number;
+  max_quality: string; can_save: number; is_admin?: number; created_at: number; last_login_at: number;
 };
 
 /* ---------- passwords ---------- */
@@ -104,11 +104,20 @@ export async function requireUserSession() {
 export async function requireUser(): Promise<UserRow> {
   return (await requireUserSession()).user;
 }
+
+export const isAccountAdmin = (user?: UserRow) => user?.status === 'active' && user.is_admin === 1;
+
+export async function adminAccess() {
+  if (isAccountAdmin((await currentUserSession())?.user)) return 'account';
+  if (adminKey() && await findSession('admin')) return 'key';
+  return null;
+}
+
 export async function requireAdmin() {
+  const access = await adminAccess();
+  if (access) return access;
   if (!adminKey()) throw fail(503, '服务端尚未配置 ADMIN_KEY', 'admin_unconfigured');
-  const s = await findSession('admin');
-  if (!s) throw fail(401, '需要管理密钥', 'admin_required');
-  return s;
+  throw fail(401, '需要管理员账号或管理密钥', 'admin_required');
 }
 
 export const kickUser = (userId: number) => run("DELETE FROM sessions WHERE user_id=? AND kind='user'", userId);

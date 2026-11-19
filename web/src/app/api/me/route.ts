@@ -1,4 +1,4 @@
-import { publicUser } from '@/server/auth';
+import { isAccountAdmin, publicUser } from '@/server/auth';
 import { one, run } from '@/server/db';
 import { body, fail } from '@/server/http';
 import { userRoute } from '@/server/guard';
@@ -9,7 +9,7 @@ const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/;
 export const GET = userRoute(async (_req, _ctx, u) => {
   const favorites = one<{ n: number }>('SELECT COUNT(*) n FROM favorites WHERE user_id=?', u.id)!.n;
   const plays = one<{ n: number }>('SELECT COUNT(*) n FROM history WHERE user_id=?', u.id)!.n;
-  return { user: publicUser(u), stats: { favorites, plays } };
+  return { user: publicUser(u), admin: isAccountAdmin(u), stats: { favorites, plays } };
 });
 
 export const PATCH = userRoute(async (req, _ctx, u) => {

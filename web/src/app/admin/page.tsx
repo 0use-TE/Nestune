@@ -1,4 +1,6 @@
 'use client';
+import Link from 'next/link';
+import { CanvasAdmin } from '@/components/CanvasAdmin';
 import { Select } from '@/components/Select';
 import { QqSourceAdmin } from '@/components/QqSourceAdmin';
 import { Loading } from '@/components/Loading';
@@ -8,20 +10,21 @@ import { Icon } from '@/components/Icon';
 import { QUALITY_LABEL, fmtBytes, fmtDateTime } from '@/lib/util';
 
 type Toast = (m: string) => void;
-const TABS = [['overview', '概览', 'dash'], ['users', '用户', 'users'], ['source', '音源账号', 'cloud'], ['storage', '缓存与本地库', 'disk'], ['jobs', '转换任务', 'task'], ['system', '系统设置', 'set']] as const;
+const TABS = [['overview', '概览', 'dash'], ['canvas', '画布管理', 'picture'], ['users', '用户', 'users'], ['source', '音源账号', 'cloud'], ['storage', '缓存与本地库', 'disk'], ['jobs', '转换任务', 'task'], ['system', '系统设置', 'set']] as const;
 type Tab = (typeof TABS)[number][0];
 
 export default function AdminPage() {
-  const [state, setState] = useState<'loading' | 'unconfigured' | 'locked' | 'open'>('loading');
+  const [state, setState] = useState<'loading' | 'unconfigured' | 'locked' | 'account' | 'key'>('loading');
   const [toasts, setToasts] = useState<{ id: number; t: string }[]>([]);
   const toast: Toast = useCallback(t => {
     const id = Date.now() + Math.random();
     setToasts(x => [...x, { id, t }]); setTimeout(() => setToasts(x => x.filter(y => y.id !== id)), 2400);
   }, []);
 
-  useEffect(() => {
-    get('/api/admin/session').then(r => setState(!r.configured ? 'unconfigured' : r.admin ? 'open' : 'locked')).catch(() => setState('locked'));
+  const loadSession = useCallback(() => {
+    get('/api/admin/session').then(r => setState(r.access ?? (r.configured ? 'locked' : 'unconfigured'))).catch(() => setState('locked'));
   }, []);
+  useEffect(loadSession, [loadSession]);
 
   return (
     <>
@@ -32,8 +35,8 @@ export default function AdminPage() {
           <p className="sub" style={{ marginTop: 10 }}>服务端没有配置管理密钥。请在服务器环境变量中设置 <code>ADMIN_KEY</code>（至少 32 个字符），然后重启服务。</p>
         </div></div>
       )}
-      {state === 'locked' && <KeyLogin onDone={() => setState('open')} />}
-      {state === 'open' && <Panel toast={toast} onLock={() => setState('locked')} />}
+      {state === 'locked' && <KeyLogin onDone={loadSession} />}
+      {(state === 'account' || state === 'key') && <Panel toast={toast} access={state} onLock={loadSession} />}
       <div className="toasts">{toasts.map(t => <div key={t.id} className="toast">{t.t}</div>)}</div>
     </>
   );
@@ -56,13 +59,13 @@ function KeyLogin({ onDone }: { onDone: () => void }) {
         <div className="field"><label className="sm sub">管理密钥</label><input type="password" value={key} onChange={e => setKey(e.target.value)} autoFocus autoComplete="off" required placeholder="服务端环境变量 ADMIN_KEY" /></div>
         {err && <div className="err">{err}</div>}
         <button className="btn" style={{ width: '100%', justifyContent: 'center', padding: 12 }} disabled={busy || !key}>{busy ? <Loading inline label="正在验证" /> : '进入后台'}</button>
-        <p className="muted sm" style={{ marginTop: 16 }}>后台没有账号体系，只能使用服务器上配置的管理密钥进入。</p>
+        <p className="muted sm" style={{ marginTop: 16 }}>也可以前往 <Link href="/" className="link">Nestune</Link> 登录管理员账号。</p>
       </form>
     </div>
   );
 }
 
-function Panel({ toast, onLock }: { toast: Toast; onLock: () => void }) {
+function Panel({ toast, access, onLock }: { toast: Toast; access: 'account' | 'key'; onLock: () => void }) {
   const [tab, setTab] = useState<Tab>('overview');
   async function lock() { await post('/api/admin/logout').catch(() => {}); onLock(); }
   const guard = useCallback((e: any) => { if (e?.status === 401) onLock(); else toast(e?.message || '操作失败'); }, [onLock, toast]);
@@ -73,10 +76,12 @@ function Panel({ toast, onLock }: { toast: Toast; onLock: () => void }) {
         <div className="badge">管理后台</div>
         {TABS.map(([k, label, icon]) => <button key={k} className={`nav ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}><Icon n={icon} s={18} />{label}</button>)}
         <div className="sp" />
-        <button className="nav" onClick={lock}><Icon n="out" s={18} />锁定后台</button>
+        {access === 'key' && <button className="nav" onClick={lock}><Icon n="out" s={18} />锁定后台</button>}
+        <Link className="nav" href="/"><Icon n="home" s={18} />返回 Nestune</Link>
       </aside>
       <main>
         {tab === 'overview' && <Overview guard={guard} go={setTab} />}
+        {tab === 'canvas' && <CanvasAdmin guard={guard} toast={toast} />}
         {tab === 'users' && <Users guard={guard} toast={toast} />}
         {tab === 'source' && <Source guard={guard} toast={toast} />}
         {tab === 'storage' && <Storage guard={guard} toast={toast} />}

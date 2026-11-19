@@ -1,4 +1,5 @@
 import type { Camera } from './canvas-camera';
+import { CANVAS_WALLPAPERS, type CanvasWallpaper } from './canvas-settings';
 
 export type WallMark = { key: string; src: string; left: number; top: number; width: number; height: number };
 type Area = { x: number; y: number; width: number; height: number };
@@ -6,14 +7,14 @@ type Asset = {
   url: string; image?: HTMLImageElement; imageUrl?: string; pending?: HTMLImageElement;
   failures: number; retryAfter: number; timer?: number;
 };
-const TEXTURE_PERIOD = 920;
-const WALL_COLOR = '#bdbab4';
 const MAX_LOADS = 6;
 const MAX_CACHED_PIXELS = 12_000_000;
 
 export class CanvasWallPainter {
   private context: CanvasRenderingContext2D | null;
-  private texture: HTMLImageElement;
+  private wallpaper: (typeof CANVAS_WALLPAPERS)[CanvasWallpaper] = CANVAS_WALLPAPERS.concrete;
+  private wallpaperId?: CanvasWallpaper;
+  private texture: HTMLImageElement | null = null;
   private pattern: CanvasPattern | null = null;
   private observer: ResizeObserver;
   private view: Camera = { x: 0, y: 0, zoom: 1 };
@@ -31,14 +32,26 @@ export class CanvasWallPainter {
   constructor(private surface: HTMLCanvasElement, private boardElement: HTMLDivElement,
     private onErrorChange: (value: boolean) => void) {
     this.context = surface.getContext('2d', { alpha: false });
-    this.texture = new Image();
-    this.texture.onload = () => { this.updatePattern(); this.schedule(); };
-    this.texture.src = '/canvas-walls/concrete.webp';
     this.observer = new ResizeObserver(() => this.measure());
     this.observer.observe(surface);
     this.observer.observe(boardElement);
     window.addEventListener('online', this.retry);
     this.measure();
+  }
+
+  setWallpaper(id: CanvasWallpaper) {
+    if (id === this.wallpaperId) return;
+    this.wallpaperId = id;
+    this.wallpaper = CANVAS_WALLPAPERS[id];
+    if (this.texture) this.texture.onload = null;
+    this.pattern = null;
+    this.texture = null;
+    if (this.wallpaper.image) {
+      this.texture = new Image();
+      this.texture.onload = () => { this.updatePattern(); this.schedule(); };
+      this.texture.src = this.wallpaper.image;
+    }
+    this.schedule();
   }
 
   setView(view: Camera) {
@@ -73,13 +86,13 @@ export class CanvasWallPainter {
     this.observer.disconnect();
     window.removeEventListener('online', this.retry);
     cancelAnimationFrame(this.frame);
-    this.texture.onload = null;
+    if (this.texture) this.texture.onload = null;
     for (const asset of this.assets.values()) this.drop(asset);
     this.assets.clear();
   }
 
   private updatePattern() {
-    this.pattern = this.texture.naturalWidth ? this.context?.createPattern(this.texture, 'repeat') ?? null : null;
+    this.pattern = this.texture?.naturalWidth ? this.context?.createPattern(this.texture, 'repeat') ?? null : null;
   }
 
   private measure() {
@@ -173,14 +186,14 @@ export class CanvasWallPainter {
     // Snap both sides of every tile to the same device-pixel grid.
     const px = (world: number) => Math.round((bx + x + world * zoom) * scaleX);
     const py = (world: number) => Math.round((by + y + world * zoom) * scaleY);
-    const period = TEXTURE_PERIOD * zoom;
-    if (typeof this.pattern?.setTransform === 'function') {
+    const period = this.wallpaper.period * zoom;
+    if (this.texture && typeof this.pattern?.setTransform === 'function') {
       this.pattern.setTransform({
         a: period * scaleX / this.texture.naturalWidth, d: period * scaleY / this.texture.naturalHeight,
         e: (bx + x) % period * scaleX, f: (by + y) % period * scaleY,
       });
     }
-    ctx.fillStyle = WALL_COLOR;
+    ctx.fillStyle = this.wallpaper.color;
     ctx.fillRect(0, 0, this.surface.width, this.surface.height);
     if (this.pattern) {
       ctx.fillStyle = this.pattern;

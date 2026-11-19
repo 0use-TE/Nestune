@@ -4,7 +4,7 @@ import { sha, startSession } from '@/server/auth';
 import { body, clientIp, fail, route } from '@/server/http';
 import { hit } from '@/server/ratelimit';
 
-/** The admin panel has no accounts: it unlocks only with the ADMIN_KEY from the server environment. */
+/** Unlock the admin panel with the server key independently of an account. */
 export const POST = route(async req => {
   const expected = adminKey();
   if (!expected) throw fail(503, '服务端尚未配置 ADMIN_KEY（至少 32 个字符）', 'admin_unconfigured');

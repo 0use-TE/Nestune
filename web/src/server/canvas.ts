@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises';
 import type { CanvasBase, CanvasItem, CanvasRecord, CanvasState } from '@/lib/canvas-types';
 import { CANVAS_MOMENT_FONTS, isCanvasGraffiti, isCanvasMusic } from '@/lib/canvas-types';
 import type { Song } from '@/lib/types';
+import type { CanvasSettings } from '@/lib/canvas-settings';
 import { isUploadSong } from '@/lib/upload-types';
 import { db, kvGet, kvSet, one, all } from './db';
 import { catalogId, catalogSong } from './catalog';
@@ -17,6 +18,7 @@ import { dir } from './config';
 import { sniffImage, avatarMime } from './avatar';
 import { fail, str } from './http';
 import { compositeWall, stageLegacyWall, wallTiles } from './canvas-wall';
+import { canvasSettings } from './canvas-settings';
 
 const storageKey = () => 'canvas:shared:v1';
 const publicSong = (song: Song) => !isUploadSong(song.id) || !!one("SELECT 1 FROM uploaded_songs s JOIN users u ON u.id=s.owner_id WHERE s.id=? AND s.visibility='public' AND u.status='active'", song.id);
@@ -28,7 +30,7 @@ function readStoredCanvas(): CanvasState {
   const raw = kvGet(storageKey());
   return raw ? JSON.parse(raw) : { revision: 0, records: [] };
 }
-export function readCanvas(): CanvasState {
+export function readCanvas(): CanvasState & { settings: CanvasSettings } {
   const state = readStoredCanvas();
   state.records = state.records.flatMap<CanvasItem>(item => {
     if (isCanvasMusic(item)) {
@@ -41,7 +43,7 @@ export function readCanvas(): CanvasState {
   });
   const wall = wallTiles();
   if (wall.length) state.wall = wall;
-  return state;
+  return { ...state, settings: canvasSettings() };
 }
 function canvasTransaction<T>(update: () => T) {
   const database = db(); database.exec('BEGIN IMMEDIATE');
@@ -51,7 +53,7 @@ function canvasTransaction<T>(update: () => T) {
     return result;
   } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
-function mutate(change: (state: CanvasState) => void) {
+function mutate(change: (state: ReturnType<typeof readCanvas>) => void) {
   return canvasTransaction(() => {
     const state = readCanvas(); change(state); state.revision++;
     kvSet(storageKey(), JSON.stringify({ revision: state.revision, records: state.records }));
@@ -67,12 +69,14 @@ function base(ownerId: number, input: Record<string, unknown>): CanvasBase {
 }
 function store(item: CanvasItem) {
   return mutate(state => {
+    const { personalLimit, totalLimit, allowGraffiti } = state.settings;
     if (isCanvasGraffiti(item)) {
+      if (!allowGraffiti) throw fail(403, '画布暂时关闭了涂鸦发布');
       if (state.records.filter(isCanvasGraffiti).length >= 400) throw fail(409, '墙面涂鸦已达上限');
     } else {
       const objects = state.records.filter(record => !isCanvasGraffiti(record));
-      if (objects.length >= 200) throw fail(400, '画布已满');
-      if (objects.filter(record => record.ownerId === item.ownerId).length >= 30) throw fail(400, '每人最多放置 30 个物件');
+      if (objects.length >= totalLimit) throw fail(400, `画布已满，最多放置 ${totalLimit} 个物件`);
+      if (objects.filter(record => record.ownerId === item.ownerId).length >= personalLimit) throw fail(400, `每人最多放置 ${personalLimit} 个物件`);
     }
     state.records.push(item);
   });
@@ -218,12 +222,14 @@ function discardImage(item: CanvasItem) {
   }
 }
 export function addCanvasWallPaint(bytes: Buffer, input: Record<string, unknown>) {
+  if (!canvasSettings().allowGraffiti) throw fail(403, '画布暂时关闭了涂鸦发布');
   const x = coordinate(input.x), y = coordinate(input.y);
   const width = input.boardWidth === undefined ? undefined : Number(input.boardWidth);
   if (width !== undefined && (!Number.isFinite(width) || width <= 0 || width > MAX_GRAFFITI_WORLD_WIDTH)) {
     throw fail(400, '涂鸦放置尺寸无效');
   }
   return compositeWall(bytes, { x, y, width }, apply => mutate(state => {
+    if (!state.settings.allowGraffiti) throw fail(403, '画布暂时关闭了涂鸦发布');
     apply();
     state.wall = wallTiles();
   }));

@@ -3,7 +3,7 @@ import type { CanvasState, CanvasSyncReply } from '@/lib/canvas-types';
 import { readCanvas } from './canvas';
 import { db, one } from './db';
 
-type BoardIndex = { signatures: Map<string, string>; order: string[]; wallHash: string };
+type BoardIndex = { signatures: Map<string, string>; order: string[]; wallHash: string; settingsHash: string };
 const recent = new Map<string, BoardIndex>();
 let cached: { database: ReturnType<typeof db>; stamp: string; state: CanvasState; token: string; index: BoardIndex } | undefined;
 const digest = (input: string) => createHash('sha256').update(input).digest('hex').slice(0, 32);
@@ -20,8 +20,9 @@ function currentBoard() {
   const signatures = new Map(state.records.map(item => [item.id, digest(JSON.stringify(item))]));
   const order = state.records.map(item => item.id);
   const wallHash = digest(JSON.stringify(state.wall ?? []));
-  const token = digest(JSON.stringify([state.revision, [...signatures], wallHash]));
-  const index = { signatures, order, wallHash };
+  const settingsHash = digest(JSON.stringify(state.settings));
+  const token = digest(JSON.stringify([state.revision, [...signatures], wallHash, settingsHash]));
+  const index = { signatures, order, wallHash, settingsHash };
   cached = { database, stamp, state, token, index };
   recent.delete(token);
   recent.set(token, index);
@@ -41,5 +42,6 @@ export function readCanvasSync(since: string | null): CanvasSyncReply {
   const removed = previous.order.filter(id => !index.signatures.has(id));
   const reordered = previous.order.length !== index.order.length || index.order.some((id, position) => id !== previous.order[position]);
   return { kind: 'delta', from: since, token, revision: state.revision, upserts, removed,
-    ...(reordered && { order: index.order }), ...(previous.wallHash !== index.wallHash && { wall: state.wall ?? [] }) };
+    ...(reordered && { order: index.order }), ...(previous.wallHash !== index.wallHash && { wall: state.wall ?? [] }),
+    ...(previous.settingsHash !== index.settingsHash && { settings: state.settings }) };
 }

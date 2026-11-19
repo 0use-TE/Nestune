@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { Loading } from '@/components/Loading';
 import { useEffect, useRef, useState } from 'react';
 import { api, del, get, patch, post } from '@/lib/api';
@@ -24,6 +25,7 @@ export default function SettingsPage() {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('资料');
   const [plays, setPlays] = useState<number | null>(null);
+  const [admin, setAdmin] = useState(false);
   const [name, setName] = useState(me.displayName);
   const [bio, setBio] = useState(me.bio);
   const [email, setEmail] = useState(me.email);
@@ -33,7 +35,9 @@ export default function SettingsPage() {
   const [pwErr, setPwErr] = useState('');
   const [savingVisibility, setSavingVisibility] = useState(false);
 
-  useEffect(() => { get('/api/me').then(r => setPlays(r.stats.plays)).catch(() => {}); }, []);
+  useEffect(() => {
+    get('/api/me').then(r => { setPlays(r.stats.plays); setAdmin(r.admin === true); }).catch(() => {});
+  }, []);
   const dirty = name !== me.displayName || bio !== me.bio || email !== me.email;
 
   async function saveProfile(e: React.FormEvent) {
@@ -66,7 +70,10 @@ export default function SettingsPage() {
 
   return (
     <div className="settings-page">
-      <h1>个人设置</h1>
+      <div className="row" style={{ justifyContent: 'space-between' }}>
+        <h1>个人设置</h1>
+        {admin && <Link href="/admin" className="btn ghost sm"><Icon n="set" s={16} />管理后台</Link>}
+      </div>
       <div className="tabs" role="group" aria-label="个人设置">
         {SECTIONS.map(label => (
           <button key={label} className={`tab ${section === label ? 'on' : ''}`} aria-pressed={section === label} onClick={() => setSection(label)}>{label}</button>

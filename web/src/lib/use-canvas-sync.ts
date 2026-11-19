@@ -53,6 +53,7 @@ function applyReply(base: CanvasCursor | null, reply: CanvasSyncReply | CanvasSt
   if (records.length !== byId.size || records.some(item => !item)) return null;
   return { token: reply.token, state: {
     revision: reply.revision, records: records as CanvasState['records'], wall: reply.wall ?? base.state.wall,
+    settings: reply.settings ?? base.state.settings,
   } };
 }
 

@@ -18,7 +18,7 @@ export function userRoute(
   });
 }
 
-/** Admin route: only reachable with a session created from the ADMIN_KEY. */
+/** Admin route: use an active administrator account or a session created with ADMIN_KEY. */
 export function adminRoute(handler: (req: NextRequest, ctx: Ctx) => unknown) {
   return route(async (req, ctx) => {
     await requireAdmin();

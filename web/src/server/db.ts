@@ -24,6 +24,7 @@ function open() {
       act_expires INTEGER NOT NULL DEFAULT 0,
       max_quality TEXT NOT NULL DEFAULT 'exhigh',
       can_save INTEGER NOT NULL DEFAULT 1,
+      is_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1)),
       created_at INTEGER NOT NULL,
       last_login_at INTEGER NOT NULL DEFAULT 0
     );
@@ -236,7 +237,9 @@ function open() {
         ALTER TABLE canvas_wall_tiles ADD COLUMN pixels INTEGER NOT NULL DEFAULT 1024;
         ALTER TABLE canvas_wall_tiles ADD COLUMN mime TEXT NOT NULL DEFAULT 'image/png';`);
     }
-    if (!db.prepare('PRAGMA table_info(users)').all().some(column => column.name === 'profile_public')) db.exec('ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 1');
+    const userColumns = db.prepare('PRAGMA table_info(users)').all();
+    if (!userColumns.some(column => column.name === 'profile_public')) db.exec('ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 1');
+    if (!userColumns.some(column => column.name === 'is_admin')) db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1))');
     if (!db.prepare('PRAGMA table_info(playlists)').all().some(column => column.name === 'is_public')) db.exec('ALTER TABLE playlists ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
     const columns = db.prepare('PRAGMA table_info(listening_rooms)').all();
     if (!columns.some(column => column.name === 'queue_data')) db.exec('ALTER TABLE listening_rooms ADD COLUMN queue_data TEXT');
