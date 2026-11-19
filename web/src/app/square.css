@@ -581,6 +581,27 @@
   overscroll-behavior: contain;
   padding: 10px 12px;
 }
+.nc-graffiti-lesson-confirm {
+  flex: none;
+  padding: 10px 12px 0;
+}
+.nc-graffiti-lesson-confirm .btn {
+  width: 100%;
+  min-height: 44px;
+  justify-content: center;
+}
+.nc-graffiti-lesson-confirm .btn:disabled {
+  background: var(--soft);
+  color: var(--sub);
+  border: 1px solid var(--line);
+  opacity: 1;
+}
+.nc-graffiti-lesson-confirm i {
+  width: 14px;
+  height: 14px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+}
 .nc-graffiti-lesson {
   display: grid;
   gap: 7px;

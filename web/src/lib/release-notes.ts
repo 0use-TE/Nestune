@@ -12,6 +12,16 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 19 日',
+    title: '涂鸦教程按钮置顶',
+    summary: '把「用这罐开始喷」放到涂鸦工具栏顶部，手机上调色时也能随时找到。',
+    sections: [
+      { title: '调好颜色就能开喷', paragraphs: ['进入教程的调色步骤就能看到「用这罐开始喷」。滚动调色盘时按钮留在原位，调整颜色或套用配色后即可点击。'] },
+      { title: '网页更新', paragraphs: ['刷新网页或重新打开 Nestune 即可使用。'] },
+    ],
+  },
+  {
+    version: '1.2.16',
+    date: '2026 年 11 月 19 日',
     title: '画布图片加载修复',
     summary: '修复画布图片密集加载时部分涂鸦显示不出来的问题，涂鸦底栏新增常驻教程按钮。',
     sections: [

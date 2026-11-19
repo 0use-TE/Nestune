@@ -791,6 +791,12 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     {dock && createPortal(<section className="nc-graffiti-dock" aria-label="涂鸦工具">
       <GraffitiSprayCans colors={cans.map(paintHex)} selected={selectedCan} onSelect={selectCan} />
       <div className="nc-graffiti-dock-chassis panel">
+      {guide === 'mix' && <div className="nc-graffiti-lesson-confirm">
+        <button className="btn sm" type="button" disabled={mixedCan !== selectedCan} onClick={() => setGuide('spray')}>
+          <i aria-hidden="true" style={{ backgroundColor: color }} />
+          用这罐开始喷
+        </button>
+      </div>}
       <div className="nc-graffiti-dock-options">
         {guide && <GraffitiLayerGuide stage={guide} coverage={coverage} painted={paintedLayers.size} total={lessonImage?.layers.length ?? 0}
           busy={generating || saving} onExit={exitGuide}>
@@ -806,10 +812,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
           {guide === 'select' && lessonImage && <GraffitiImageLayerColors layers={lessonImage.layers}
             selected={-1} painted={paintedLayers} onSelect={selectGuideLayer} />}
           {guide === 'pick' && <GraffitiLayerPaintButton paint={lessonImage?.layers[activeLayer]?.paint} onPick={pickGuideColor} />}
-          {guide === 'mix' && <>
-            <GraffitiColorPicker color={paintColor} selectedCan={selectedCan} onChange={setPaintColor} onApply={applyPalette} />
-            <button className="btn sm" type="button" disabled={mixedCan !== selectedCan} onClick={() => setGuide('spray')}>用这罐开始喷</button>
-          </>}
+          {guide === 'mix' && <GraffitiColorPicker color={paintColor} selectedCan={selectedCan} onChange={setPaintColor} onApply={applyPalette} />}
           {guide === 'spray' && <button className="btn sm" type="button" disabled={coverage < GRAFFITI_LESSON_COVERAGE}
             onClick={finishGuideLayer}>{paintedLayers.size + 1 === lessonImage?.layers.length ? '查看成品' : '喷下一层'}</button>}
           {guide === 'complete' && <button className="btn sm" type="button" disabled={!hasInk || saving} onClick={() => void publish()}>
