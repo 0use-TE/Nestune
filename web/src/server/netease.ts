@@ -206,7 +206,8 @@ export async function collectionMetadata(kind: 'album' | 'playlist', id: string)
 }
 
 async function playlistSnapshot(id: string, allowPublicLikes = false) {
-  const b = await call('playlist_detail', { id, s: 0 });
+  // The web API serves public playlist details even when the default mobile endpoint times out.
+  const b = await call('playlist_detail', { id, s: 0, crypto: 'weapi' });
   const p = b.playlist;
   const isLikes = Number(p?.specialType) === 5;
   if (!p || Number(p.privacy ?? -1) !== 0 || (isLikes && !allowPublicLikes)) {

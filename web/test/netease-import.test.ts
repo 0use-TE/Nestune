@@ -17,6 +17,7 @@ it('imports public likes in order and reports tracks the public response omits',
   expect(result.songs.map(song => song.id)).toEqual(ids);
   expect(result.skipped).toBe(1);
   expect(detail).toHaveBeenCalledTimes(1);
+  expect(detail).toHaveBeenCalledWith(expect.objectContaining({ id: '99', crypto: 'weapi', cookie: {} }));
   expect(tracks).toHaveBeenCalledTimes(2);
   await expect(playlist('99', 10, 0)).rejects.toMatchObject({ status: 403 });
 });
