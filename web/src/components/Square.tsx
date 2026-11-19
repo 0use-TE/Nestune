@@ -19,6 +19,7 @@ import { Loading } from './Loading';
 import { Sheet } from './Sheet';
 import { CanvasGuide } from './CanvasGuide';
 import { CanvasGraffiti, type GraffitiEditorHandle } from './CanvasGraffiti';
+import { CanvasImage } from './CanvasImage';
 import { MAX_GRAFFITI_SIDE, type GraffitiArea, type Point } from '@/lib/canvas-graffiti';
 
 type Drag = { pointer: number; startX: number; startY: number; x: number; y: number; active: boolean; cancelled: boolean; timer: ReturnType<typeof setTimeout>; item: CanvasItem; source?: CanvasSource; size: number };
@@ -420,8 +421,8 @@ export function Square() {
           <div key={item.id} data-canvas-paint={item.id} className="nc-wall-paint" style={{
             left: item.x, top: item.y, width: item.graffiti.boardWidth ?? Math.max(12, item.graffiti.width / 2),
           }}>
-            <img src={`/api/canvas/images/${item.imageFile}`} alt={`${item.ownerName ?? '用户'}的墙面涂鸦`}
-              width={item.graffiti.width} height={item.graffiti.height} loading="lazy" decoding="async" draggable={false} />
+            <CanvasImage file={item.imageFile} alt={`${item.ownerName ?? '用户'}的墙面涂鸦`}
+              width={item.graffiti.width} height={item.graffiti.height} />
           </div>)}
     </div>
   ), [state.records]);
@@ -552,7 +553,7 @@ const ItemArtwork = memo(function ItemArtwork({ item, spinning = false }: { item
       <i />
     </div>;
   }
-  if (item.kind === 'image') return <div className="nc-photo"><img src={`/api/canvas/images/${item.imageFile}`} alt="画布图片" loading="lazy" decoding="async" draggable={false} /></div>;
+  if (item.kind === 'image') return <div className="nc-photo"><CanvasImage file={item.imageFile} alt="画布图片" /></div>;
   if (item.kind === 'emoji') return <div className="nc-emoji-art">{item.emoji}</div>;
   const count = item.tracks?.length ? `${item.tracks.length} 首` : '';
   if (item.kind === 'album') return <div className="nc-music-art nc-album-art">

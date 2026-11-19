@@ -149,6 +149,39 @@
   width: 100%;
   height: auto;
 }
+.nc-canvas-image {
+  position: relative;
+}
+.nc-canvas-image[data-failed] {
+  min-height: 32px;
+}
+.nc-canvas-image[data-failed] img {
+  visibility: hidden;
+}
+.nc-canvas-image-retry {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bar);
+  color: var(--text);
+  box-shadow: var(--shadow-s);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+.nc-painting .nc-canvas-image-retry {
+  pointer-events: none;
+  visibility: hidden;
+}
 .nc-world.nc-painting > .nc-record {
   pointer-events: none;
 }
