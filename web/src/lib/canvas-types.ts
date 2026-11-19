@@ -16,11 +16,12 @@ type CanvasPaint = { width: number; height: number; boardWidth?: number };
 export type CanvasImage = CanvasBase & { kind: 'image'; imageFile: string; graffiti?: CanvasPaint };
 export type CanvasEmoji = CanvasBase & { kind: 'emoji'; emoji: string };
 export type CanvasItem = CanvasRecord | CanvasNote | CanvasImage | CanvasEmoji;
-export type CanvasState = { revision: number; records: CanvasItem[] };
+export type CanvasWallTile = { x: number; y: number; version: string };
+export type CanvasState = { revision: number; records: CanvasItem[]; wall?: CanvasWallTile[] };
 export type CanvasSyncReply =
   | { kind: 'snapshot'; token: string; state: CanvasState }
   | { kind: 'unchanged'; token: string }
-  | { kind: 'delta'; from: string; token: string; revision: number; upserts: CanvasItem[]; removed: string[]; order?: string[] };
+  | { kind: 'delta'; from: string; token: string; revision: number; upserts: CanvasItem[]; removed: string[]; order?: string[]; wall?: CanvasWallTile[] };
 export type CanvasTake = { state: CanvasState; item: CanvasItem };
 export type CanvasSource = {
   kind: CanvasRecord['kind']; name: string; cover?: string | null;

@@ -51,7 +51,9 @@ function applyReply(base: CanvasCursor | null, reply: CanvasSyncReply | CanvasSt
   for (const item of reply.upserts) byId.set(item.id, item);
   const records = reply.order ? reply.order.map(id => byId.get(id)) : [...byId.values()];
   if (records.length !== byId.size || records.some(item => !item)) return null;
-  return { token: reply.token, state: { revision: reply.revision, records: records as CanvasState['records'] } };
+  return { token: reply.token, state: {
+    revision: reply.revision, records: records as CanvasState['records'], wall: reply.wall ?? base.state.wall,
+  } };
 }
 
 export function useCanvasSync(userId: number | undefined, onState: (state: CanvasState, previous?: CanvasState) => boolean, onError: (error: Error) => void) {

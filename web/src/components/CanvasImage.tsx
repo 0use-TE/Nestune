@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Icon } from './Icon';
 
-export function CanvasImage({ file, alt, width, height }: { file: string; alt: string; width?: number; height?: number }) {
+export function CanvasImage({ src, alt, width, height }: { src: string; alt: string; width?: number; height?: number }) {
   const [request, setRequest] = useState({ attempts: 0, retryAt: 0 });
   const [failed, setFailed] = useState(false);
-  const src = `/api/canvas/images/${file}${request.attempts ? `?retry=${request.retryAt}` : ''}`;
+  const imageSrc = request.attempts ? `${src}${src.includes('?') ? '&' : '?'}retry=${request.retryAt}` : src;
 
   const retry = useCallback(() => {
     setFailed(false);
@@ -34,7 +34,7 @@ export function CanvasImage({ file, alt, width, height }: { file: string; alt: s
 
   return <div className="nc-canvas-image" data-failed={failed ? '' : undefined}
     style={width && height ? { aspectRatio: `${width} / ${height}` } : undefined}>
-    <img key={src} src={src} alt={alt} width={width} height={height}
+    <img key={imageSrc} src={imageSrc} alt={alt} width={width} height={height}
       loading={request.attempts ? 'eager' : 'lazy'} decoding="async" draggable={false} onError={() => setFailed(true)} />
     {failed && <button type="button" className="nc-canvas-image-retry" aria-label={`重试加载${alt}`}
       onPointerDown={event => event.stopPropagation()} onClick={retry}>

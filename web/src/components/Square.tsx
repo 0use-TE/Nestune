@@ -6,6 +6,7 @@ import { useCanvasCamera } from '@/lib/use-canvas-camera';
 import { CANVAS_DRAG_THRESHOLD, WORLD_LIMIT } from '@/lib/canvas-camera';
 import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { useCanvasSync } from '@/lib/use-canvas-sync';
+import { WALL_TILE_PIXELS, WALL_TILE_SIZE } from '@/lib/canvas-wall';
 import { api, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
@@ -415,17 +416,32 @@ export function Square() {
   useEffect(() => { if (loaded && playGuideId && !playbackGuideItem) setPlayGuideId(null); }, [loaded, playGuideId, playbackGuideItem]);
   const receivingItem = ghost?.item ?? insertion?.item ?? (nativeSource ? sourceItem(nativeSource) : null);
   const receivingCollection = receivingItem && isCanvasMusic(receivingItem) && receivingItem.kind !== 'song';
+  const visibleWall = useMemo(() => {
+    if (!board.current || !state.wall?.length) return [];
+    const { x, y, zoom } = camera.camera;
+    const left = -x / zoom, top = -y / zoom;
+    const right = left + board.current.clientWidth / zoom, bottom = top + board.current.clientHeight / zoom;
+    // Keep the adjacent tiles available while the camera tracks a pan.
+    const minX = Math.floor(left / WALL_TILE_SIZE) - 1, maxX = Math.floor(right / WALL_TILE_SIZE) + 1;
+    const minY = Math.floor(top / WALL_TILE_SIZE) - 1, maxY = Math.floor(bottom / WALL_TILE_SIZE) + 1;
+    return state.wall.filter(tile => tile.x >= minX && tile.x <= maxX && tile.y >= minY && tile.y <= maxY);
+  }, [camera.camera, state.wall]);
   const paintLayer = useMemo(() => (
     <div className="nc-wall-paint-layer" aria-label="墙面涂鸦">
       {state.records.filter(isCanvasGraffiti).map(item =>
           <div key={item.id} data-canvas-paint={item.id} className="nc-wall-paint" style={{
             left: item.x, top: item.y, width: item.graffiti.boardWidth ?? Math.max(12, item.graffiti.width / 2),
           }}>
-            <CanvasImage file={item.imageFile} alt={`${item.ownerName ?? '用户'}的墙面涂鸦`}
+            <CanvasImage src={`/api/canvas/images/${item.imageFile}`} alt={`${item.ownerName ?? '用户'}的墙面涂鸦`}
               width={item.graffiti.width} height={item.graffiti.height} />
           </div>)}
+      {visibleWall.map(tile => <div key={`${tile.x}:${tile.y}`} data-wall-tile={`${tile.x}:${tile.y}`} className="nc-wall-tile"
+        style={{ left: tile.x * WALL_TILE_SIZE, top: tile.y * WALL_TILE_SIZE, width: WALL_TILE_SIZE, height: WALL_TILE_SIZE }}>
+        <CanvasImage key={tile.version} src={`/api/canvas/wall/${tile.x}/${tile.y}?v=${tile.version}`}
+          alt="墙面涂鸦" width={WALL_TILE_PIXELS} height={WALL_TILE_PIXELS} />
+      </div>)}
     </div>
-  ), [state.records]);
+  ), [state.records, visibleWall]);
   const liftedId = draggingId ?? insertion?.item.id;
   const actionItem = ghost || insertion ? null : selected;
   const auditioning = preview.active && !preview.active.loading ? preview.active.id : null;
@@ -464,7 +480,9 @@ export function Square() {
       </div>
     </div>
     <div ref={graffitiDock} />
-    {!graffiti && <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit(state.records)}><Icon n="refresh" s={17} /></button></div>}
+    {!graffiti && <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit([
+      ...state.records, ...(state.wall ?? []).map(tile => ({ x: (tile.x + .5) * WALL_TILE_SIZE, y: (tile.y + .5) * WALL_TILE_SIZE })),
+    ])}><Icon n="refresh" s={17} /></button></div>}
     {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
     {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具"><button role="menuitem" onClick={() => { setNote({ text: '', color: 'butter', captureMoment: false }); setTools(false); }}><Icon n="sticker" />便签</button><button role="menuitem" disabled={adding || !!graffiti} onClick={startGraffiti}><Icon n="spray" />涂鸦</button><button role="menuitem" disabled={adding} onClick={() => fileInput.current?.click()}><Icon n="picture" />图片 / 表情包</button><button role="menuitem" onClick={() => { setEmojiPicker(true); setTools(false); }}><Icon n="smile" />表情</button><button role="menuitem" onClick={() => { setFilter(''); setPicker(true); setTools(false); }}><Icon n="note" />添加音乐</button><button role="menuitem" onClick={() => { setPlayGuideId(null); setShowGuide(true); setTools(false); }}><Icon n="note" />操作指引</button></div>}
@@ -553,7 +571,7 @@ const ItemArtwork = memo(function ItemArtwork({ item, spinning = false }: { item
       <i />
     </div>;
   }
-  if (item.kind === 'image') return <div className="nc-photo"><CanvasImage file={item.imageFile} alt="画布图片" /></div>;
+  if (item.kind === 'image') return <div className="nc-photo"><CanvasImage src={`/api/canvas/images/${item.imageFile}`} alt="画布图片" /></div>;
   if (item.kind === 'emoji') return <div className="nc-emoji-art">{item.emoji}</div>;
   const count = item.tracks?.length ? `${item.tracks.length} 首` : '';
   if (item.kind === 'album') return <div className="nc-music-art nc-album-art">

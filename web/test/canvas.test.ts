@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import sharp from 'sharp';
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { CANVAS_MOMENT_FONTS, isCanvasMusic } from '@/lib/canvas-types';
 
@@ -17,8 +18,67 @@ beforeAll(async () => {
   database = await import('@/server/db'); canvas = await import('@/server/canvas');
   for (const id of [1, 2, 3]) database.run("INSERT INTO users(id,username,display_name,status,created_at) VALUES(?,?,?,'active',1)", id, 'user' + id, ['小雨','阿林','小陈'][id - 1]);
 });
-beforeEach(() => { database.run("DELETE FROM kv WHERE key LIKE 'canvas:%'"); database.run('DELETE FROM playlists'); vi.clearAllMocks(); });
+beforeEach(() => {
+  database.run("DELETE FROM kv WHERE key LIKE 'canvas:%'");
+  database.run('DELETE FROM canvas_wall_tiles');
+  database.run('DELETE FROM playlists');
+  vi.clearAllMocks();
+});
 afterAll(() => { database.db().close(); fs.rmSync(folder, { recursive: true, force: true }); vi.unstubAllEnvs(); });
+
+it('updates wall pixels in place across tile boundaries and syncs tile versions', async () => {
+  const { readCanvasSync } = await import('@/server/canvas-sync');
+  const { wallTileImage } = await import('@/server/canvas-wall');
+  const paint = (r: number, b: number, alpha = 1) =>
+    sharp({ create: { width: 80, height: 40, channels: 4, background: { r, g: 0, b, alpha } } }).png().toBuffer();
+  const position = { x: 0, y: 120, boardWidth: 40 };
+  const blank = readCanvasSync(null);
+  const first = await canvas.addCanvasWallPaint(await paint(255, 0), position);
+  expect(first.records).toEqual([]);
+  expect(first.wall?.map(({ x, y }) => [x, y])).toEqual([[-1, 0], [0, 0]]);
+  const redTiles = first.wall!;
+  const blended = await canvas.addCanvasWallPaint(await paint(0, 255, .5), position);
+  expect(blended.wall).not.toEqual(redTiles);
+  expect(() => wallTileImage(0, 0, redTiles[1].version)).toThrow('墙面区域已更新');
+  for (const tile of blended.wall!) {
+    const response = wallTileImage(tile.x, tile.y, tile.version);
+    expect(response.headers.get('cache-control')).toBe('private, max-age=86400, immutable');
+    expect(wallTileImage(tile.x, tile.y, tile.version, response.headers.get('etag')).status).toBe(304);
+    const left = tile.x === -1 ? 1023 : 0;
+    const [r, g, b, a] = await sharp(Buffer.from(await response.arrayBuffer()))
+      .extract({ left, top: 240, width: 1, height: 1 }).raw().toBuffer();
+    expect(r).toBeGreaterThanOrEqual(126);
+    expect(r).toBeLessThanOrEqual(128);
+    expect([g, b, a]).toEqual([0, 128, 255]);
+  }
+  const blue = await canvas.addCanvasWallPaint(await paint(0, 255), position);
+  const newest = redTiles.map(({ x, y }) => blue.wall!.find(tile => tile.x === x && tile.y === y)!);
+  expect(newest).toEqual(blue.wall);
+  const tile = newest[1];
+  const image = Buffer.from(await wallTileImage(tile.x, tile.y, tile.version).arrayBuffer());
+  expect([...await sharp(image).extract({ left: 0, top: 240, width: 1, height: 1 }).raw().toBuffer()]).toEqual([0, 0, 255, 255]);
+  expect(database.one<{ count: number }>('SELECT count(*) AS count FROM canvas_wall_tiles')!.count).toBe(2);
+  expect(fs.existsSync(path.join(folder, 'canvas-images'))).toBe(false);
+  expect(readCanvasSync(blank.token)).toMatchObject({ kind: 'delta', wall: blue.wall, upserts: [], removed: [] });
+});
+
+it('preserves concurrent paint submissions that touch the same tile', async () => {
+  const { wallTileImage } = await import('@/server/canvas-wall');
+  const square = (r: number, b: number) =>
+    sharp({ create: { width: 24, height: 24, channels: 4, background: { r, g: 0, b, alpha: 1 } } }).png().toBuffer();
+  const [red, blue] = await Promise.all([square(255, 0), square(0, 255)]);
+  await Promise.all([
+    canvas.addCanvasWallPaint(red, { x: 100, y: 100, boardWidth: 12 }),
+    canvas.addCanvasWallPaint(blue, { x: 120, y: 100, boardWidth: 12 }),
+  ]);
+  const tile = canvas.readCanvas().wall![0];
+  const png = Buffer.from(await wallTileImage(0, 0, tile.version).arrayBuffer());
+  const at = async (left: number) => [...await sharp(png)
+    .extract({ left, top: 200, width: 1, height: 1 }).raw().toBuffer()];
+  expect(await at(200)).toEqual([255, 0, 0, 255]);
+  expect(await at(240)).toEqual([0, 0, 255, 255]);
+  expect(canvas.readCanvas().revision).toBe(2);
+});
 
 it('shares one persistent board, preserves concurrent additions and attributes their original posters', async () => {
   await Promise.all([canvas.addRecord(1, { songId: '101', x: 150, y: 200 }), canvas.addRecord(2, { albumId: '7', kind: 'album', x: 550, y: 400 })]);

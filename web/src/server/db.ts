@@ -149,6 +149,13 @@ function open() {
       UNIQUE(playlist_id,kind,target_id)
     );
     CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS canvas_wall_tiles (
+      x INTEGER NOT NULL,
+      y INTEGER NOT NULL,
+      version TEXT NOT NULL,
+      png BLOB NOT NULL,
+      PRIMARY KEY (x, y)
+    ) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS music_sources (
       source_id TEXT PRIMARY KEY,
       recording_id TEXT NOT NULL,

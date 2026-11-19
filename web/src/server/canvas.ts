@@ -15,6 +15,7 @@ import { enrichSong } from './recordings';
 import { dir } from './config';
 import { sniffImage, avatarMime } from './avatar';
 import { fail, str } from './http';
+import { compositeWall, wallTiles } from './canvas-wall';
 
 const storageKey = () => 'canvas:shared:v1';
 const publicSong = (song: Song) => !isUploadSong(song.id) || !!one("SELECT 1 FROM uploaded_songs s JOIN users u ON u.id=s.owner_id WHERE s.id=? AND s.visibility='public' AND u.status='active'", song.id);
@@ -37,13 +38,15 @@ export function readCanvas(): CanvasState {
     }
     return [{ ...item, ...poster(item.ownerId) }];
   });
+  const wall = wallTiles();
+  if (wall.length) state.wall = wall;
   return state;
 }
 function mutate(change: (state: CanvasState) => void) {
   const database = db(); database.exec('BEGIN IMMEDIATE');
   try {
     const state = readCanvas(); change(state); state.revision++;
-    kvSet(storageKey(), JSON.stringify(state)); database.exec('COMMIT'); return state;
+    kvSet(storageKey(), JSON.stringify({ revision: state.revision, records: state.records })); database.exec('COMMIT'); return state;
   } catch (error) { database.exec('ROLLBACK'); throw error; }
 }
 function coordinate(value: unknown) {
@@ -183,6 +186,18 @@ function discardImage(item: CanvasItem) {
     try { fs.rmSync(dir('canvas-images', item.imageFile), { force: true }); } catch { /* Unreferenced files cannot be served. */ }
   }
 }
+export function addCanvasWallPaint(bytes: Buffer, input: Record<string, unknown>) {
+  const x = coordinate(input.x), y = coordinate(input.y);
+  const width = input.boardWidth === undefined ? undefined : Number(input.boardWidth);
+  if (width !== undefined && (!Number.isFinite(width) || width <= 0 || width > MAX_GRAFFITI_WORLD_WIDTH)) {
+    throw fail(400, '涂鸦放置尺寸无效');
+  }
+  return compositeWall(bytes, { x, y, width }, apply => mutate(state => {
+    apply();
+    state.wall = wallTiles();
+  }));
+}
+
 export function addCanvasImage(owner: number, bytes: Buffer, input: Record<string, unknown>) {
   if (!bytes.length || bytes.length > CANVAS_IMAGE_MAX) throw fail(413, '图片不能超过 3 MB');
   const ext = sniffImage(bytes) ?? (/^GIF8[79]a$/.test(bytes.subarray(0, 6).toString('ascii')) ? 'gif' : null);

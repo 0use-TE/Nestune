@@ -144,7 +144,10 @@
   position: absolute;
   transform: translate(-50%, -50%);
 }
-.nc-wall-paint img {
+.nc-wall-tile {
+  position: absolute;
+}
+:is(.nc-wall-paint, .nc-wall-tile) img {
   display: block;
   width: 100%;
   height: auto;
@@ -185,7 +188,7 @@
 .nc-world.nc-painting > .nc-record {
   pointer-events: none;
 }
-.nc-world:has([data-graffiti-practice]) :is(.nc-record, .nc-wall-paint) {
+.nc-world:has([data-graffiti-practice]) :is(.nc-record, .nc-wall-paint, .nc-wall-tile) {
   visibility: hidden;
 }
 .nc-graffiti-custom-color,
