@@ -12,6 +12,17 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 19 日',
+    title: '画布涂鸦模板与取色优化',
+    summary: '导入的图片模板去掉了矩形边框，颜色分层后可以直接把所选图层的颜色用到当前喷漆罐。',
+    sections: [
+      { title: '模板边缘', paragraphs: ['开启「允许喷到模板外」后，喷漆会在图片边缘自然过渡。'] },
+      { title: '图层取色', paragraphs: ['选中颜色层，再点「给当前罐取色」，即可使用该图层显示的颜色。'] },
+      { title: '网页更新', paragraphs: ['刷新网页或重新打开 Nestune 即可使用。'] },
+    ],
+  },
+  {
+    version: '1.2.13',
+    date: '2026 年 11 月 19 日',
     title: '手机画布手势优化',
     summary: '从唱片或便签上划动也能平移。双指缩放后可接着单指移动，拖动物件时画面更跟手。',
     sections: [
