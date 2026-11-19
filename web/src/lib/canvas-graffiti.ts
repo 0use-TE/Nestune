@@ -132,6 +132,31 @@ export function cutStencil(context: CanvasRenderingContext2D, stencil: GraffitiS
   context.restore();
 }
 
+/** Turn the cutout into a blocker with a soft edge on the rotated image boundary. */
+export function blockImageStencilInterior(
+  mask: CanvasRenderingContext2D, center: Point, width: number, height: number, rotation: number, feather: number,
+) {
+  function fade(gradient: CanvasGradient, length: number) {
+    const edge = Math.min(.25, feather / length);
+    gradient.addColorStop(0, '#fff0');
+    gradient.addColorStop(edge, '#fff');
+    gradient.addColorStop(1 - edge, '#fff');
+    gradient.addColorStop(1, '#fff0');
+    return gradient;
+  }
+  const x = -width / 2, y = -height / 2;
+  mask.save();
+  mask.translate(center.x, center.y);
+  mask.rotate(rotation * Math.PI / 180);
+  mask.globalCompositeOperation = 'source-out';
+  mask.fillStyle = fade(mask.createLinearGradient(x, 0, -x, 0), width);
+  mask.fillRect(x, y, width, height);
+  mask.globalCompositeOperation = 'destination-in';
+  mask.fillStyle = fade(mask.createLinearGradient(0, y, 0, -y), height);
+  mask.fillRect(x, y, width, height);
+  mask.restore();
+}
+
 export function sprayPaint(
   paint: CanvasRenderingContext2D, scratch: CanvasRenderingContext2D, paperBlock: HTMLCanvasElement | null,
   point: Point, radius: number, color: string, allowOutside: boolean,

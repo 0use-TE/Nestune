@@ -3,7 +3,7 @@
 import { useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type PointerEvent, type Ref } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  cutStencil, DEFAULT_TEXT_EFFECTS, DEFAULT_TEXT_SHAPE, extendGraffitiArea, GRAFFITI_FONTS, GRAFFITI_FONT_LABELS,
+  blockImageStencilInterior, cutStencil, DEFAULT_TEXT_EFFECTS, DEFAULT_TEXT_SHAPE, extendGraffitiArea, GRAFFITI_FONTS, GRAFFITI_FONT_LABELS,
   GRAFFITI_PNG_MAX_BYTES, GRAFFITI_STENCILS, GRAFFITI_TEXT_LIMIT, inkBounds, ROAD_RAGE_SHAPE, sprayPaint, stencilFontFamily, stencilFontNeedsFallback,
   stencilText, TEXT_SHAPES, type GraffitiArea, type GraffitiPlacement,
   type GraffitiFont, type GraffitiPass, type GraffitiStencil, type Point, type TextEffects, type TextShape,
@@ -250,18 +250,25 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     const center = { x: (position.x - area.x) * scaleX, y: (position.y - area.y) * scaleY };
     cutStencil(paperMask, stencil, center, size * sizeScale, textShape, textEffects, rotation,
       { width: initialArea.width * scaleX, height: initialArea.height * scaleY });
-    let frame;
     if (stencil.type === 'image' && pixels) {
       const { width: sourceWidth, height: sourceHeight } = pixels;
       const scale = size * sizeScale / Math.max(sourceWidth, sourceHeight);
+      const imageWidth = sourceWidth * scale, imageHeight = sourceHeight * scale;
       const angle = rotation * Math.PI / 180;
       const sin = Math.abs(Math.sin(angle)), cos = Math.abs(Math.cos(angle));
-      const width = (sourceWidth * cos + sourceHeight * sin) * scale;
-      const height = (sourceWidth * sin + sourceHeight * cos) * scale;
-      frame = { x: center.x - width / 2, y: center.y - height / 2, width, height };
-    } else {
-      frame = inkBounds(snapshot(paperMask));
+      const left = center.x - (imageWidth * cos + imageHeight * sin) / 2;
+      const top = center.y - (imageWidth * sin + imageHeight * cos) / 2;
+      setHandle({ x: clamp(left, rasterWidth) / rasterWidth, y: clamp(top, rasterHeight) / rasterHeight });
+      guide.save();
+      guide.drawImage(paperMask.canvas, 0, 0);
+      guide.globalCompositeOperation = 'source-in';
+      guide.fillStyle = 'rgba(85, 69, 48, .2)';
+      guide.fillRect(0, 0, rasterWidth, rasterHeight);
+      guide.restore();
+      if (allowOutside) blockImageStencilInterior(paperMask, center, imageWidth, imageHeight, rotation, 16 * sizeScale);
+      return;
     }
+    const frame = inkBounds(snapshot(paperMask));
     if (!frame) {
       setHandle(null);
       return;

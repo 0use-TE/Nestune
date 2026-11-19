@@ -23,7 +23,7 @@ export function GraffitiImageLayers({ image, assignments, onChange, onPickPaint 
   onPickPaint: (hex: string) => void;
 }) {
   const { pixels, layers, selected, range, background } = image;
-  const [pickTarget, setPickTarget] = useState<'paint' | 'sample' | 'background' | null>(null);
+  const [pickTarget, setPickTarget] = useState<'sample' | 'background' | null>(null);
   const source = useRef<HTMLCanvasElement>(null);
   const preview = useRef<HTMLCanvasElement>(null);
   const active = layers[selected];
@@ -67,9 +67,8 @@ export function GraffitiImageLayers({ image, assignments, onChange, onPickPaint 
             <i aria-hidden="true" style={{ background: layer.paint }} />{index + 1}{layer.hidden && ' · 留空'}
           </button>)}
       </div>
-      <button className={`chip nc-graffiti-image-pick ${pickTarget === 'paint' ? 'on' : ''}`}
-        type="button" aria-pressed={pickTarget === 'paint'}
-        onClick={() => setPickTarget(pickTarget === 'paint' ? null : 'paint')}>给当前罐取色</button>
+      <button className="chip nc-graffiti-image-pick" type="button" disabled={!active}
+        onClick={() => { setPickTarget(null); onPickPaint(active.paint); }}>给当前罐取色</button>
       <details className="nc-graffiti-layer-settings">
         <summary>分色设置</summary>
         <div className="nc-graffiti-text-presets">
@@ -95,8 +94,7 @@ export function GraffitiImageLayers({ image, assignments, onChange, onPickPaint 
     <div className="nc-graffiti-image-previews">
       <figure>
         <button type="button" disabled={pickTarget === null}
-          aria-label={pickTarget === 'background' ? '从原图取背景色' : pickTarget === 'sample' ? '从原图取图层样色'
-            : pickTarget === 'paint' ? '从原图给当前罐取色' : '原图预览'}
+          aria-label={pickTarget === 'background' ? '从原图取背景色' : pickTarget === 'sample' ? '从原图取图层样色' : '原图预览'}
           onClick={event => {
             const rect = event.currentTarget.getBoundingClientRect();
             const u = event.detail ? (event.clientX - rect.left) / rect.width : .5;
@@ -110,13 +108,10 @@ export function GraffitiImageLayers({ image, assignments, onChange, onPickPaint 
               onChange({ ...image, background: hex });
             } else if (pickTarget === 'sample') {
               updateLayer({ sample: hex });
-            } else if (pickTarget === 'paint') {
-              onPickPaint(hex);
             }
             setPickTarget(null);
           }}><canvas ref={source} width={pixels.width} height={pixels.height} style={thumbStyle} /></button>
-        <figcaption>{pickTarget === 'background' ? '点原图选背景' : pickTarget === 'sample' ? '点原图选分色'
-          : pickTarget === 'paint' ? '点原图换罐色' : '原图'}</figcaption>
+        <figcaption>{pickTarget === 'background' ? '点原图选背景' : pickTarget === 'sample' ? '点原图选分色' : '原图'}</figcaption>
       </figure>
       <figure>
         <canvas ref={preview} width={pixels.width} height={pixels.height} style={thumbStyle} aria-label="分色预览" />
