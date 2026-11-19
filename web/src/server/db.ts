@@ -153,7 +153,9 @@ function open() {
       x INTEGER NOT NULL,
       y INTEGER NOT NULL,
       version TEXT NOT NULL,
-      png BLOB NOT NULL,
+      pixels INTEGER NOT NULL,
+      mime TEXT NOT NULL,
+      image BLOB NOT NULL,
       PRIMARY KEY (x, y)
     ) WITHOUT ROWID;
     CREATE TABLE IF NOT EXISTS music_sources (
@@ -228,6 +230,12 @@ function open() {
   `);
   db.exec('BEGIN IMMEDIATE');
   try {
+    const wallColumns = db.prepare('PRAGMA table_info(canvas_wall_tiles)').all();
+    if (wallColumns.some(column => column.name === 'png')) {
+      db.exec(`ALTER TABLE canvas_wall_tiles RENAME COLUMN png TO image;
+        ALTER TABLE canvas_wall_tiles ADD COLUMN pixels INTEGER NOT NULL DEFAULT 1024;
+        ALTER TABLE canvas_wall_tiles ADD COLUMN mime TEXT NOT NULL DEFAULT 'image/png';`);
+    }
     if (!db.prepare('PRAGMA table_info(users)').all().some(column => column.name === 'profile_public')) db.exec('ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 1');
     if (!db.prepare('PRAGMA table_info(playlists)').all().some(column => column.name === 'is_public')) db.exec('ALTER TABLE playlists ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
     const columns = db.prepare('PRAGMA table_info(listening_rooms)').all();

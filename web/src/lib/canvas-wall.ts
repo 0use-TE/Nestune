@@ -1,3 +1,2 @@
 export const WALL_TILE_SIZE = 512;
-export const WALL_TILE_DENSITY = 2;
-export const WALL_TILE_PIXELS = WALL_TILE_SIZE * WALL_TILE_DENSITY;
+export const LEGACY_WALL_TILE_PIXELS = 1024;

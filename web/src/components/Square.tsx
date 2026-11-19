@@ -6,7 +6,7 @@ import { useCanvasCamera } from '@/lib/use-canvas-camera';
 import { CANVAS_DRAG_THRESHOLD, WORLD_LIMIT } from '@/lib/canvas-camera';
 import { useCanvasPreview } from '@/lib/use-canvas-preview';
 import { useCanvasSync } from '@/lib/use-canvas-sync';
-import { WALL_TILE_PIXELS, WALL_TILE_SIZE } from '@/lib/canvas-wall';
+import { LEGACY_WALL_TILE_PIXELS, WALL_TILE_SIZE } from '@/lib/canvas-wall';
 import { api, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { CANVAS_DRAG_TYPE, isCanvasGraffiti, isCanvasMusic, type CanvasItem, type CanvasRecord, type CanvasSource, type CanvasState } from '@/lib/canvas-types';
@@ -438,7 +438,7 @@ export function Square() {
       {visibleWall.map(tile => <div key={`${tile.x}:${tile.y}`} data-wall-tile={`${tile.x}:${tile.y}`} className="nc-wall-tile"
         style={{ left: tile.x * WALL_TILE_SIZE, top: tile.y * WALL_TILE_SIZE, width: WALL_TILE_SIZE, height: WALL_TILE_SIZE }}>
         <CanvasImage key={tile.version} src={`/api/canvas/wall/${tile.x}/${tile.y}?v=${tile.version}`}
-          alt="墙面涂鸦" width={WALL_TILE_PIXELS} height={WALL_TILE_PIXELS} />
+          alt="墙面涂鸦" width={tile.pixels ?? LEGACY_WALL_TILE_PIXELS} height={tile.pixels ?? LEGACY_WALL_TILE_PIXELS} />
       </div>)}
     </div>
   ), [state.records, visibleWall]);

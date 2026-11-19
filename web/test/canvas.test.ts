@@ -42,6 +42,7 @@ it('updates wall pixels in place across tile boundaries and syncs tile versions'
   expect(() => wallTileImage(0, 0, redTiles[1].version)).toThrow('墙面区域已更新');
   for (const tile of blended.wall!) {
     const response = wallTileImage(tile.x, tile.y, tile.version);
+    expect(response.headers.get('content-type')).toBe('image/webp');
     expect(response.headers.get('cache-control')).toBe('private, max-age=86400, immutable');
     expect(wallTileImage(tile.x, tile.y, tile.version, response.headers.get('etag')).status).toBe(304);
     const left = tile.x === -1 ? 1023 : 0;
@@ -60,6 +61,24 @@ it('updates wall pixels in place across tile boundaries and syncs tile versions'
   expect(database.one<{ count: number }>('SELECT count(*) AS count FROM canvas_wall_tiles')!.count).toBe(2);
   expect(fs.existsSync(path.join(folder, 'canvas-images'))).toBe(false);
   expect(readCanvasSync(blank.token)).toMatchObject({ kind: 'delta', wall: blue.wall, upserts: [], removed: [] });
+});
+
+it('stores soft paint at lower resolution and upgrades only tiles touched by higher-detail paint', async () => {
+  const { wallTileImage } = await import('@/server/canvas-wall');
+  const sprite = (width: number, background: string) =>
+    sharp({ create: { width, height: width, channels: 4, background } }).png().toBuffer();
+  const soft = await canvas.addCanvasWallPaint(await sprite(24, '#ff0000'), { x: 512, y: 256, boardWidth: 128 });
+  const first = soft.wall!;
+  expect(first.map(({ x, pixels }) => [x, pixels])).toEqual([[0, 128], [1, 128]]);
+  const withDetail = await canvas.addCanvasWallPaint(await sprite(40, '#0000ff'), { x: 520, y: 256, boardWidth: 12 });
+  expect(withDetail.wall![0]).toEqual(first[0]);
+  const updated = withDetail.wall![1];
+  expect(updated.pixels).toBe(1024);
+  const image = Buffer.from(await wallTileImage(1, 0, updated.version).arrayBuffer());
+  const pixel = async (left: number) => [...await sharp(image)
+    .extract({ left, top: 512, width: 1, height: 1 }).raw().toBuffer()];
+  expect(await pixel(16)).toEqual([0, 0, 255, 255]);
+  expect(await pixel(80)).toEqual([255, 0, 0, 255]);
 });
 
 it('preserves concurrent paint submissions that touch the same tile', async () => {

@@ -195,17 +195,14 @@ export async function migrateLegacyCanvasWall() {
   const state = readStoredCanvas();
   const legacy = state.records.filter(isCanvasGraffiti);
   if (!legacy.length) return { migrated: 0, tiles: wallTiles().length };
-  async function* sources() {
-    for (const { imageFile, x, y, graffiti } of legacy) {
-      if (!imagePattern.test(imageFile)) throw new Error(`历史涂鸦文件名无效：${imageFile}`);
-      yield {
-        bytes: await readFile(dir('canvas-images', imageFile)),
-        position: { x, y, width: graffiti.boardWidth ?? Math.max(12, graffiti.width / 2) },
-        dimensions: { width: graffiti.width, height: graffiti.height },
-      };
-    }
-  }
-  const writeWall = await stageLegacyWall(sources());
+  const writeWall = await stageLegacyWall(legacy.map(({ imageFile, x, y, graffiti }) => {
+    if (!imagePattern.test(imageFile)) throw new Error(`历史涂鸦文件名无效：${imageFile}`);
+    return {
+      read: () => readFile(dir('canvas-images', imageFile)),
+      position: { x, y, width: graffiti.boardWidth ?? Math.max(12, graffiti.width / 2) },
+      dimensions: { width: graffiti.width, height: graffiti.height },
+    };
+  }));
   return canvasTransaction(() => {
     if (kvGet(storageKey()) !== before) throw fail(409, '迁移期间画布有更新，请重新开始迁移');
     writeWall();

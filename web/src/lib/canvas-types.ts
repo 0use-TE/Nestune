@@ -16,7 +16,7 @@ type CanvasPaint = { width: number; height: number; boardWidth?: number };
 export type CanvasImage = CanvasBase & { kind: 'image'; imageFile: string; graffiti?: CanvasPaint };
 export type CanvasEmoji = CanvasBase & { kind: 'emoji'; emoji: string };
 export type CanvasItem = CanvasRecord | CanvasNote | CanvasImage | CanvasEmoji;
-export type CanvasWallTile = { x: number; y: number; version: string };
+export type CanvasWallTile = { x: number; y: number; version: string; pixels?: number };
 export type CanvasState = { revision: number; records: CanvasItem[]; wall?: CanvasWallTile[] };
 export type CanvasSyncReply =
   | { kind: 'snapshot'; token: string; state: CanvasState }
