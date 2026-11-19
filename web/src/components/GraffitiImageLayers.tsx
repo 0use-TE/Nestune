@@ -16,6 +16,30 @@ export function GraffitiSourcePreview({ pixels }: { pixels: ImageData }) {
   </figure>;
 }
 
+export function GraffitiImageLayerColors({ layers, selected, painted, onSelect }: {
+  layers: StencilColorLayer[];
+  selected: number;
+  painted?: ReadonlySet<number>;
+  onSelect: (index: number) => void;
+}) {
+  return <div className="nc-graffiti-text-presets" role="group" aria-label="图片颜色层">
+    {layers.map((layer, index) => {
+      const complete = painted?.has(index);
+      const status = layer.hidden ? '留空' : complete ? '已喷涂' : '';
+      return <button className={`chip nc-graffiti-pass ${selected === index ? 'on' : ''}`} key={index} type="button"
+        aria-label={`颜色层 ${index + 1}${layer.hidden ? '，已留空' : complete ? '，已喷涂' : ''}`}
+        aria-pressed={selected === index} disabled={complete} onClick={() => onSelect(index)}>
+        <i aria-hidden="true" style={{ background: layer.paint }} />{index + 1}{status && ` · ${status}`}
+      </button>;
+    })}
+  </div>;
+}
+
+export function GraffitiLayerPaintButton({ paint, onPick }: { paint?: string; onPick: (hex: string) => void }) {
+  return <button className="chip nc-graffiti-image-pick" type="button" disabled={!paint}
+    onClick={() => { if (paint) onPick(paint); }}>给当前罐取色</button>;
+}
+
 export function GraffitiImageLayers({ image, assignments, onChange, onPickPaint }: {
   image: StencilImage;
   assignments: Uint8Array;
@@ -56,19 +80,14 @@ export function GraffitiImageLayers({ image, assignments, onChange, onPickPaint 
           {[2, 3, 4, 5, 6].map(count => <option key={count} value={count}>{count} 色</option>)}
         </select></label>
       </div>
-      <div className="nc-graffiti-text-presets" role="group" aria-label="图片颜色层">
-        {layers.map((layer, index) =>
-          <button className={`chip nc-graffiti-pass ${selected === index ? 'on' : ''}`} key={index} type="button"
-            aria-label={`颜色层 ${index + 1}${layer.hidden ? '，已留空' : ''}`}
-            aria-pressed={selected === index} onClick={() => {
-              setPickTarget(null);
-              onChange({ ...image, selected: index });
-            }}>
-            <i aria-hidden="true" style={{ background: layer.paint }} />{index + 1}{layer.hidden && ' · 留空'}
-          </button>)}
-      </div>
-      <button className="chip nc-graffiti-image-pick" type="button" disabled={!active}
-        onClick={() => { setPickTarget(null); onPickPaint(active.paint); }}>给当前罐取色</button>
+      <GraffitiImageLayerColors layers={layers} selected={selected} onSelect={index => {
+        setPickTarget(null);
+        onChange({ ...image, selected: index });
+      }} />
+      <GraffitiLayerPaintButton paint={active?.paint} onPick={hex => {
+        setPickTarget(null);
+        onPickPaint(hex);
+      }} />
       <details className="nc-graffiti-layer-settings">
         <summary>分色设置</summary>
         <div className="nc-graffiti-text-presets">

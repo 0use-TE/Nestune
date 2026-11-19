@@ -1,49 +1,47 @@
-'use client';
+import type { ReactNode } from 'react';
 
-import { useEffect, useRef } from 'react';
-import type { Point } from '@/lib/canvas-graffiti';
+export const GRAFFITI_LESSON_IMAGE = '/canvas-graffiti/record-practice.png';
+export const GRAFFITI_LESSON_COVERAGE = 80;
 
-export const GUIDE_LOGO_LAYERS = [
-  { name: '外圈', path: 'M50 10a40 40 0 1 0 0 80a40 40 0 1 0 0-80ZM50 17a33 33 0 1 1 0 66a33 33 0 1 1 0-66Z',
-    color: '#252422', instruction: '选一罐深色，沿着墙面模板的镂空圆圈喷一遍。' },
-  { name: '阴影', path: 'M62 28 34 57H52L46 79 77 47H58Z',
-    color: '#3679d6', instruction: '换一罐颜色，喷满偏下一点的闪电，给标志加一层阴影。' },
-  { name: '主体', path: 'M55 23 27 52H45L39 74 70 42H51Z',
-    color: '#edaf35', instruction: '换一罐亮色，喷满上面的闪电。刚才的阴影会从它的边缘露出来。' },
-] as const;
+export type LayerGuide = 'intro' | 'import' | 'separate' | 'select' | 'pick' | 'mix' | 'spray' | 'complete';
 
-export type LayerGuide = { stage: 'intro' } | { stage: 'practice'; step: number; position: Point; painted: boolean } | { stage: 'complete' };
+const steps = {
+  intro: ['把图片喷到墙上', '导入一张图，按颜色分层，再一层层喷出自己的版本。'],
+  import: ['导入图片', '选一张自己的图，或者用示例唱片开始。'],
+  separate: ['按颜色分层', '点「颜色分层」，把图片里的颜色拆成能单独喷涂的区域。'],
+  select: ['选择颜色层', '点一个还没喷过的色块，墙面会显示这一层能喷的位置。'],
+  pick: ['一键取色', '点「给当前罐取色」，把这个图层的颜色装进手里的喷漆罐。'],
+  mix: ['调出自己的颜色', '拖动调色盘选色，也可以套用一组配色。调好后用这罐喷。'],
+  spray: ['喷涂这一层', '按住模板来回喷涂，松开后查看进度。'],
+  complete: ['作品完成', '可以把成品贴到共享画布，也可以结束这次练习。'],
+} as const satisfies Record<LayerGuide, readonly [string, string]>;
 
-export function GraffitiLayerGuide({ guide, onStart, onNext, onExit }: {
-  guide: LayerGuide; onStart: () => void; onNext: () => void; onExit: () => void;
+export function GraffitiLayerGuide({ stage, coverage, painted, total, busy, children, onExit }: {
+  stage: LayerGuide;
+  coverage: number;
+  painted: number;
+  total: number;
+  busy: boolean;
+  children?: ReactNode;
+  onExit: () => void;
 }) {
-  const reference = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const context = reference.current?.getContext('2d');
-    if (!context) return;
-    for (const layer of GUIDE_LOGO_LAYERS) {
-      context.fillStyle = layer.color;
-      context.fill(new Path2D(layer.path), 'evenodd');
-    }
-  }, []);
-
-  const step = guide.stage === 'practice' ? GUIDE_LOGO_LAYERS[guide.step] : null;
-  const last = guide.stage === 'practice' && guide.step === GUIDE_LOGO_LAYERS.length - 1;
-  return <section className="nc-graffiti-lesson" aria-label="涂鸦分层教程">
-    <canvas ref={reference} width={100} height={100} role="img" aria-label="示例闪电标志" />
-    <div className="nc-graffiti-lesson-copy" aria-live="polite">
-      <b>{guide.stage === 'intro' ? '用涂鸦做个闪电标志' : guide.stage === 'practice'
-        ? `${guide.step + 1}/${GUIDE_LOGO_LAYERS.length} · ${step?.name}` : '练习完成'}</b>
-      <p className="sub sm">{step?.instruction ?? (guide.stage === 'intro'
-        ? '用三张模板亲手喷出外圈、阴影和主体。' : '看看墙上三层叠起来的效果。开始自由涂鸦时会清空这幅练习。')}</p>
-    </div>
-    <div className="nc-graffiti-lesson-actions">
-      {guide.stage === 'intro' && <button className="btn sm" type="button" onClick={onStart}>开始练习</button>}
-      {guide.stage === 'practice' && <button className="btn sm" type="button" disabled={!guide.painted}
-        onClick={onNext}>{last ? '查看成品' : '下一层'}</button>}
-      <button className={`btn sm ${guide.stage !== 'complete' ? 'ghost' : ''}`} type="button" onClick={onExit}>
-        {guide.stage === 'intro' ? '跳过' : guide.stage === 'practice' ? '退出练习' : '开始自由涂鸦'}
+  const [title, instruction] = steps[stage];
+  return <section className="nc-graffiti-lesson" aria-label="图片涂鸦教程">
+    <div className="nc-graffiti-lesson-heading">
+      {(stage === 'intro' || stage === 'import') && <img src={GRAFFITI_LESSON_IMAGE} width={44} height={44} alt="示例唱片" />}
+      <div className="nc-graffiti-lesson-copy" aria-live="polite">
+        <b>{title}</b>
+        <p className="sub sm">{instruction}</p>
+      </div>
+      <button className="btn ghost sm nc-graffiti-lesson-exit" type="button" disabled={busy} onClick={onExit}>
+        {stage === 'intro' ? '跳过' : stage === 'complete' ? '结束练习' : '退出练习'}
       </button>
     </div>
+    {stage === 'spray' && <div className="nc-graffiti-lesson-progress">
+      <progress aria-label="当前图层喷涂进度" value={Math.min(coverage, GRAFFITI_LESSON_COVERAGE)} max={GRAFFITI_LESSON_COVERAGE}>
+      </progress>
+      <span className="sub sm">{painted}/{total} 层已完成</span>
+    </div>}
+    {children && <div className="nc-graffiti-lesson-controls">{children}</div>}
   </section>;
 }

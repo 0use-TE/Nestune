@@ -19,8 +19,8 @@ import { GraffitiSprayAudio } from '@/lib/graffiti-spray-audio';
 import { registerOverlay } from '@/lib/overlays';
 import { Icon } from './Icon';
 import { GraffitiColorPicker, GraffitiPaintCards } from './GraffitiColorPicker';
-import { GraffitiImageLayers, GraffitiSourcePreview } from './GraffitiImageLayers';
-import { GraffitiLayerGuide, GUIDE_LOGO_LAYERS, type LayerGuide } from './GraffitiLayerGuide';
+import { GraffitiImageLayerColors, GraffitiImageLayers, GraffitiLayerPaintButton, GraffitiSourcePreview } from './GraffitiImageLayers';
+import { GRAFFITI_LESSON_COVERAGE, GRAFFITI_LESSON_IMAGE, GraffitiLayerGuide, type LayerGuide } from './GraffitiLayerGuide';
 import { GraffitiSprayCans } from './GraffitiSprayCans';
 
 const snapshot = (ctx: CanvasRenderingContext2D) => ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -33,6 +33,16 @@ const layer = (width: number, height: number, willReadFrequently = false) => {
 const clamp = (value: number, max: number) => Math.min(Math.max(value, 0), max);
 const textInput = (value: string) => [...value.replace(/[^A-Za-z0-9\p{Script=Han} ，。！？·]/gu, '')].slice(0, GRAFFITI_TEXT_LIMIT).join('');
 const preferencesKey = 'nt-graffiti-spray';
+function stencilCoverage(paint: ImageData, cutout: ImageData) {
+  let total = 0, filled = 0;
+  for (let alpha = 3; alpha < cutout.data.length; alpha += 4) {
+    if (cutout.data[alpha] < 128) continue;
+    total++;
+    if (paint.data[alpha] >= 52) filled++;
+  }
+  return total ? Math.floor(filled / total * 100) : 0;
+}
+
 function sprayPreferences(): { sound: boolean; outside: boolean } {
   try {
     const saved = JSON.parse(localStorage.getItem(preferencesKey) ?? '{}');
@@ -97,19 +107,22 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   const renderedArea = useRef<GraffitiArea | null>(null);
   const active = useRef(true);
   const [tab, setTab] = useState<Tab>('paint');
-  const guideKey = `nt-graffiti-layer-guide-v1:${accountId ?? 'guest'}`;
+  const guideKey = `nt-graffiti-layer-guide-v2:${accountId ?? 'guest'}`;
   const [guide, setGuide] = useState<LayerGuide | null>(() => {
-    try { return localStorage.getItem(guideKey) === '1' ? null : { stage: 'intro' }; }
-    catch { return { stage: 'intro' }; }
+    try { return localStorage.getItem(guideKey) === '1' ? null : 'intro'; }
+    catch { return 'intro'; }
   });
-  const practice = guide?.stage === 'practice' ? guide : null;
-  const inGuide = guide?.stage === 'practice' || guide?.stage === 'complete';
-  const practicePath = practice ? GUIDE_LOGO_LAYERS[practice.step].path : null;
+  const inGuide = guide !== null && guide !== 'intro';
+  const [lessonImage, setLessonImage] = useState<StencilImage | null>(null);
+  const [paintedLayers, setPaintedLayers] = useState<ReadonlySet<number>>(() => new Set());
+  const [coverage, setCoverage] = useState(0);
+  const [mixedCan, setMixedCan] = useState<number | null>(null);
   const hand = tab === 'hand' && !inGuide;
   const [hasInk, setHasInk] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const [cans, setCans] = useState(() => PAINT_CARDS[0].colors.map(paintFromHex));
   const [selectedCan, setSelectedCan] = useState(0);
+  const previousPaint = useRef<{ cans: PaintColor[]; selected: number } | null>(null);
   const [paintPanel, setPaintPanel] = useState<'picker' | 'cards' | null>(null);
   const [sprayOptions, setSprayOptions] = useState(sprayPreferences);
   const allowOutside = sprayOptions.outside && !inGuide;
@@ -117,15 +130,17 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   const [fileHover, setFileHover] = useState(false);
   const color = paintHex(paintColor);
   const [radius, setRadius] = useState(36);
+  const brushRadius = inGuide ? 52 : radius;
   const [selectedStencil, setStencil] = useState<EditorStencil>(null);
-  const [imageSource, setImageSource] = useState<StencilImage | null>(null);
+  const [savedImage, setSavedImage] = useState<StencilImage | null>(null);
+  const imageSource = inGuide ? lessonImage : savedImage;
   const [showSource, setShowSource] = useState(false);
   const [showPatterns, setShowPatterns] = useState(false);
   const [basicPose, setBasicPose] = useState<StencilPose>({
     size: 230, rotation: 0, position: { x: initialArea.x + initialArea.width / 2, y: initialArea.y + initialArea.height / 2 },
   });
-  const activeImage = selectedStencil === 'image' ? imageSource : null;
-  const { position, rotation, size } = practice ? { position: practice.position, rotation: 0, size: 220 } : activeImage?.pose ?? basicPose;
+  const activeImage = inGuide ? lessonImage : selectedStencil === 'image' ? imageSource : null;
+  const { position, rotation, size } = activeImage?.pose ?? basicPose;
   const pixels = activeImage?.pixels;
   const imageMode = activeImage?.mode;
   const matchColors = activeImage?.layers.map(layer => layer.sample).join(',');
@@ -143,11 +158,11 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     return assignments && !layerHidden ? stencilColorMask(pixels, assignments, activeLayer) : null;
   }, [pixels, imageMode, threshold, assignments, activeLayer, layerHidden]);
   const stencil = useMemo<GraffitiStencil | null>(() => {
-    if (inGuide) return practicePath ? { type: 'shape', path: practicePath } : null;
+    if (inGuide) return guide === 'pick' || guide === 'mix' || guide === 'spray' ? { type: 'image', mask: imageMask } : null;
     return selectedStencil === 'image' ? { type: 'image', mask: imageMask } : selectedStencil;
-  }, [inGuide, practicePath, selectedStencil, imageMask]);
-  const latestImage = useRef(imageSource);
-  latestImage.current = imageSource;
+  }, [inGuide, guide, imageMode, selectedStencil, imageMask]);
+  const latestImage = useRef(savedImage);
+  latestImage.current = savedImage;
   const storedImage = useRef<StencilImage | null>(null);
   const [handle, setHandle] = useState<Point | null>(null);
   const [draft, setDraft] = useState('');
@@ -171,7 +186,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     void loadStencilImage(accountId).then(image => {
       if (!mounted || !image || latestImage.current) return;
       storedImage.current = image;
-      setImageSource(current => current ?? image);
+      setSavedImage(current => current ?? image);
     }).catch(() => {});
     return () => {
       mounted = false;
@@ -182,14 +197,14 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   }, [accountId]);
 
   useEffect(() => {
-    if (accountId === undefined || !imageSource || storedImage.current === imageSource) return;
+    if (accountId === undefined || !savedImage || storedImage.current === savedImage) return;
     const timer = setTimeout(() => {
-      void saveStencilImage(accountId, imageSource).then(() => {
-        storedImage.current = imageSource;
+      void saveStencilImage(accountId, savedImage).then(() => {
+        storedImage.current = savedImage;
       }).catch(() => {});
     }, 200);
     return () => clearTimeout(timer);
-  }, [accountId, imageSource]);
+  }, [accountId, savedImage]);
 
   useEffect(() => {
     const dismiss = () => close.current();
@@ -324,30 +339,75 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
 
   function startGuide() {
     if (gesture.current || stencilDrag.current || generating || saving || hasInk) return;
-    const center = viewCenter();
-    rememberGuide();
-    setGuide({ stage: 'practice', step: 0, painted: false, position: { x: center.x, y: center.y - 24 / zoom } });
+    previousPaint.current = { cans, selected: selectedCan };
+    setError('');
+    setGuide('import');
   }
 
-  function nextGuideLayer() {
-    if (!practice?.painted || gesture.current) return;
-    const step = practice.step + 1;
-    setGuide(step === GUIDE_LOGO_LAYERS.length ? { stage: 'complete' } : { ...practice, step, painted: false });
+  function splitGuideImage() {
+    if (!lessonImage) return;
+    const { pixels, layers } = lessonImage;
+    const used = new Set(separateStencilColors(pixels, layers.map(item => item.sample), 100, null));
+    const visibleLayers = layers.filter((_, index) => used.has(index + 1));
+    setLessonImage({ ...lessonImage, layers: visibleLayers, mode: 'colors', pose: {
+      ...lessonImage.pose, position: viewCenter(),
+    } });
+    setGuide('select');
+  }
+
+  function selectGuideLayer(index: number) {
+    if (!lessonImage || paintedLayers.has(index)) return;
+    setLessonImage({ ...lessonImage, selected: index });
+    setMixedCan(null);
+    if (paintedLayers.size === 1) {
+      setPaintColor(paintFromHex(lessonImage.layers[index].paint));
+      setGuide('mix');
+    } else {
+      setGuide('pick');
+    }
+  }
+
+  function pickGuideColor(hex: string) {
+    setPaintColor(paintFromHex(hex));
+    setGuide(lessonImage?.layers.length === 1 ? 'mix' : 'spray');
+  }
+
+  function finishGuideLayer() {
+    if (!lessonImage || coverage < GRAFFITI_LESSON_COVERAGE || gesture.current) return;
+    const completed = new Set(paintedLayers).add(lessonImage.selected);
+    setPaintedLayers(completed);
+    setCoverage(0);
+    if (completed.size === lessonImage.layers.length) {
+      rememberGuide();
+      setGuide('complete');
+    } else {
+      setGuide('select');
+    }
   }
 
   function exitGuide() {
-    if (gesture.current) return;
-    if (guide?.stage === 'intro') rememberGuide();
+    if (gesture.current || generating || saving) return;
+    rememberGuide();
     if (inGuide) {
       context.current?.clearRect(0, 0, rasterWidth, rasterHeight);
       setHasInk(false);
+      setLessonImage(null);
+      setPaintedLayers(new Set());
+      setCoverage(0);
+      setMixedCan(null);
+      setError('');
+      if (previousPaint.current) {
+        setCans(previousPaint.current.cans);
+        setSelectedCan(previousPaint.current.selected);
+        previousPaint.current = null;
+      }
     }
     setGuide(null);
   }
 
   function changePose(patch: Partial<StencilPose>) {
     if (selectedStencil === 'image') {
-      setImageSource(current => current && { ...current, pose: { ...current.pose, ...patch } });
+      setSavedImage(current => current && { ...current, pose: { ...current.pose, ...patch } });
     } else {
       setBasicPose(current => ({ ...current, ...patch }));
     }
@@ -393,14 +453,14 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
 
   function spray(point: Point) {
     if (!context.current || !scratch.current) return;
-    sprayPaint(context.current, scratch.current, stencil ? mask.current?.canvas ?? null : null, point, radius * sizeScale, color, allowOutside);
+    sprayPaint(context.current, scratch.current, stencil ? mask.current?.canvas ?? null : null, point, brushRadius * sizeScale, color, allowOutside);
   }
 
   function begin(event: PointerEvent<HTMLCanvasElement>) {
     if (!context.current || gesture.current || stencilDrag.current || hand || movingView || saving || generating
-      || guide?.stage === 'complete' || !event.isPrimary || event.button !== 0) return;
+      || (inGuide && (guide !== 'spray' || !imageMask)) || !event.isPrimary || event.button !== 0) return;
     event.preventDefault();
-    if (guide?.stage === 'intro') exitGuide();
+    if (guide === 'intro') exitGuide();
     if (event.pointerType === 'mouse') event.currentTarget.focus({ preventScroll: true });
     const point = pointAt(event);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -422,7 +482,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     if (!current || current.id !== event.pointerId) return;
     const point = pointAt(event);
     const dx = point.x - current.last.x, dy = point.y - current.last.y;
-    const steps = Math.ceil(Math.hypot(dx, dy) / Math.max(2, radius * sizeScale / 3));
+    const steps = Math.ceil(Math.hypot(dx, dy) / Math.max(2, brushRadius * sizeScale / 3));
     for (let i = 1; i <= steps; i++) {
       spray({ x: current.last.x + dx * i / steps, y: current.last.y + dy * i / steps });
     }
@@ -448,7 +508,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     }
     const after = snapshot(context.current);
     if (!after.data.some((value, index) => value !== current.before.data[index])) return;
-    if (practice) setGuide({ ...practice, painted: true });
+    if (guide === 'spray' && mask.current) setCoverage(stencilCoverage(after, snapshot(mask.current)));
     else remember(current.before);
     setHasInk(true);
   }
@@ -464,10 +524,13 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   function setPaintColor(next: PaintColor) {
     if (gesture.current) return;
     setCans(current => current.map((can, index) => index === selectedCan ? next : can));
+    if (guide === 'mix' && paintHex(next) !== color) setMixedCan(selectedCan);
   }
 
   function applyPalette(next: readonly string[]) {
-    if (!gesture.current) setCans(next.map(paintFromHex));
+    if (gesture.current) return;
+    setCans(next.map(paintFromHex));
+    if (guide === 'mix') setMixedCan(selectedCan);
   }
 
   function toggleSpraySound() {
@@ -553,7 +616,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
 
   function updateImage(next: StencilImage) {
     if (gesture.current || stencilDrag.current) return;
-    setImageSource(next);
+    setSavedImage(next);
   }
 
   function reopenImage() {
@@ -567,23 +630,33 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     if (gesture.current || stencilDrag.current) return;
     latestImage.current = null;
     storedImage.current = null;
-    setImageSource(null);
+    setSavedImage(null);
     if (selectedStencil === 'image') setStencil(null);
     if (accountId !== undefined) void saveStencilImage(accountId, null).catch(() => {});
   }
 
-  async function importStencil(file: File, at?: Point) {
-    if (inGuide || generating || saving || gesture.current || stencilDrag.current) return;
-    if (guide?.stage === 'intro') exitGuide();
+  async function importStencil(file: File | (() => Promise<File>), at?: Point) {
+    if ((inGuide && guide !== 'import') || generating || saving || gesture.current || stencilDrag.current) return;
+    if (guide === 'intro') exitGuide();
     setGenerating(true);
     setError('');
     try {
-      const { pixels, mode } = await readStencilImage(file);
+      const source = typeof file === 'function' ? await file() : file;
+      const { pixels, mode } = await readStencilImage(source);
       if (!active.current) return;
-      updateImage({
-        name: file.name, pixels, mode, threshold: 128, layers: autoStencilLayers(pixels, 3),
-        selected: 0, range: 100, background: null, pose: { size: 310, rotation: 0, position: at ?? viewCenter() },
-      });
+      const layers = autoStencilLayers(pixels, 3);
+      if (inGuide && !layers.length) throw new Error('这张图没有可分层的颜色，请选一张有内容的图。');
+      const imported: StencilImage = {
+        name: source.name, pixels, mode, threshold: 128, layers,
+        selected: 0, range: 100, background: null,
+        pose: { size: inGuide ? 270 : 310, rotation: 0, position: at ?? viewCenter() },
+      };
+      if (inGuide) {
+        setLessonImage(imported);
+        setGuide('separate');
+        return;
+      }
+      updateImage(imported);
       setShowPatterns(false);
       setShowSource(false);
       setStencil('image');
@@ -593,6 +666,14 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     } finally {
       if (active.current) setGenerating(false);
     }
+  }
+
+  function importGuideExample() {
+    void importStencil(async () => {
+      const response = await fetch(GRAFFITI_LESSON_IMAGE);
+      if (!response.ok) throw new Error('示例图未加载，请重试或选一张自己的图。');
+      return new File([await response.blob()], '示例唱片.png', { type: 'image/png' });
+    });
   }
 
   function dragImage(event: DragEvent<HTMLButtonElement>) {
@@ -613,7 +694,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   }
 
   async function publish() {
-    if (inGuide || !context.current || gesture.current || saving || !hasInk) return;
+    if ((inGuide && guide !== 'complete') || !context.current || gesture.current || saving || !hasInk) return;
     const bounds = inkBounds(snapshot(context.current));
     if (!bounds) return;
     setSaving(true);
@@ -646,6 +727,12 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
 
   const outsideSwitch = <button className={`chip nc-graffiti-spray-toggle ${sprayOptions.outside ? 'on' : ''}`} type="button"
     role="switch" aria-checked={sprayOptions.outside} onClick={toggleOutside}>允许喷到模板外</button>;
+
+  const importButton = <button className={`nc-graffiti-file-drop ${fileHover ? 'is-dragged-over' : ''}`} type="button"
+    aria-label={imageSource ? '换图片' : '导入图片'} disabled={generating || saving}
+    onClick={() => stencilFile.current?.click()} onDragOver={dragImage} onDragLeave={() => setFileHover(false)} onDrop={dropImage}>
+    <Icon n="picture" s={17} />{generating ? '读取中…' : imageSource ? '拖入图片或点此更换' : '拖入图片或点击选择'}
+  </button>;
 
   const adjustStencil = stencil && <div className="nc-graffiti-adjust">
     <label className="nc-graffiti-range">模板大小<input type="range" min="110" max="400" value={size}
@@ -682,7 +769,36 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
       <GraffitiSprayCans colors={cans.map(paintHex)} selected={selectedCan} onSelect={selectCan} />
       <div className="nc-graffiti-dock-chassis panel">
       <div className="nc-graffiti-dock-options">
-        {guide && <GraffitiLayerGuide guide={guide} onStart={startGuide} onNext={nextGuideLayer} onExit={exitGuide} />}
+        {guide && <GraffitiLayerGuide stage={guide} coverage={coverage} painted={paintedLayers.size} total={lessonImage?.layers.length ?? 0}
+          busy={generating || saving} onExit={exitGuide}>
+          {guide === 'intro' && <button className="btn sm" type="button" onClick={startGuide}>开始练习</button>}
+          {guide === 'import' && <>
+            {importButton}
+            <button className="btn sm" type="button" disabled={generating} onClick={importGuideExample}>用示例唱片</button>
+          </>}
+          {guide === 'separate' && lessonImage && <>
+            <GraffitiSourcePreview pixels={lessonImage.pixels} />
+            <button className="btn sm" type="button" onClick={splitGuideImage}>颜色分层</button>
+          </>}
+          {guide === 'select' && lessonImage && <GraffitiImageLayerColors layers={lessonImage.layers}
+            selected={-1} painted={paintedLayers} onSelect={selectGuideLayer} />}
+          {guide === 'pick' && <GraffitiLayerPaintButton paint={lessonImage?.layers[activeLayer]?.paint} onPick={pickGuideColor} />}
+          {guide === 'mix' && <>
+            <GraffitiColorPicker color={paintColor} selectedCan={selectedCan} onChange={setPaintColor} onApply={applyPalette} />
+            <button className="btn sm" type="button" disabled={mixedCan !== selectedCan} onClick={() => setGuide('spray')}>用这罐开始喷</button>
+          </>}
+          {guide === 'spray' && <button className="btn sm" type="button" disabled={coverage < GRAFFITI_LESSON_COVERAGE}
+            onClick={finishGuideLayer}>{paintedLayers.size + 1 === lessonImage?.layers.length ? '查看成品' : '喷下一层'}</button>}
+          {guide === 'complete' && <button className="btn sm" type="button" disabled={!hasInk || saving} onClick={() => void publish()}>
+            {saving ? '保存中…' : '贴到共享画布'}
+          </button>}
+        </GraffitiLayerGuide>}
+        <input ref={stencilFile} type="file" accept={STENCIL_IMAGE_ACCEPT} aria-label="选择模板图片" hidden
+          onChange={event => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (file) void importStencil(file);
+          }} />
         {!inGuide && <>
         {hand && <div className="nc-graffiti-view" role="group" aria-label="涂鸦视角">
           <span className="sub sm">拖动墙面 · 空格拖动 / 中键 / 双指</span>
@@ -711,6 +827,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
         {tab === 'stencil' && <>
           <div className="nc-graffiti-stencils" role="group" aria-label="镂空模板">
             <button className={`chip ${!stencil ? 'on' : ''}`} type="button" aria-pressed={!stencil} onClick={() => applyStencil(null)}>移开模板</button>
+            {!hasInk && <button className="chip" type="button" disabled={generating || saving} onClick={startGuide}>入门教程</button>}
             {activeImage && <button className={`chip ${showPatterns ? 'on' : ''}`} type="button" aria-expanded={showPatterns}
               onClick={() => setShowPatterns(!showPatterns)}>内置图案</button>}
             {(!activeImage || showPatterns) && GRAFFITI_STENCILS.map(shape => {
@@ -721,17 +838,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
               </button>;
             })}
           </div>
-          <button className={`nc-graffiti-file-drop ${fileHover ? 'is-dragged-over' : ''}`} type="button"
-            aria-label={imageSource ? '换图片' : '导入图片'} disabled={generating || saving}
-            onClick={() => stencilFile.current?.click()} onDragOver={dragImage} onDragLeave={() => setFileHover(false)} onDrop={dropImage}>
-            <Icon n="picture" s={17} />{generating ? '读取中…' : imageSource ? '拖入图片或点此更换' : '拖入图片或点击选择'}
-          </button>
-          <input ref={stencilFile} type="file" accept={STENCIL_IMAGE_ACCEPT} aria-label="选择模板图片" hidden
-            onChange={event => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) void importStencil(file);
-            }} />
+          {importButton}
           {imageSource && <div className="nc-graffiti-saved-image">
             {activeImage ? <Icon n="picture" s={14} /> : <button className="chip" type="button"
               onClick={reopenImage}><Icon n="picture" s={14} />已导入图片</button>}
@@ -816,7 +923,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
             <button key={id} className={`chip ${tab === id ? 'on' : ''}`} type="button" aria-pressed={tab === id}
               onClick={() => {
                 if (gesture.current || stencilDrag.current) return;
-                if (guide?.stage === 'intro') exitGuide();
+                if (guide === 'intro') exitGuide();
                 setTab(id);
               }}>
               {id === 'hand' && <Icon n="hand" s={14} />}{label}

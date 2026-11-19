@@ -549,22 +549,26 @@
   padding: 10px 12px;
 }
 .nc-graffiti-lesson {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 7px 11px;
+  display: grid;
+  gap: 7px;
   padding: 7px 9px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--soft);
 }
-.nc-graffiti-lesson > canvas {
+.nc-graffiti-lesson-heading,
+.nc-graffiti-lesson-controls,
+.nc-graffiti-lesson-progress {
+  display: flex;
+  align-items: center;
+  gap: 7px 9px;
+}
+.nc-graffiti-lesson-heading > img {
   flex: none;
-  width: 45px;
-  height: 45px;
+  object-fit: contain;
 }
 .nc-graffiti-lesson-copy {
-  flex: 1 1 160px;
+  flex: 1;
   min-width: 0;
 }
 .nc-graffiti-lesson-copy b {
@@ -573,10 +577,24 @@
 .nc-graffiti-lesson-copy p {
   margin: 2px 0 0;
 }
-.nc-graffiti-lesson-actions {
-  display: flex;
-  gap: 5px;
-  margin-left: auto;
+.nc-graffiti-lesson-exit {
+  flex: none;
+}
+.nc-graffiti-lesson-controls {
+  flex-wrap: wrap;
+}
+.nc-graffiti-lesson-controls .nc-graffiti-color-picker {
+  flex: 0 0 100%;
+}
+.nc-graffiti-lesson-controls .nc-graffiti-source-preview canvas {
+  max-width: 70px;
+  max-height: 48px;
+}
+.nc-graffiti-lesson-progress progress {
+  flex: 1;
+  min-width: 0;
+  height: 8px;
+  accent-color: var(--text);
 }
 .nc-graffiti-dock button {
   touch-action: manipulation;
