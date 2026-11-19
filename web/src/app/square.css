@@ -833,10 +833,20 @@
   flex: none;
   justify-content: flex-end;
   gap: 3px;
+  margin-left: auto;
 }
 .nc-graffiti-actions .ib {
   width: 29px;
   height: 32px;
+}
+.nc-graffiti-help {
+  min-height: 32px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+@media (max-width: 420px) {
+  .nc-graffiti-tabs .chip { padding-inline: 5px; }
+  .nc-graffiti-actions .btn { padding-inline: 9px; }
 }
 @media (max-width: 860px) {
   .nc-graffiti-dock { bottom: calc(142px + env(safe-area-inset-bottom)); }

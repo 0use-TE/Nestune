@@ -85,7 +85,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   ref: Ref<GraffitiEditorHandle>; accountId?: number; initialArea: GraffitiArea; dock: HTMLElement | null;
   camera: Camera; movingView: boolean; guideDepth: number;
   getView: () => GraffitiArea | null; onZoom: (factor: number) => void;
-  onClose: () => void; onPublish: (file: File, placement: GraffitiPlacement) => Promise<void>;
+  onClose: () => void; onPublish: (file: File, placement: GraffitiPlacement, keepEditor: boolean) => Promise<void>;
 }) {
   const [area, setArea] = useState(initialArea);
   const { zoom } = camera;
@@ -104,6 +104,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   const gesture = useRef<SprayGesture | null>(null);
   const stencilDrag = useRef<{ id: number; offset: Point } | null>(null);
   const history = useRef<PaintSnapshot[]>([]);
+  const pendingDraft = useRef<PaintSnapshot | null>(null);
   const renderedArea = useRef<GraffitiArea | null>(null);
   const active = useRef(true);
   const [tab, setTab] = useState<Tab>('paint');
@@ -122,7 +123,7 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   const [canUndo, setCanUndo] = useState(false);
   const [cans, setCans] = useState(() => PAINT_CARDS[0].colors.map(paintFromHex));
   const [selectedCan, setSelectedCan] = useState(0);
-  const previousPaint = useRef<{ cans: PaintColor[]; selected: number } | null>(null);
+  const previousPaint = useRef<{ cans: PaintColor[]; selected: number; draft: PaintSnapshot | null } | null>(null);
   const [paintPanel, setPaintPanel] = useState<'picker' | 'cards' | null>(null);
   const [sprayOptions, setSprayOptions] = useState(sprayPreferences);
   const allowOutside = sprayOptions.outside && !inGuide;
@@ -174,7 +175,10 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const close = useRef(onClose);
-  close.current = () => { if (!saving) onClose(); };
+  close.current = () => {
+    if (inGuide) exitGuide();
+    else if (!saving) onClose();
+  };
 
   useEffect(() => {
     try { localStorage.setItem(preferencesKey, JSON.stringify(sprayOptions)); } catch { /* Preferences can still be changed for this visit. */ }
@@ -237,21 +241,25 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   useLayoutEffect(() => {
     if (!drawing.current || !paper.current) return;
     const paint = drawing.current.getContext('2d', { willReadFrequently: true });
-    if (!paint || renderedArea.current === area) return;
+    const draft = pendingDraft.current;
+    if (!paint || (renderedArea.current === area && !draft)) return;
     const previous = renderedArea.current;
     let copy: CanvasRenderingContext2D | undefined;
-    if (previous && hasInk) {
+    if (!draft && previous && hasInk) {
       copy = layer(previous.rasterWidth, previous.rasterHeight);
       copy.drawImage(paint.canvas, 0, 0);
     }
     paint.canvas.width = paper.current.width = area.rasterWidth;
     paint.canvas.height = paper.current.height = area.rasterHeight;
-    if (copy && previous) reproject(paint, area, previous, copy.canvas);
+    if (draft) {
+      paint.putImageData(draft.image, 0, 0);
+      pendingDraft.current = null;
+    } else if (copy && previous) reproject(paint, area, previous, copy.canvas);
     context.current = paint;
     mask.current = layer(area.rasterWidth, area.rasterHeight, true);
     scratch.current = layer(area.rasterWidth, area.rasterHeight);
     renderedArea.current = area;
-  }, [area, hasInk]);
+  }, [area, hasInk, inGuide]);
 
   useLayoutEffect(() => {
     const guide = paper.current?.getContext('2d');
@@ -314,14 +322,14 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
     if (hand || movingView || gesture.current || stencilDrag.current) return;
     const view = getView();
     if (!view) return;
-    const next = hasInk || history.current.length ? extendGraffitiArea(area, view) : view;
+    const next = hasInk || (!inGuide && history.current.length) ? extendGraffitiArea(area, view) : view;
     if (!next) {
       setError('当前视角离这次涂鸦太远，请移近一些再继续喷涂。');
       return;
     }
     if (next.x === area.x && next.y === area.y && next.width === area.width && next.height === area.height) return;
     setArea(next);
-  }, [area, camera, getView, hand, hasInk, movingView]);
+  }, [area, camera, getView, hand, hasInk, inGuide, movingView]);
 
   function viewCenter() {
     const view = getView() ?? area;
@@ -338,8 +346,12 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
   }
 
   function startGuide() {
-    if (gesture.current || stencilDrag.current || generating || saving || hasInk) return;
-    previousPaint.current = { cans, selected: selectedCan };
+    if (gesture.current || stencilDrag.current || generating || saving) return;
+    const paint = context.current;
+    const draft = hasInk && paint ? { area, image: snapshot(paint) } : null;
+    previousPaint.current = { cans, selected: selectedCan, draft };
+    paint?.clearRect(0, 0, rasterWidth, rasterHeight);
+    setHasInk(false);
     setError('');
     setGuide('import');
   }
@@ -387,18 +399,27 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
 
   function exitGuide() {
     if (gesture.current || generating || saving) return;
+    resumeEditor();
+  }
+
+  function resumeEditor() {
     rememberGuide();
     if (inGuide) {
+      const previous = previousPaint.current;
       context.current?.clearRect(0, 0, rasterWidth, rasterHeight);
-      setHasInk(false);
+      setHasInk(!!previous?.draft);
       setLessonImage(null);
       setPaintedLayers(new Set());
       setCoverage(0);
       setMixedCan(null);
       setError('');
-      if (previousPaint.current) {
-        setCans(previousPaint.current.cans);
-        setSelectedCan(previousPaint.current.selected);
+      if (previous) {
+        setCans(previous.cans);
+        setSelectedCan(previous.selected);
+        if (previous.draft) {
+          pendingDraft.current = previous.draft;
+          setArea(previous.draft.area);
+        }
         previousPaint.current = null;
       }
     }
@@ -713,11 +734,13 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
       if (!blob) throw new Error('无法生成涂鸦图片，请重试。');
       const x = area.x + (bounds.x + bounds.width / 2) / scaleX;
       const y = area.y + (bounds.y + bounds.height / 2) / scaleY;
+      const keepEditor = inGuide && !!previousPaint.current?.draft;
       await onPublish(new File([blob], 'graffiti.png', { type: 'image/png' }), {
         x: Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, x)),
         y: Math.max(-WORLD_LIMIT, Math.min(WORLD_LIMIT, y)),
         width: bounds.width / scaleX,
-      });
+      }, keepEditor);
+      if (keepEditor && active.current) resumeEditor();
     } catch (cause) {
       if (active.current) setError(cause instanceof Error ? cause.message : '涂鸦发布失败，请重试。');
     } finally {
@@ -827,7 +850,6 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
         {tab === 'stencil' && <>
           <div className="nc-graffiti-stencils" role="group" aria-label="镂空模板">
             <button className={`chip ${!stencil ? 'on' : ''}`} type="button" aria-pressed={!stencil} onClick={() => applyStencil(null)}>移开模板</button>
-            {!hasInk && <button className="chip" type="button" disabled={generating || saving} onClick={startGuide}>入门教程</button>}
             {activeImage && <button className={`chip ${showPatterns ? 'on' : ''}`} type="button" aria-expanded={showPatterns}
               onClick={() => setShowPatterns(!showPatterns)}>内置图案</button>}
             {(!activeImage || showPatterns) && GRAFFITI_STENCILS.map(shape => {
@@ -917,8 +939,8 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
         </>}
         {error && <p className="sub sm nc-graffiti-error" role="alert">{error}</p>}
       </div>
-      {!inGuide && <div className="nc-graffiti-bar">
-        <div className="nc-graffiti-tabs" role="group" aria-label="涂鸦工具类型">
+      <div className="nc-graffiti-bar">
+        {!inGuide && <div className="nc-graffiti-tabs" role="group" aria-label="涂鸦工具类型">
           {([['paint', '喷漆'], ['hand', '手'], ['stencil', '图案'], ['text', '文字']] as const).map(([id, label]) =>
             <button key={id} className={`chip ${tab === id ? 'on' : ''}`} type="button" aria-pressed={tab === id}
               onClick={() => {
@@ -928,14 +950,18 @@ export function CanvasGraffiti({ ref, accountId, initialArea, dock, camera, movi
               }}>
               {id === 'hand' && <Icon n="hand" s={14} />}{label}
             </button>)}
-        </div>
+        </div>}
         <div className="nc-graffiti-actions">
-          <button className="ib" type="button" disabled={!canUndo || saving} onClick={undo} aria-label="撤销喷漆" title="撤销喷漆"><Icon n="undo" s={17} /></button>
-          <button className="ib" type="button" disabled={!hasInk || saving} onClick={clear} aria-label="清空喷漆" title="清空喷漆"><Icon n="trash" s={16} /></button>
-          <button className="btn sm" type="button" disabled={!hasInk || saving || generating} onClick={() => void publish()}>{saving ? '保存中…' : '完成'}</button>
-          <button className="ib" type="button" disabled={saving} onClick={onClose} aria-label="丢弃涂鸦" title="丢弃涂鸦"><Icon n="x" s={16} /></button>
+          {!inGuide && <>
+            <button className="ib" type="button" disabled={!canUndo || saving} onClick={undo} aria-label="撤销喷漆" title="撤销喷漆"><Icon n="undo" s={17} /></button>
+            <button className="ib" type="button" disabled={!hasInk || saving} onClick={clear} aria-label="清空喷漆" title="清空喷漆"><Icon n="trash" s={16} /></button>
+            <button className="btn sm" type="button" disabled={!hasInk || saving || generating} onClick={() => void publish()}>{saving ? '保存中…' : '完成'}</button>
+            <button className="ib" type="button" disabled={saving} onClick={onClose} aria-label="丢弃涂鸦" title="丢弃涂鸦"><Icon n="x" s={16} /></button>
+          </>}
+          <button className={`chip nc-graffiti-help ${inGuide ? 'on' : ''}`} type="button"
+            aria-pressed={inGuide} disabled={generating || saving} onClick={inGuide ? exitGuide : startGuide}>教程</button>
         </div>
-      </div>}
+      </div>
       </div>
     </section>, dock)}
   </>;

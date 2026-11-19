@@ -455,9 +455,9 @@ export function Square() {
       {graffiti && <CanvasGraffiti key={app.me?.id} ref={graffitiEditor} accountId={app.me?.id} initialArea={graffiti} dock={graffitiDock.current}
         guideDepth={state.records.length + 1}
         camera={camera.camera} movingView={camera.moving} getView={graffitiView} onZoom={camera.zoom}
-        onClose={() => setGraffiti(null)} onPublish={async (file, placed) => {
+        onClose={() => setGraffiti(null)} onPublish={async (file, placed, keepEditor) => {
           await upload(file, placed, placed.width);
-          setGraffiti(null);
+          if (!keepEditor) setGraffiti(null);
         }} />}
       {items}
       </div>
