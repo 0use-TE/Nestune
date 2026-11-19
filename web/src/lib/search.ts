@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { get } from './api';
+import { api } from './api';
 
 export function recentSearches(): string[] {
   try {
@@ -22,13 +22,13 @@ export function useSearchSuggestions(query: string, enabled: boolean) {
 
   useEffect(() => {
     if (!enabled || !keywords) return;
-    let live = true;
+    const controller = new AbortController();
     const timer = setTimeout(() => {
-      get<{ keywords: string[] }>(`/api/search/suggest?keywords=${encodeURIComponent(keywords)}`).then(response => {
-        if (live) setResult({ query: keywords, keywords: response.keywords });
+      api<{ keywords: string[] }>(`/api/search/suggest?keywords=${encodeURIComponent(keywords)}`, { signal: controller.signal }).then(response => {
+        if (!controller.signal.aborted) setResult({ query: keywords, keywords: response.keywords });
       }).catch(() => {});
     }, 250);
-    return () => { live = false; clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); };
   }, [enabled, keywords]);
 
   return enabled && result?.query === keywords ? result.keywords : [];

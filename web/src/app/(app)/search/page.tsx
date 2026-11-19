@@ -3,7 +3,7 @@ import { Loading } from '@/components/Loading';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { get } from '@/lib/api';
+import { api, get } from '@/lib/api';
 import { recentSearches, saveRecentSearches, useSearchSuggestions } from '@/lib/search';
 import type { Song } from '@/lib/types';
 import { fmtCount } from '@/lib/util';
@@ -38,7 +38,7 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
   const [err, setErr] = useState('');
   const [hot, setHot] = useState<string[]>([]);
   const [recent, setRecent] = useState<string[]>([]);
-  const seq = useRef(0);
+  const pendingSearch = useRef<AbortController | null>(null);
   const lastRun = useRef('');
   const input = useRef<HTMLInputElement>(null);
   const sugg = useSearchSuggestions(q, q.trim() !== lastRun.current);
@@ -51,14 +51,16 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
 
   const run = useCallback(async (keywords: string, t: SearchType, offset = 0) => {
     const k = keywords.trim();
-    const my = ++seq.current;
+    pendingSearch.current?.abort();
     lastRun.current = k;
-    if (!k) { setItems([]); setTotal(0); setBusy(false); setErr(''); return; }
+    if (!k) { pendingSearch.current = null; setItems([]); setTotal(0); setHasMore(false); setWarnings([]); setBusy(false); setErr(''); return; }
     if (!offset) { setItems([]); setTotal(0); setHasMore(false); setWarnings([]); }
+    const controller = new AbortController();
+    pendingSearch.current = controller;
     setBusy(true); setErr('');
     try {
-      const r = await get(`/api/search?keywords=${encodeURIComponent(k)}&type=${t}&limit=30&offset=${offset}`);
-      if (my !== seq.current) return;
+      const r = await api(`/api/search?keywords=${encodeURIComponent(k)}&type=${t}&limit=30&offset=${offset}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
       setItems(p => t === 'song' ? mergeSongPages(offset ? p : [], r.items) : offset ? [...p, ...r.items] : r.items); setTotal(r.total);
       setNextOffset(r.nextOffset); setHasMore(r.hasMore); setWarnings(r.warnings || []);
       if (!offset) {
@@ -66,13 +68,13 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
         saveRecentSearches(next);
         setRecent(next);
       }
-    } catch (e: any) { if (my === seq.current) setErr(e.message); }
-    if (my === seq.current) setBusy(false);
+    } catch (e: any) { if (!controller.signal.aborted) setErr(e.message); }
+    finally { if (!controller.signal.aborted) { pendingSearch.current = null; setBusy(false); } }
   }, []);
 
   useEffect(() => {
     if (initialQuery) run(initialQuery, 'song');
-    return () => { seq.current++; };
+    return () => { pendingSearch.current?.abort(); };
   }, [initialQuery, run]);
 
   const pick = (k: string) => { setQ(k); run(k, type); };
