@@ -12,6 +12,17 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 19 日',
+    title: '共享涂鸦墙',
+    summary: '现在可以在同一面共享墙上不断叠喷。历史涂鸦已按原来的顺序合入墙面。',
+    sections: [
+      { title: '在已有涂鸦上继续喷', paragraphs: ['点「完成」后，喷漆会直接合入墙面。实色覆盖原来的像素，半透明喷漆会与下面的颜色混合。'] },
+      { title: '按区域加载', paragraphs: ['墙面按区域保存，分辨率随作品细节调整。打开画布时，设备会加载视野附近的区域并复用缓存。'] },
+      { title: '网页更新', paragraphs: ['刷新网页或重新打开 Nestune 即可使用。'] },
+    ],
+  },
+  {
+    version: '1.2.18',
+    date: '2026 年 11 月 19 日',
     title: 'Android 悬浮歌词防闪烁',
     summary: '修复播放时悬浮歌词反复消失的问题。',
     sections: [
