@@ -1,4 +1,5 @@
 export type Camera = { x: number; y: number; zoom: number };
+export const CANVAS_DRAG_THRESHOLD = 7;
 export const MIN_ZOOM = .2, MAX_ZOOM = 2.5, WORLD_LIMIT = 1_000_000;
 export const worldPoint = (p: { x: number; y: number }, camera: Camera) => ({ x: (p.x - camera.x) / camera.zoom, y: (p.y - camera.y) / camera.zoom });
 export function zoomAt(camera: Camera, point: { x: number; y: number }, zoom: number): Camera {

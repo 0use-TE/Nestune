@@ -123,10 +123,15 @@
   src: url('/fonts/canvas-graffiti/zcool-qingke-huangyou.woff2') format('woff2');
   font-display: swap;
 }
+.nc-wall-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
 .nc-wall {
   position: absolute;
   inset: 0;
-  pointer-events: none;
   background: #bdbab4 url('/canvas-walls/concrete.webp') repeat;
 }
 .nc-wall-paint-layer {
@@ -850,7 +855,7 @@
 .nc-receiver-ready{border-color:var(--sub);background:var(--soft);box-shadow:0 0 0 5px color-mix(in srgb,var(--text) 8%,transparent),var(--shadow)}
 .nc-receiver-collection :is(.nc-slot,.nc-platter,.nc-machine-light){display:none}
 .nc-receiver-collection>svg{position:static;width:27px;height:27px}
-.nc-ghost{position:fixed;aspect-ratio:1;transform:translate(-50%,-50%) scale(1.07) rotate(-8deg);z-index:60;pointer-events:none;filter:drop-shadow(0 18px 20px #0004);transition:filter .18s}
+.nc-ghost{position:fixed;left:0;top:0;aspect-ratio:1;transform:translate3d(var(--drag-x),var(--drag-y),0) translate(-50%,-50%) scale(1.07) rotate(-8deg);z-index:60;pointer-events:none;filter:drop-shadow(0 18px 20px #0004);transition:filter .18s}
 .nc-ghost-ready{filter:drop-shadow(0 8px 22px #0007)}
 .nc-ghost-ready .nc-music-art>.nc-disc{animation:nc-spin 1.5s linear infinite}
 .nc-machine-light{position:absolute;left:26px;width:4px;height:4px;border-radius:50%;background:var(--muted);opacity:.3}
@@ -965,7 +970,7 @@
 }
 
 /* World coordinates remain independent from each user's viewport. */
-.nc-board{overflow:hidden;touch-action:none;cursor:grab;inset:0 0 118px}
+.nc-board{overflow:hidden;overscroll-behavior:contain;touch-action:none;cursor:grab;inset:0 0 118px}
 .nc-board.nc-panning{cursor:grabbing}
 .nc-world{position:absolute;inset:0;transform-origin:0 0;pointer-events:none}
 .nc-world>.nc-record{--object-size:164px;pointer-events:auto}
@@ -978,4 +983,5 @@
 @keyframes nc-breathe{from{transform:scale(1) translateY(0)}to{transform:scale(1.025) translateY(-3px)}}
 @keyframes nc-peek{to{transform:translate(7px,-5px) rotate(13deg)}}
 @media(max-width:600px){.nc-camera{left:12px;bottom:125px}.nc-audition-status{bottom:174px;max-width:85%;width:max-content}}
+@media (pointer:coarse){.nc-world .nc-album-count{backdrop-filter:none}.nc-ghost{filter:none}}
 @media(prefers-reduced-motion:reduce){.nc-auditioning>.nc-music-art,.nc-auditioning .nc-album-disc,.nc-auditioning .nc-folder-disc{animation:none}}

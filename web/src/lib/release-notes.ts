@@ -11,6 +11,17 @@ export type ReleaseNote = {
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
+    date: '2026 年 11 月 19 日',
+    title: '手机画布手势优化',
+    summary: '从唱片或便签上划动也能平移。双指缩放后可接着单指移动，拖动物件时画面更跟手。',
+    sections: [
+      { title: '平移与缩放', paragraphs: ['从物件上快速划动时，画布会跟着手指平移。双指缩放后，松开一根手指就能用另一根继续移动视图。'] },
+      { title: '长按拖动', paragraphs: ['长按仍可拿起物件。拖动位置按屏幕帧更新，减少移动画布时的重复绘制。'] },
+      { title: '网页更新', paragraphs: ['刷新网页或重新打开 Nestune 即可使用。'] },
+    ],
+  },
+  {
+    version: '1.2.12',
     date: '2026 年 11 月 18 日',
     title: '画布收藏与音乐搜索',
     summary: '在画布里选用音乐库收藏的专辑，也可以在线搜索歌曲和专辑，直接贴到墙上。',

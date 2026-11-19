@@ -1,10 +1,12 @@
 'use client';
 import { useEffect, useId, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import type { Camera } from '@/lib/canvas-camera';
 
 /** Light, non-blocking hints anchored to the actual canvas and player positions. */
-export function CanvasGuide({ board, playItem, held, onDismiss }: {
+export function CanvasGuide({ board, view, playItem, held, onDismiss }: {
   board: RefObject<HTMLDivElement | null>;
+  view: Camera;
   playItem?: { id: string; x: number; y: number };
   held?: { x: number; y: number; size: number };
   onDismiss: () => void;
@@ -18,7 +20,7 @@ export function CanvasGuide({ board, playItem, held, onDismiss }: {
       const player = document.querySelector('#bar .bar-canvas-source');
       const origin = (player ?? document.querySelector('.nc-add'))?.getBoundingClientRect();
       const receiver = document.querySelector('#bar,.nc-empty-player')?.getBoundingClientRect();
-      const item = playItem ? Array.from(board.current!.querySelectorAll<HTMLElement>('[data-canvas-item]')).find(node => node.dataset.canvasItem === playItem.id)?.getBoundingClientRect() : undefined;
+      const item = playItem && !held ? board.current?.querySelector(`[data-canvas-item="${CSS.escape(playItem.id)}"]`)?.getBoundingClientRect() : undefined;
       const from = held ?? (item ? { x: item.left + item.width / 2, y: item.top + item.height / 2, size: item.height } : undefined);
       if (!origin || playItem && (!receiver || !from)) { setLayout(null); return; }
       const endX = playItem ? receiver!.left + receiver!.width / 2 : rect.left + rect.width * .54;
@@ -35,7 +37,7 @@ export function CanvasGuide({ board, playItem, held, onDismiss }: {
     if (board.current) observer.observe(board.current);
     window.addEventListener('resize', sync); window.visualViewport?.addEventListener('resize', sync);
     return () => { observer.disconnect(); window.removeEventListener('resize', sync); window.visualViewport?.removeEventListener('resize', sync); };
-  }, [board, held, playItem]);
+  }, [board, view, held, playItem]);
   if (!layout) return null;
   return createPortal(<div className={`nc-guide ${playItem ? 'nc-guide-play' : ''}`}>
     <svg aria-hidden="true"><defs><marker id={marker} markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M2 1 L8 5 L2 9" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></marker></defs><path className="nc-guide-path" d={layout.path} markerEnd={`url(#${marker})`} /></svg>
