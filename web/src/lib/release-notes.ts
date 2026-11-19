@@ -12,6 +12,16 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 19 日',
+    title: '手机画布缩放与状态栏修复',
+    summary: '双指缩放时墙面保持可见，涂鸦分块边缘连成一体。安卓顶部状态栏跟随应用的深浅主题。',
+    sections: [
+      { title: '共享画布', paragraphs: ['缩放时会保留当前墙面，等新画面准备好再切换。刷新网页或重新打开 Nestune 即可使用。'] },
+      { title: 'Android 客户端 1.2.11', paragraphs: ['顶部状态栏和图标会随深浅主题切换。可在「关于 → 客户端更新」下载安装。'] },
+    ],
+  },
+  {
+    version: '1.2.20',
+    date: '2026 年 11 月 19 日',
     title: '搜索等待优化',
     summary: '网易云连接超时时会尝试备用接口，并更快显示可用音源的搜索结果。',
     sections: [
