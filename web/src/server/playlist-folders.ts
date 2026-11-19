@@ -1,15 +1,20 @@
-import type { FolderSource } from '@/lib/playlist-folders';
+import type { AddFolderInput, FolderSource } from '@/lib/playlist-folders';
 import { all, db, now, one, run } from './db';
-import { fail } from './http';
+import { fail, str } from './http';
 import { catalogAlbum, catalogId } from './catalog';
 import { canReadPlaylist, playlistContent, wouldCycle } from './playlist-content';
-import { externalPlaylist } from './playlist-import';
+import { externalPlaylist, resolvePlaylistLink } from './playlist-import';
 
 function owner(user: number, id: number) {
   if (!one('SELECT 1 FROM playlists WHERE id=? AND user_id=?', id, user)) throw fail(404, '歌单不存在或你没有编辑权限');
 }
-export async function addFolder(user: number, parent: number, source: FolderSource) {
+export async function addFolder(user: number, parent: number, input: AddFolderInput) {
   owner(user, parent);
+  let source: FolderSource;
+  if (input && typeof input === 'object' && 'link' in input) {
+    const link = await resolvePlaylistLink(str(input.link, 1, 2000, '分享链接'));
+    source = { kind: link.provider, id: link.id };
+  } else source = input;
   if (!source || !['album','mine','shared','netease','qq'].includes(source.kind) || typeof source.id !== 'string') throw fail(400, '请选择专辑或歌单');
   let data: { name: string; cover: string | null; songs?: unknown };
   if (source.kind === 'album') {

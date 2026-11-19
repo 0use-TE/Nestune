@@ -58,6 +58,27 @@ it('deduplicates repeated QQ tracks before importing them in source order', asyn
   expect(result.imported).toBe(2);
   expect(playlists.getPlaylist(1, result.playlist.id).songs.map(s => s.id)).toEqual(['qq-first', 'qq-second']);
 });
+
+it('adds a shared short link as one read-only folder with one provider lookup', async () => {
+  const { importablePlaylist } = await import('@/server/netease');
+  vi.mocked(importablePlaylist).mockClear();
+  const redirect = vi.fn(async () => new Response(null, {
+    status: 302,
+    headers: { location: 'https://y.music.163.com/m/playlist?app_version=9.6.25&id=18609450172' },
+  }));
+  vi.stubGlobal('fetch', redirect);
+  try {
+    const parent = playlists.createPlaylist(1, 'Parent');
+    const input = { link: '分享Yrainybefore的共享歌单《导入》 https://163cn.tv/blkzlQmT (@网易云音乐)' };
+    await expect(folders.addFolder(2, parent.id, input)).rejects.toThrow('编辑权限');
+    expect(redirect).not.toHaveBeenCalled();
+    const data = await folders.addFolder(1, parent.id, input);
+    expect(data.folders).toHaveLength(1);
+    expect(data.folders[0]).toMatchObject({ kind: 'netease', targetId: '18609450172', readonly: true });
+    expect(data.songs.map(song => song.id)).toEqual(['101', '102']);
+    expect(importablePlaylist).toHaveBeenCalledExactlyOnceWith('18609450172');
+  } finally { vi.unstubAllGlobals(); }
+});
 it('recognizes the new QQ mobile share URL without fetching the share page', async () => {
   const request = vi.fn(() => { throw new Error('A complete share URL must be parsed locally'); });
   vi.stubGlobal('fetch', request);
