@@ -29,7 +29,11 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
     private var gradientWidth = 0
     private val matrix = Matrix()
 
-    fun clear(value: String) { current = null; scrollTo(0, 0); if (text.toString() != value) text = value }
+    fun clear(value: String) {
+        if (current == null && text.toString() == value) return
+        current = null
+        text = value
+    }
 
     fun render(line: JSONObject, position: Double, nextTime: Double, duration: Double, seed: Long) {
         seconds = position
@@ -38,7 +42,6 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
             val text = line.optString("text"); val time = line.optDouble("t")
             scrollStart = time
             scrollEnd = if (line.optDouble("d") > 0) time + line.optDouble("d") else if (nextTime > time) nextTime else if (duration > time) duration else time + 5
-            scrollTo(0, 0)
             val supplied = line.optJSONArray("words")
             var words = (0 until (supplied?.length() ?: 0).coerceAtMost(128)).mapNotNull { index ->
                 supplied?.optJSONObject(index)?.let { Word(it.optDouble("t", -1.0), it.optDouble("d", -1.0), it.optString("text")) }
@@ -63,22 +66,21 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
             }
             setText(styled, BufferType.SPANNABLE)
         }
-        invalidate()
+        postInvalidateOnAnimation()
     }
 
     override fun onDraw(canvas: Canvas) {
-        layout?.takeIf { it.lineCount > 0 }?.let { lineLayout ->
-            // TextView centers a horizontally scrolling line within its virtual layout.
-            val left = lineLayout.getLineLeft(0)
-            val lineWidth = lineLayout.getLineRight(0) - left
-            val available = width - compoundPaddingLeft - compoundPaddingRight
-            val overflow = (lineWidth - available).coerceAtLeast(0f)
-            val progress = if (current == null) 0.0 else ((seconds - scrollStart) / (scrollEnd - scrollStart).coerceAtLeast(.2) - .12) / .76
-            val offset = progress.coerceIn(0.0, 1.0)
-            val scroll = if (lineLayout.getParagraphDirection(0) < 0) 1.0 - offset else offset
-            val target = (left - (available - lineWidth).coerceAtLeast(0f) / 2 + overflow * scroll).roundToInt()
-            if (scrollX != target) scrollTo(target, 0)
-        }
+        val lineLayout = layout ?: return
+        if (lineLayout.lineCount == 0) return
+        val lineLeft = lineLayout.getLineLeft(0)
+        val lineWidth = lineLayout.getLineRight(0) - lineLeft
+        val available = width - compoundPaddingLeft - compoundPaddingRight
+        if (available <= 0) return
+        val overflow = (lineWidth - available).coerceAtLeast(0f)
+        val progress = if (current == null) 0.0 else ((seconds - scrollStart) / (scrollEnd - scrollStart).coerceAtLeast(.2) - .12) / .76
+        val offset = progress.coerceIn(0.0, 1.0)
+        val scroll = if (lineLayout.getParagraphDirection(0) < 0) 1.0 - offset else offset
+        val target = (lineLeft - (available - lineWidth).coerceAtLeast(0f) / 2 + overflow * scroll).roundToInt()
 
         if (width != gradientWidth) {
             gradientWidth = width
@@ -87,9 +89,22 @@ class KaraokeLyricsText(context: Context) : TextView(context) {
                 floatArrayOf(0f, .22f, .46f, .54f, .78f, 1f), Shader.TileMode.REPEAT)
         }
         val animate = android.provider.Settings.Global.getFloat(context.contentResolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) != 0f
-        matrix.setTranslate(width * 2 * phase + if (animate) (-seconds * speed * direction).toFloat() else 0f, 0f)
+        val flow = if (animate) (-seconds * speed * direction).toFloat() else 0f
+        matrix.setTranslate(target + width * 2 * phase + flow, 0f)
         gradient?.setLocalMatrix(matrix)
-        super.onDraw(canvas)
+
+        // Use one viewport offset for both clipping and drawing. Scrolling the view here
+        // would change its offset after Android has already positioned this frame's canvas.
+        val left = scrollX + compoundPaddingLeft
+        val top = scrollY + extendedPaddingTop
+        val bottom = scrollY + height - extendedPaddingBottom
+        val centerY = ((bottom - top - lineLayout.height) / 2).coerceAtLeast(0)
+        paint.color = currentTextColor
+        val saved = canvas.save()
+        canvas.clipRect(left, top, left + available, bottom)
+        canvas.translate((left - target).toFloat(), (top + centerY).toFloat())
+        lineLayout.draw(canvas)
+        canvas.restoreToCount(saved)
     }
 
     private inner class SungSpan(private val word: Word) : ReplacementSpan() {

@@ -12,6 +12,15 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 19 日',
+    title: 'Android 悬浮歌词防闪烁',
+    summary: '修复播放时悬浮歌词反复消失的问题。',
+    sections: [
+      { title: 'Android 客户端 1.2.10', paragraphs: ['锁定浮窗时，「前奏」和原歌词可以稳定显示。可在「关于 → 客户端更新」下载安装。'] },
+    ],
+  },
+  {
+    version: '1.2.17',
+    date: '2026 年 11 月 19 日',
     title: '涂鸦教程按钮置顶',
     summary: '把「用这罐开始喷」放到涂鸦工具栏顶部，手机上调色时也能随时找到。',
     sections: [
