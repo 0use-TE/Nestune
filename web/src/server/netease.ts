@@ -218,7 +218,8 @@ export async function collectionMetadata(kind: 'album' | 'playlist', id: string)
 }
 
 async function playlistSnapshot(id: string, allowPublicLikes = false) {
-  const b = await call('playlist_detail', { id, s: 0 });
+  // The web API serves public playlist details even when the default mobile endpoint times out.
+  const b = await call('playlist_detail', { id, s: 0, crypto: 'weapi' });
   const p = b.playlist;
   const isLikes = Number(p?.specialType) === 5;
   if (!p || Number(p.privacy ?? -1) !== 0 || (isLikes && !allowPublicLikes)) {
@@ -230,6 +231,7 @@ async function playlistSnapshot(id: string, allowPublicLikes = false) {
   return {
     playlist: { id: String(p.id), name: p.name, cover: cover(p.coverImgUrl), description: p.description || '', creator: p.creator?.nickname || '', trackCount: p.trackCount, playCount: p.playCount, tags: p.tags || [] },
     ids: trackIds.map(track => String(track.id)),
+    tracks: Array.isArray(p.tracks) ? p.tracks : [],
     isLikes,
   };
 }
@@ -239,18 +241,45 @@ export async function playlist(id: string, limit: number, offset: number) {
   return { playlist: snapshot.playlist, songs: await songs(snapshot.ids.slice(offset, offset + limit)), limit, offset };
 }
 
+async function importTrackBatch(ids: string[], snapshot: Map<string, any>) {
+  let tracks: Song[] = [];
+  let lookupError: unknown;
+  try { tracks = await songs(ids); } catch (error) { lookupError = error; }
+
+  const byId = new Map(tracks.map(track => [track.id, track]));
+  for (const id of ids) {
+    if (!byId.has(id) && snapshot.has(id)) byId.set(id, songSummary(snapshot.get(id)));
+  }
+
+  // Public track metadata can be read even if the bound account's lookup fails.
+  // Keep this result out of the cache used to check that account's privileges.
+  const missing = ids.filter(id => !byId.has(id));
+  if (missing.length && session().cookie) {
+    try {
+      const result = await call('song_detail', { ids: missing.join(',') });
+      for (const track of result.songs ?? []) byId.set(String(track.id), songSummary(track));
+      lookupError = undefined;
+    } catch (error) { lookupError = error; }
+  }
+  if (lookupError && ids.some(id => !byId.has(id))) {
+    throw fail(502, '网易云暂时无法读取这份歌单的完整曲目，请稍后重试', 'netease_playlist_tracks_unavailable');
+  }
+  return ids.flatMap(id => { const track = byId.get(id); return track ? [track] : []; });
+}
+
 export async function importablePlaylist(id: string) {
-  const { playlist, ids, isLikes } = await playlistSnapshot(id, true);
+  const { playlist, ids, tracks: publicTracks, isLikes } = await playlistSnapshot(id, true);
   const count = Number(playlist.trackCount);
   if (!Number.isSafeInteger(count) || count < 0) throw fail(502, '无法确认歌单的曲目数量，请稍后重试');
   if (Math.max(ids.length, count) > 1000) throw fail(400, '一个歌单最多导入 1000 首，请拆分后再导入');
   if (!isLikes && ids.length !== count) throw fail(502, '歌单内容不完整，本次没有导入');
 
+  const snapshot = new Map<string, any>(publicTracks.filter((track: any) => track?.id && track.name).map((track: any) => [String(track.id), track]));
   const tracks: Song[] = [];
   // Resolve public IDs from one snapshot so a playlist edit between pages cannot shift their order.
   for (let offset = 0; offset < ids.length; offset += 300) {
     const batches = [0, 100, 200].map(start => ids.slice(offset + start, offset + start + 100));
-    const pages = await Promise.all(batches.filter(batch => batch.length > 0).map(songs));
+    const pages = await Promise.all(batches.filter(batch => batch.length > 0).map(batch => importTrackBatch(batch, snapshot)));
     tracks.push(...pages.flat());
   }
   if (!isLikes && tracks.length !== count) throw fail(502, '歌单内容不完整，本次没有导入');
