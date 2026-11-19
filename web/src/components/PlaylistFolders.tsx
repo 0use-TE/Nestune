@@ -38,8 +38,7 @@ export function AddPlaylistFolder({ parent, onChange }: { parent: string; onChan
   async function add(source?: FolderSource) {
     if (busy) return; setBusy(true); setError('');
     try {
-      if (!source) { const result = await post('/api/me/playlist-import', { link }); source = { kind: result.provider, id: result.id }; }
-      await post(`/api/me/playlists/${parent}/folders`, source); await app.reloadPlaylists(); onChange(); setOpen(false);
+      await post(`/api/me/playlists/${parent}/folders`, source ?? { link }); await app.reloadPlaylists(); onChange(); setOpen(false);
     } catch (error) { setError(error instanceof Error ? error.message : '无法添加'); }
     finally { setBusy(false); }
   }

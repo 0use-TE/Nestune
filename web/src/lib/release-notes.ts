@@ -12,6 +12,15 @@ export const RELEASE_NOTES: ReleaseNote[] = [
   {
     version: VERSION,
     date: '2026 年 11 月 19 日',
+    title: '搜索等待优化',
+    summary: '网易云连接超时时会尝试备用接口，并更快显示可用音源的搜索结果。',
+    sections: [
+      { title: '网页更新', paragraphs: ['重新搜索会取消上一次尚未完成的请求。刷新网页或重开 Nestune 即可使用。'] },
+    ],
+  },
+  {
+    version: '1.2.19',
+    date: '2026 年 11 月 19 日',
     title: '共享涂鸦墙',
     summary: '现在可以在同一面共享墙上不断叠喷。历史涂鸦已按原来的顺序合入墙面。',
     sections: [

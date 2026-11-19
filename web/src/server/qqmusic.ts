@@ -35,12 +35,12 @@ export function cookieHeader(c: Credential) {
     return `${k}=${value}`;
   }).join('; ');
 }
-async function call(path: string, params: Record<string, string | number | boolean> = {}, c = credential()): Promise<any> {
+async function call(path: string, params: Record<string, string | number | boolean> = {}, c = credential(), timeout = 20_000): Promise<any> {
   if (!qqConfigured()) throw fail(503, 'QQ 音乐尚未配置', 'qq_offline');
   const url = new URL(path, process.env.QQMUSIC_URL);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
   try {
-    const response = await fetch(url, { headers: { Cookie: cookieHeader(c) }, redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(20_000) });
+    const response = await fetch(url, { headers: { Cookie: cookieHeader(c) }, redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(timeout) });
     const b = await response.json();
     if (!response.ok || b.code !== 0) throw fail(response.status === 401 ? 401 : 502,
       response.status === 401 ? 'QQ 音乐登录已失效，请管理员重新扫码' : 'QQ 音乐请求失败，请稍后重试', response.status === 401 ? 'qq_login_expired' : 'qq_request_failed');
@@ -118,7 +118,7 @@ export function qqSong(s: any): Song {
 export async function qqSearch(keyword: string, limit: number, offset: number) {
   // The upstream paginates by page, so keep num constant for a search session.
   const page = Math.floor(offset / limit) + 1;
-  const data = await call('/search/search_by_type', { keyword, search_type: 0, num: limit, page, highlight: false });
+  const data = await call('/search/search_by_type', { keyword, search_type: 0, num: limit, page, highlight: false }, undefined, 4_000);
   return { type: 'song', items: (data.song || []).map(qqSong).filter((s: Song) => s.id), total: Number(data.total_num) || 0 };
 }
 async function rawSong(id: string) {
