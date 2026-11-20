@@ -122,6 +122,36 @@ describe('social visibility and permissions', () => {
     expect(social.socialState(listener(2)).people[0]).toMatchObject({ online: null, track: null });
   });
 
+  it('records one timeline across devices and keeps last seen after logout', async () => {
+    const { listUsers } = await import('@/server/users');
+    const start = Date.now();
+    const clock = vi.spyOn(Date, 'now');
+    const activity = () => listUsers().find(user => user.id === 1)!.activity;
+    const pulse = (elapsed: number, device: number) => {
+      clock.mockReturnValue(start + elapsed);
+      social.syncSocial(listener(1, device), track, undefined, null);
+    };
+    try {
+      expect(activity()).toMatchObject({ online: false, currentMs: null, totalMs: null });
+      social.setOnlineVisibility(1, false);
+      pulse(0, 1);
+      pulse(7_000, 2);
+      pulse(10_000, 1);
+      expect(activity()).toEqual({ online: true, lastSeenAt: start + 10_000, currentMs: 10_000, totalMs: 10_000 });
+      expect(social.socialState(listener(2)).people[0]).toMatchObject({ online: null, track: null });
+
+      clock.mockReturnValue(start + 45_000);
+      expect(activity()).toMatchObject({ online: false, currentMs: null, totalMs: 10_000 });
+      pulse(46_000, 2);
+      pulse(55_000, 2);
+      expect(activity()).toEqual({ online: true, lastSeenAt: start + 55_000, currentMs: 9_000, totalMs: 19_000 });
+      database.run('DELETE FROM sessions WHERE user_id=1');
+      expect(activity()).toEqual({ online: false, lastSeenAt: start + 55_000, currentMs: null, totalMs: 19_000 });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('requires a recipient to accept friendship before either side can send or read messages', () => {
     social.requestFriend(1, 2);
     expect(() => social.answerFriend(1, 2, true)).toThrow();

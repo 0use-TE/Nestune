@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { sharedPlaylistSummary } from './playlists';
-import { INVITE_STATUS, type ListeningInvite, type ConversationSummary, type ListeningRoom, type ListeningTrack, type Message, type Person, type Playback, type SharedSong, type SocialState, type SocialUpdate, type SharedPlaylist } from '@/lib/social-types';
+import { INVITE_STATUS, PRESENCE_TIMEOUT_MS, type ListeningInvite, type ConversationSummary, type ListeningRoom, type ListeningTrack, type Message, type Person, type Playback, type SharedSong, type SocialState, type SocialUpdate, type SharedPlaylist } from '@/lib/social-types';
 import { isUploadSong } from '@/lib/upload-types';
 import { all, db, now, one, run } from './db';
 import { fail } from './http';
@@ -72,7 +72,7 @@ export function socialState({ userId: user, sessionId }: Listener, queues: Recor
     FROM users u LEFT JOIN social_presence p ON p.user_id=u.id
     LEFT JOIN friendships f ON f.low_id=min(u.id,?) AND f.high_id=max(u.id,?)
     WHERE u.status='active' ORDER BY name COLLATE NOCASE, u.id`, user, user).map((row): Person => {
-    const online = row.visible ? row.last_seen > time - 35_000 : null;
+    const online = row.visible ? row.last_seen > time - PRESENCE_TIMEOUT_MS : null;
     return {
       id: row.id, username: row.username, name: row.name, avatar: row.avatar ? `/api/avatars/${row.avatar}` : null, online,
       track: online && row.track ? publicTrack(row.id, JSON.parse(row.track)) : null,
@@ -124,8 +124,18 @@ export function syncSocial(listener: Listener, track: ListeningTrack | null, roo
     const target = one<{ guest_id: number }>('SELECT guest_id FROM listening_rooms WHERE id=? AND host_id=? AND host_session_id=?', room, user, sessionId);
     if (!target || !canListenTogether(user, target.guest_id, playback.songId)) playback = null;
   }
-  run(`INSERT INTO social_presence(user_id,last_seen,track) VALUES(?,?,?) ON CONFLICT(user_id)
-    DO UPDATE SET last_seen=excluded.last_seen,track=excluded.track WHERE visible=1`, user, time, visibleTrack ? JSON.stringify(visibleTrack) : null);
+  // One timeline per account keeps pulses from multiple devices from double-counting.
+  run(`INSERT INTO social_presence(user_id,last_seen,track,activity_last_seen,activity_started_at)
+    VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
+      last_seen=CASE WHEN visible=1 THEN excluded.last_seen ELSE last_seen END,
+      track=CASE WHEN visible=1 THEN excluded.track ELSE track END,
+      activity_total_ms=activity_total_ms + CASE
+        WHEN activity_started_at>0 AND excluded.activity_last_seen-activity_last_seen<? THEN excluded.activity_last_seen-activity_last_seen ELSE 0 END,
+      activity_started_at=CASE
+        WHEN activity_started_at>0 AND excluded.activity_last_seen-activity_last_seen<? THEN activity_started_at ELSE excluded.activity_started_at END,
+      activity_last_seen=excluded.activity_last_seen
+    WHERE excluded.activity_last_seen>=activity_last_seen`, user, time, visibleTrack ? JSON.stringify(visibleTrack) : null,
+    time, time, PRESENCE_TIMEOUT_MS, PRESENCE_TIMEOUT_MS);
   if (room) run(`UPDATE listening_rooms SET song_id=?,position=?,playing=?,updated_at=?
     WHERE id=? AND host_id=? AND host_session_id=? AND active=1 AND updated_at>=? AND transport_version=? AND (queue_data IS NULL OR song_id IS ?)`, playback?.songId ?? null, playback?.position ?? 0,
     Number(playback?.playing ?? false), time, room, user, sessionId, time - 90_000, version, playback?.songId ?? null);

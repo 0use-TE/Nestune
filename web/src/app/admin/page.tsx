@@ -5,7 +5,7 @@ import { Select } from '@/components/Select';
 import { QqSourceAdmin } from '@/components/QqSourceAdmin';
 import { Loading } from '@/components/Loading';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { del, get, patch, post } from '@/lib/api';
+import { api, ApiError, del, get, patch, post } from '@/lib/api';
 import { Icon } from '@/components/Icon';
 import { QUALITY_LABEL, fmtBytes, fmtDateTime } from '@/lib/util';
 
@@ -135,20 +135,62 @@ function Overview({ guard, go }: { guard: P['guard']; go: (t: Tab) => void }) {
 }
 
 /* ---------------- users ---------------- */
-type U = { id: number; username: string; displayName: string; status: string; maxQuality: string; createdAt: number; lastLoginAt: number; favorites: number; plays: number };
+type Activity = { online: boolean; lastSeenAt: number | null; currentMs: number | null; totalMs: number | null };
+type U = { id: number; username: string; displayName: string; status: string; maxQuality: string; lastLoginAt: number; favorites: number; plays: number; activity?: Activity };
+type UserSnapshot = { users: U[]; observedAt: number };
 type ActivationCode = { id: number; maxQuality: string; createdAt: number; expiresAt: number; status: 'unused' | 'used' | 'expired' | 'revoked'; username: string | null };
+
+function onlineDuration(milliseconds: number) {
+  const minutes = Math.floor(milliseconds / 60_000);
+  if (!minutes) return `${Math.floor(milliseconds / 1000)} 秒`;
+  const hours = Math.floor(minutes / 60);
+  if (!hours) return `${minutes} 分钟`;
+  if (hours < 24) return `${hours} 小时 ${minutes % 60} 分钟`;
+  return `${Math.floor(hours / 24)} 天 ${hours % 24} 小时`;
+}
+
+function UserActivity({ activity, observedAt }: { activity: Activity; observedAt: number }) {
+  const { lastSeenAt, online, currentMs, totalMs } = activity;
+  const ago = Math.max(0, observedAt - (lastSeenAt ?? observedAt));
+  const seen = lastSeenAt === null ? '暂无在线记录' : ago < 60_000 ? '刚刚在线' : `${onlineDuration(ago)}前在线`;
+  return <div className="adm-user-activity">
+    {online ? <div><Pill kind="ok">在线</Pill>{currentMs !== null && <span>本次 {onlineDuration(currentMs)}</span>}</div>
+      : <span title={lastSeenAt === null ? undefined : fmtDateTime(lastSeenAt)}>{seen}</span>}
+    <span className="sub sm">{totalMs === null ? '累计时长待记录' : `累计 ${onlineDuration(totalMs)}`}</span>
+  </div>;
+}
+
 function Users({ guard, toast }: P) {
-  const [users, setUsers] = useState<U[] | null>(null);
+  const [snapshot, setSnapshot] = useState<UserSnapshot | null>(null);
   const [codes, setCodes] = useState<ActivationCode[]>([]);
   const [form, setForm] = useState<null | { maxQuality: string }>(null);
   const [creating, setCreating] = useState(false);
   const [reveal, setReveal] = useState<null | { title: string; code: string }>(null);
   const [err, setErr] = useState('');
+  const loadUsers = useCallback(async (signal?: AbortSignal) => {
+    const response = await api<Omit<UserSnapshot, 'observedAt'> & { observedAt?: number }>('/api/admin/users', { signal });
+    const next = { ...response, observedAt: response.observedAt ?? Date.now() };
+    setSnapshot(previous => previous && previous.observedAt > next.observedAt ? previous : next);
+  }, []);
   const load = useCallback(() => Promise.all([
-    get('/api/admin/users').then(r => setUsers(r.users)),
+    loadUsers(),
     get('/api/admin/activation-codes').then(r => setCodes(r.codes)),
-  ]).catch(guard), [guard]);
+  ]).catch(guard), [guard, loadUsers]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    let refreshing = false;
+    async function refresh() {
+      if (document.hidden || refreshing) return;
+      refreshing = true;
+      try { await loadUsers(controller.signal); }
+      catch (error) { if (error instanceof ApiError && error.status === 401) guard(error); }
+      finally { refreshing = false; }
+    }
+    const timer = setInterval(refresh, 15_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', refresh); };
+  }, [guard, loadUsers]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault(); if (creating) return; setErr(''); setCreating(true);
@@ -167,15 +209,16 @@ function Users({ guard, toast }: P) {
     <>
       <div className="head"><div><h1>用户</h1><div className="sub">生成激活码，用户兑换时自行设置用户名、昵称和密码。</div></div>
         <button className="btn" onClick={() => { setErr(''); setForm({ maxQuality: 'exhigh' }); }}><Icon n="plus" s={16} />生成激活码</button></div>
-      {users === null ? <Loading /> : (
+      {snapshot === null ? <Loading /> : (
         <div className="box" style={{ overflowX: 'auto' }}>
           <table>
-            <thead><tr><th>用户</th><th>状态</th><th>最高音质</th><th className="hm">收藏 / 播放</th><th className="hm">上次登录</th><th /></tr></thead>
+            <thead><tr><th>用户</th><th>状态</th><th title="根据客户端心跳估算，累计时长从功能启用后开始统计">在线情况</th><th>最高音质</th><th className="hm">收藏 / 播放</th><th className="hm">上次登录</th><th /></tr></thead>
             <tbody>
-              {users.map(u => (
+              {snapshot.users.map(u => (
                 <tr key={u.id}>
                   <td><b>{u.username}</b><div className="muted sm">{u.displayName !== u.username ? u.displayName : ''}</div></td>
                   <td><Pill kind={u.status === 'active' ? 'ok' : u.status === 'pending' ? 'wait' : ''}>{{ active: '正常', pending: '待激活', disabled: '已停用' }[u.status]}</Pill></td>
+                  <td><UserActivity activity={u.activity ?? { online: false, lastSeenAt: u.lastLoginAt || null, currentMs: null, totalMs: null }} observedAt={snapshot.observedAt} /></td>
                   <td><Select value={u.maxQuality} aria-label={`${u.username} 的最高音质`} onChange={value => act(() => patch(`/api/admin/users/${u.id}`, { maxQuality: value }), '已更新音质上限')} options={Object.entries(QUALITY_LABEL).map(([value, label]) => ({ value, label }))} /></td>
                   <td className="hm sub">{u.favorites} / {u.plays}</td>
                   <td className="hm sub">{u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : '从未'}</td>
@@ -187,7 +230,7 @@ function Users({ guard, toast }: P) {
                   </div></td>
                 </tr>
               ))}
-              {!users.length && <tr><td colSpan={6} className="center sub">还没有用户</td></tr>}
+              {!snapshot.users.length && <tr><td colSpan={7} className="center sub">还没有用户</td></tr>}
             </tbody>
           </table>
         </div>

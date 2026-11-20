@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { PRESENCE_TIMEOUT_MS } from '@/lib/social-types';
 import { QUALITIES, dir } from './config';
 import { all, db, now, one, run } from './db';
 import {
@@ -105,11 +106,27 @@ export function deleteUser(id: number) {
   run('DELETE FROM users WHERE id=?', id);
 }
 
-export function listUsers() {
-  return all<UserRow & { favs: number; plays: number }>(`
+export function listUsers(time = now()) {
+  return all<UserRow & { favs: number; plays: number; publicSeen: number; activitySeen: number;
+    activityStart: number; activityTotal: number; sessionSeen: number; connected: number }>(`
     SELECT u.*, (SELECT COUNT(*) FROM favorites f WHERE f.user_id=u.id) favs,
-           (SELECT COUNT(*) FROM history h WHERE h.user_id=u.id) plays
-    FROM users u ORDER BY u.created_at DESC`).map(u => ({ ...publicUser(u), favorites: u.favs, plays: u.plays }));
+           (SELECT COUNT(*) FROM history h WHERE h.user_id=u.id) plays,
+           COALESCE(p.last_seen,0) publicSeen, COALESCE(p.activity_last_seen,0) activitySeen,
+           COALESCE(p.activity_started_at,0) activityStart, COALESCE(p.activity_total_ms,0) activityTotal,
+           COALESCE((SELECT MAX(s.last_seen) FROM sessions s WHERE s.user_id=u.id AND s.kind='user'),0) sessionSeen,
+           EXISTS(SELECT 1 FROM sessions s WHERE s.user_id=u.id AND s.kind='user' AND s.expires_at>?) connected
+    FROM users u LEFT JOIN social_presence p ON p.user_id=u.id ORDER BY u.created_at DESC`, time).map(u => {
+    const online = u.status === 'active' && u.connected === 1 && (u.activitySeen || u.publicSeen) > time - PRESENCE_TIMEOUT_MS;
+    return {
+      ...publicUser(u), favorites: u.favs, plays: u.plays,
+      activity: {
+        lastSeenAt: u.activitySeen || Math.max(u.publicSeen, u.sessionSeen, u.last_login_at) || null,
+        online,
+        currentMs: online && u.activityStart ? u.activitySeen - u.activityStart : null,
+        totalMs: u.activitySeen ? u.activityTotal : null,
+      },
+    };
+  });
 }
 
 /* ---------- user-facing auth ---------- */

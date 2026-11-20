@@ -4,7 +4,7 @@
 .adm aside{background:var(--surface);border-right:1px solid var(--line);padding:24px 14px;position:sticky;top:0;height:100vh;gap:2px}
 .adm .badge{margin:0 10px 22px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--sub)}
 .adm .nav{cursor:pointer}
-.adm main{padding:36px 44px 80px;max-width:1120px;width:100%;overflow:visible}
+.adm main{padding:36px 44px 80px;max-width:1120px;width:100%;min-width:0;overflow:visible}
 .adm .head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:26px;gap:14px;flex-wrap:wrap}
 .adm h1{font-size:26px}
 .adm .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px}
@@ -15,6 +15,8 @@
 .adm .box.pad{padding:22px}
 .adm table{width:100%;border-collapse:collapse}
 .adm th{text-align:left;font-weight:500;color:var(--muted);font-size:12px;padding:11px 18px;border-bottom:1px solid var(--line);background:var(--soft);white-space:nowrap}
+.adm-user-activity{display:grid;gap:4px;white-space:nowrap;font-size:13px}
+.adm-user-activity>div{display:flex;align-items:center;gap:7px}
 .adm td{padding:13px 18px;border-bottom:1px solid var(--line);vertical-align:middle}
 .adm tr:last-child td{border:0}
 .pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;background:var(--soft);color:var(--muted);white-space:nowrap}

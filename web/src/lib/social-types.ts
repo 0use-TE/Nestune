@@ -1,4 +1,5 @@
 import type { SharedQueue } from './shared-queue';
+export const PRESENCE_TIMEOUT_MS = 35_000;
 export type ListeningTrack = { id: string; name: string; artist: string };
 export type Person = {
   id: number; username: string; name: string; avatar: string | null;

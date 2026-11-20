@@ -174,7 +174,10 @@ function open() {
       user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       visible INTEGER NOT NULL DEFAULT 1,
       last_seen INTEGER NOT NULL DEFAULT 0,
-      track TEXT
+      track TEXT,
+      activity_last_seen INTEGER NOT NULL DEFAULT 0,
+      activity_started_at INTEGER NOT NULL DEFAULT 0,
+      activity_total_ms INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS friendships (
       low_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -240,6 +243,10 @@ function open() {
     const userColumns = db.prepare('PRAGMA table_info(users)').all();
     if (!userColumns.some(column => column.name === 'profile_public')) db.exec('ALTER TABLE users ADD COLUMN profile_public INTEGER NOT NULL DEFAULT 1');
     if (!userColumns.some(column => column.name === 'is_admin')) db.exec('ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1))');
+    const presenceColumns = db.prepare('PRAGMA table_info(social_presence)').all();
+    for (const field of ['activity_last_seen', 'activity_started_at', 'activity_total_ms']) {
+      if (!presenceColumns.some(column => column.name === field)) db.exec(`ALTER TABLE social_presence ADD COLUMN ${field} INTEGER NOT NULL DEFAULT 0`);
+    }
     if (!db.prepare('PRAGMA table_info(playlists)').all().some(column => column.name === 'is_public')) db.exec('ALTER TABLE playlists ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
     const columns = db.prepare('PRAGMA table_info(listening_rooms)').all();
     if (!columns.some(column => column.name === 'queue_data')) db.exec('ALTER TABLE listening_rooms ADD COLUMN queue_data TEXT');
