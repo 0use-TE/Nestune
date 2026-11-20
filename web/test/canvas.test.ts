@@ -73,6 +73,55 @@ it('uses the new overview default with older settings and syncs a changed overvi
   expect(canvas.readCanvas().settings.minZoomPercent).toBe(2);
 });
 
+it('defaults older canvases to a 20 second sync and preserves a customized interval', async () => {
+  const { saveCanvasSettings } = await import('@/server/canvas-settings');
+  const { readCanvasSync } = await import('@/server/canvas-sync');
+  const { syncIntervalSeconds, ...oldSettings } = { ...DEFAULT_CANVAS_SETTINGS, minZoomPercent: 3 };
+  database.kvSet('canvas:settings', JSON.stringify(oldSettings));
+  expect(canvas.readCanvas().settings.syncIntervalSeconds).toBe(20);
+  const first = readCanvasSync(null);
+  const next = saveCanvasSettings({ ...oldSettings, syncIntervalSeconds: 30 });
+  expect(readCanvasSync(first.token)).toMatchObject({ kind: 'delta', settings: next, upserts: [], removed: [] });
+  expect(saveCanvasSettings(oldSettings)).toEqual({ ...oldSettings, syncIntervalSeconds: 30 });
+  for (const value of [1, 61, 10.5, '20', null]) {
+    expect(() => saveCanvasSettings({ ...oldSettings, syncIntervalSeconds: value })).toThrow('同步间隔');
+  }
+});
+
+it('coalesces committed changes into one stream event and detects changed profile metadata', async () => {
+  const { canvasEventStream } = await import('@/server/canvas-events');
+  const { canvasSyncToken } = await import('@/server/canvas-sync');
+  const cancellation = new AbortController();
+  vi.useFakeTimers();
+  const response = canvasEventStream(cancellation.signal, 1, () => true, canvasSyncToken);
+  const reader = response.body!.getReader();
+  const event = async () => new TextDecoder().decode((await reader.read()).value);
+  try {
+    expect(await event()).toBe('retry: 5000\n\n');
+    const packet = (token: string) => `event: version\ndata: ${token}\n\n`;
+    expect(await event()).toBe(packet(canvasSyncToken()));
+
+    const note = { kind: 'note', text: 'QA', x: 1, y: 2 };
+    canvas.addCanvasTool(1, note);
+    canvas.addCanvasTool(2, note);
+    await vi.advanceTimersByTimeAsync(75);
+    expect(await event()).toBe(packet(canvasSyncToken()));
+    await vi.advanceTimersByTimeAsync(14_925);
+    expect(await event()).toBe('event: heartbeat\ndata: 1\n\n');
+
+    database.run('UPDATE users SET display_name=? WHERE id=?', '更新昵称', 1);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await event()).toBe(packet(canvasSyncToken()));
+    expect(await event()).toBe('event: heartbeat\ndata: 1\n\n');
+    database.run('UPDATE users SET display_name=? WHERE id=?', '小雨', 1);
+    cancellation.abort();
+    expect(await reader.read()).toEqual({ done: true, value: undefined });
+  } finally {
+    cancellation.abort();
+    vi.useRealTimers();
+  }
+});
+
 it('updates wall pixels in place across tile boundaries and syncs tile versions', async () => {
   const { readCanvasSync } = await import('@/server/canvas-sync');
   const { wallTileImage } = await import('@/server/canvas-wall');

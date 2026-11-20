@@ -33,6 +33,8 @@ function currentBoard() {
   return cached;
 }
 
+export const canvasSyncToken = () => currentBoard().token;
+
 export function readCanvasSync(since: string | null): CanvasSyncReply {
   const { state, token, index } = currentBoard();
   if (token === since) return { kind: 'unchanged', token };

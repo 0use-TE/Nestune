@@ -8,6 +8,17 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.26',
+    date: '2026 年 11 月 20 日',
+    title: '共享画布实时同步',
+    summary: '有人放下、移动或拿走物品，或发布涂鸦后，正在看画布的人会收到更新。拖动或缩放时会等手势结束再显示新内容。',
+    sections: [
+      { title: '画布有改动时再同步', paragraphs: ['服务器发现改动后会通知已打开的画布，客户端只取发生变化的内容。自己完成操作后会立即显示结果。'] },
+      { title: '断线恢复', paragraphs: ['实时连接断开时，默认每 20 秒检查一次更新。管理员可以在「画布管理 → 画布同步」调整这个间隔。'] },
+      { title: '网页更新', paragraphs: ['刷新网页或重新打开 Nestune 即可使用。'] },
+    ],
+  },
+  {
     version: '1.2.21',
     date: '2026 年 11 月 19 日',
     title: '手机画布缩放与状态栏修复',

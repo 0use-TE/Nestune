@@ -19,6 +19,7 @@ import { sniffImage, avatarMime } from './avatar';
 import { fail, str } from './http';
 import { compositeWall, stageLegacyWall, wallTiles } from './canvas-wall';
 import { canvasSettings } from './canvas-settings';
+import { notifyCanvasChanged } from './canvas-events';
 
 const storageKey = () => 'canvas:shared:v1';
 const publicSong = (song: Song) => !isUploadSong(song.id) || !!one("SELECT 1 FROM uploaded_songs s JOIN users u ON u.id=s.owner_id WHERE s.id=? AND s.visibility='public' AND u.status='active'", song.id);
@@ -47,11 +48,13 @@ export function readCanvas(): CanvasState & { settings: CanvasSettings } {
 }
 function canvasTransaction<T>(update: () => T) {
   const database = db(); database.exec('BEGIN IMMEDIATE');
+  let result: T;
   try {
-    const result = update();
+    result = update();
     database.exec('COMMIT');
-    return result;
   } catch (error) { database.exec('ROLLBACK'); throw error; }
+  notifyCanvasChanged();
+  return result;
 }
 function mutate(change: (state: ReturnType<typeof readCanvas>) => void) {
   return canvasTransaction(() => {

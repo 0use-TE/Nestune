@@ -2,17 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { api, put } from '@/lib/api';
-import { CANVAS_OBJECT_LIMIT, CANVAS_WALLPAPERS, DEFAULT_CANVAS_SETTINGS, MAX_CANVAS_OVERVIEW_PERCENT,
-  MIN_CANVAS_OVERVIEW_PERCENT, type CanvasSettings, type CanvasWallpaper } from '@/lib/canvas-settings';
+import { CANVAS_OBJECT_LIMIT, CANVAS_WALLPAPERS, DEFAULT_CANVAS_SETTINGS, MAX_CANVAS_OVERVIEW_PERCENT, MAX_CANVAS_SYNC_SECONDS,
+  MIN_CANVAS_OVERVIEW_PERCENT, MIN_CANVAS_SYNC_SECONDS, type CanvasSettings, type CanvasWallpaper } from '@/lib/canvas-settings';
 import { Loading } from './Loading';
 
 type CanvasAdminData = { settings: CanvasSettings; objectCount: number };
-type NumberField = 'personalLimit' | 'totalLimit' | 'minZoomPercent';
+type NumberField = 'personalLimit' | 'totalLimit' | 'minZoomPercent' | 'syncIntervalSeconds';
 type Draft = Pick<CanvasSettings, 'wallpaper' | 'allowGraffiti'> & Record<NumberField, string>;
 const makeDraft = (settings: CanvasSettings): Draft => ({
   wallpaper: settings.wallpaper, allowGraffiti: settings.allowGraffiti,
   personalLimit: String(settings.personalLimit), totalLimit: String(settings.totalLimit),
   minZoomPercent: String(settings.minZoomPercent ?? DEFAULT_CANVAS_SETTINGS.minZoomPercent),
+  syncIntervalSeconds: String(settings.syncIntervalSeconds ?? DEFAULT_CANVAS_SETTINGS.syncIntervalSeconds),
 });
 const wallpapers = Object.keys(CANVAS_WALLPAPERS) as CanvasWallpaper[];
 
@@ -38,6 +39,7 @@ export function CanvasAdmin({ guard, toast }: { guard: (error: unknown) => void;
       const settings = await put<CanvasSettings>('/api/admin/canvas', {
         ...draft, personalLimit: Number(draft.personalLimit), totalLimit: Number(draft.totalLimit),
         minZoomPercent: Number(draft.minZoomPercent),
+        syncIntervalSeconds: Number(draft.syncIntervalSeconds),
       });
       setDraft(makeDraft(settings));
       setData(previous => previous && { ...previous, settings });
@@ -71,6 +73,17 @@ export function CanvasAdmin({ guard, toast }: { guard: (error: unknown) => void;
             <input type="number" required min={MIN_CANVAS_OVERVIEW_PERCENT} max={MAX_CANVAS_OVERVIEW_PERCENT}
               value={draft.minZoomPercent} disabled={saving}
               onChange={event => setDraft({ ...draft, minZoomPercent: event.target.value })} />
+          </label>
+        </div>
+      </div>
+      <div className="box pad">
+        <h2>画布同步</h2>
+        <p className="sub">实时通知断开时，按这个间隔检查其他用户的改动。</p>
+        <div className="adm-canvas-limits">
+          <label className="field">断线同步间隔（秒）
+            <input type="number" required min={MIN_CANVAS_SYNC_SECONDS} max={MAX_CANVAS_SYNC_SECONDS}
+              value={draft.syncIntervalSeconds} disabled={saving}
+              onChange={event => setDraft({ ...draft, syncIntervalSeconds: event.target.value })} />
           </label>
         </div>
       </div>

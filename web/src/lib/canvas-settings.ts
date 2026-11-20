@@ -11,6 +11,7 @@ export type CanvasSettings = {
   totalLimit: number;
   minZoomPercent: number;
   zoomLimitPercent: number;
+  syncIntervalSeconds: number;
   allowGraffiti: boolean;
 };
 
@@ -19,12 +20,15 @@ export const MIN_CANVAS_OVERVIEW_PERCENT = 2;
 export const MAX_CANVAS_OVERVIEW_PERCENT = 20;
 export const MIN_CANVAS_ZOOM_LIMIT_PERCENT = 100;
 export const MAX_CANVAS_ZOOM_LIMIT_PERCENT = 1000;
+export const MIN_CANVAS_SYNC_SECONDS = 2;
+export const MAX_CANVAS_SYNC_SECONDS = 60;
 export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   wallpaper: 'concrete',
   personalLimit: 30,
   totalLimit: 200,
   minZoomPercent: 5,
   zoomLimitPercent: 250,
+  syncIntervalSeconds: 20,
   allowGraffiti: true,
 };
 

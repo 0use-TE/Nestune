@@ -2,10 +2,15 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { api } from './api';
+import { DEFAULT_CANVAS_SETTINGS } from './canvas-settings';
 import type { CanvasState, CanvasSyncReply } from './canvas-types';
 
 type CanvasCursor = { token: string | null; state: CanvasState };
-type SyncSession = { owner: number; abort: AbortController; cursor: CanvasCursor | null; request: Promise<void> | null; presented?: CanvasState };
+type SyncSession = {
+  owner: number; abort: AbortController; cursor: CanvasCursor | null; request: Promise<void> | null;
+  presented?: CanvasState; timer?: ReturnType<typeof setTimeout>; version?: string;
+  streaming: boolean; connect: () => void;
+};
 const storeName = 'boards';
 let database: Promise<IDBDatabase> | undefined;
 
@@ -46,27 +51,54 @@ function applyReply(base: CanvasCursor | null, reply: CanvasSyncReply | CanvasSt
   if (reply.kind === 'snapshot') return { token: reply.token, state: reply.state };
   if (reply.kind === 'unchanged') return reply.token === base?.token ? base : null;
   if (!base || base.token !== reply.from) return null;
-  const byId = new Map(base.state.records.map(item => [item.id, item]));
-  for (const id of reply.removed) byId.delete(id);
-  for (const item of reply.upserts) byId.set(item.id, item);
-  const records = reply.order ? reply.order.map(id => byId.get(id)) : [...byId.values()];
-  if (records.length !== byId.size || records.some(item => !item)) return null;
+  let records = base.state.records;
+  if (reply.order || reply.removed.length || reply.upserts.length) {
+    const byId = new Map(records.map(item => [item.id, item]));
+    for (const id of reply.removed) byId.delete(id);
+    for (const item of reply.upserts) byId.set(item.id, item);
+    const next = reply.order ? reply.order.map(id => byId.get(id)) : [...byId.values()];
+    if (next.length !== byId.size || !next.every(item => item !== undefined)) return null;
+    records = next;
+  }
   return { token: reply.token, state: {
-    revision: reply.revision, records: records as CanvasState['records'], wall: reply.wall ?? base.state.wall,
+    revision: reply.revision, records, wall: reply.wall ?? base.state.wall,
     settings: reply.settings ?? base.state.settings,
   } };
+}
+
+function stopPolling(session: SyncSession) {
+  clearTimeout(session.timer);
+  session.timer = undefined;
+}
+
+function schedulePoll(session: SyncSession, refresh: () => Promise<void>) {
+  if (session.timer !== undefined || session.abort.signal.aborted || document.hidden) return;
+  const seconds = session.cursor?.state.settings?.syncIntervalSeconds ?? DEFAULT_CANVAS_SETTINGS.syncIntervalSeconds;
+  session.timer = setTimeout(() => {
+    session.timer = undefined;
+    if (!document.hidden) void refresh().catch(() => {});
+  }, seconds * 1000);
 }
 
 export function useCanvasSync(userId: number | undefined, onState: (state: CanvasState, previous?: CanvasState) => boolean, onError: (error: Error) => void) {
   const live = useRef({ onState, onError });
   live.current = { onState, onError };
   const active = useRef<SyncSession | null>(null);
-  const refresh = useCallback((): Promise<void> => {
+  const presentPending = useCallback(() => {
+    const session = active.current;
+    const next = session?.cursor?.state;
+    if (session && next && next !== session.presented && live.current.onState(next, session.presented)) session.presented = next;
+  }, []);
+  const refresh = useCallback(function refresh(): Promise<void> {
     const session = active.current;
     if (!session) return Promise.resolve();
     if (session.request) return session.request;
+    stopPolling(session);
+    session.connect();
     const signal = session.abort.signal;
     const base = session.cursor;
+    const version = session.version;
+    let succeeded = false;
     const request = async () => {
       const since = base?.token ? '&since=' + encodeURIComponent(base.token) : '';
       const options = { signal, cache: 'no-store' as const };
@@ -74,16 +106,63 @@ export function useCanvasSync(userId: number | undefined, onState: (state: Canva
       if (!next) next = applyReply(null, await api<CanvasSyncReply | CanvasState>('/api/canvas?sync=1', options));
       if (signal.aborted || !next) return;
       session.cursor = next;
+      succeeded = true;
       if (next !== base) void writeCache(session.owner, next).catch(() => {});
-      if (live.current.onState(next.state, session.presented)) session.presented = next.state;
+      presentPending();
     };
-    session.request = request().finally(() => { session.request = null; });
+    session.request = request().finally(() => {
+      session.request = null;
+      if (signal.aborted || document.hidden) return;
+      // The notification can arrive after the in-flight request took its snapshot.
+      if (succeeded && session.version && session.version !== version && session.version !== session.cursor?.token) {
+        void refresh().catch(() => {});
+      } else if (!session.streaming || !succeeded) schedulePoll(session, refresh);
+    });
     return session.request;
-  }, []);
+  }, [presentPending]);
 
   useEffect(() => {
     if (userId === undefined) return;
-    const session: SyncSession = { owner: userId, abort: new AbortController(), cursor: null, request: null };
+    let source: EventSource | null = null;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    const disconnect = () => {
+      source?.close();
+      source = null;
+      clearTimeout(watchdog);
+      session.streaming = false;
+      session.version = undefined;
+    };
+    const watchConnection = () => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        disconnect();
+        void refresh().catch(() => {});
+      }, 45_000);
+    };
+    const connect = () => {
+      if (source || document.hidden || navigator.onLine === false || typeof EventSource === 'undefined') return;
+      const events = new EventSource('/api/canvas/events');
+      source = events;
+      watchConnection();
+      events.addEventListener('version', (event: MessageEvent<string>) => {
+        if (source !== events || !/^[a-f0-9]{32}$/.test(event.data)) return;
+        session.streaming = true;
+        session.version = event.data;
+        watchConnection();
+        if (event.data !== session.cursor?.token) void refresh().catch(() => {});
+        else stopPolling(session);
+      });
+      events.addEventListener('heartbeat', () => { if (source === events) watchConnection(); });
+      events.onerror = () => {
+        if (source !== events) return;
+        session.streaming = false;
+        if (events.readyState === EventSource.CLOSED) disconnect();
+        schedulePoll(session, refresh);
+      };
+    };
+    const session: SyncSession = {
+      owner: userId, abort: new AbortController(), cursor: null, request: null, streaming: false, connect,
+    };
     active.current = session;
     let deadline: ReturnType<typeof setTimeout>;
     const load = async () => {
@@ -93,25 +172,30 @@ export function useCanvasSync(userId: number | undefined, onState: (state: Canva
       if (session.abort.signal.aborted) return;
       if (saved && !session.cursor && !session.request) {
         session.cursor = saved;
-        if (live.current.onState(saved.state)) session.presented = saved.state;
+        presentPending();
       }
       await refresh();
     };
     void load().catch(error => { if (!session.abort.signal.aborted) live.current.onError(error); });
-    const backgroundRefresh = () => { if (!document.hidden) void refresh().catch(() => {}); };
-    const timer = setInterval(backgroundRefresh, 2000);
+    const backgroundRefresh = () => {
+      if (document.hidden) {
+        disconnect();
+        stopPolling(session);
+      } else void refresh().catch(() => {});
+    };
     window.addEventListener('focus', backgroundRefresh);
     window.addEventListener('online', backgroundRefresh);
     document.addEventListener('visibilitychange', backgroundRefresh);
     return () => {
       active.current = null;
       session.abort.abort();
+      disconnect();
       clearTimeout(deadline);
-      clearInterval(timer);
+      stopPolling(session);
       window.removeEventListener('focus', backgroundRefresh);
       window.removeEventListener('online', backgroundRefresh);
       document.removeEventListener('visibilitychange', backgroundRefresh);
     };
-  }, [userId, refresh]);
-  return refresh;
+  }, [userId, presentPending, refresh]);
+  return { refresh, presentPending };
 }

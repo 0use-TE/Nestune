@@ -124,21 +124,6 @@ export function Square() {
     if (!mounted.current || next === stateRef.current || (!reset && next.revision < stateRef.current.revision)) return;
     stateRef.current = next; setState(next);
   }, []);
-  const refresh = useCanvasSync(app.me?.id, (next, previous) => {
-    if (!mounted.current || drag.current || pending.current) return false;
-    // Accept a restored server snapshot when the view still displays the older cached baseline.
-    const reset = previous === stateRef.current && next.revision < previous.revision;
-    if (!reset && next.revision < stateRef.current.revision) return false;
-    apply(next, reset);
-    setLoaded(true);
-    return true;
-  }, error => live.current.toast(error.message));
-  const change = useCallback(async (input: Record<string, unknown>) => {
-    pending.current++;
-    try { const next = await post<CanvasState>('/api/canvas', input); apply(next); return next; }
-    catch (error) { live.current.toast((error as Error).message); throw error; }
-    finally { pending.current--; }
-  }, [apply]);
   const clearDragFrame = useCallback(() => {
     if (dragFrame.current !== null) cancelAnimationFrame(dragFrame.current);
     dragFrame.current = null;
@@ -226,6 +211,25 @@ export function Square() {
       else { cancel(); setSelected(null); }
     },
   });
+  const { refresh, presentPending } = useCanvasSync(app.me?.id, (next, previous) => {
+    if (!mounted.current || camera.moving || drag.current || nativeRef.current || insertion || pending.current) return false;
+    // Accept a restored server snapshot when the view still displays the older cached baseline.
+    const reset = previous === stateRef.current && next.revision < previous.revision;
+    if (!reset && next.revision < stateRef.current.revision) return false;
+    apply(next, reset);
+    setLoaded(true);
+    return true;
+  }, error => live.current.toast(error.message));
+  const displayingDrag = !!ghost || !!nativeSource || !!insertion;
+  useEffect(() => {
+    if (!camera.moving && !displayingDrag) presentPending();
+  }, [camera.moving, displayingDrag, presentPending]);
+  const change = useCallback(async (input: Record<string, unknown>) => {
+    pending.current++;
+    try { const next = await post<CanvasState>('/api/canvas', input); apply(next); return next; }
+    catch (error) { live.current.toast((error as Error).message); throw error; }
+    finally { pending.current--; presentPending(); }
+  }, [apply, presentPending]);
   const point = camera.point;
   const onBoard = useCallback((x: number, y: number) => { const rect = board.current?.getBoundingClientRect(); return !!rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom; }, []);
   const receiver = useCallback(() => (document.getElementById('bar') ?? emptyPlayer.current)?.getBoundingClientRect(), []);
@@ -279,8 +283,8 @@ export function Square() {
       if (boardWidth !== undefined) throw error;
       live.current.toast((error as Error).message);
     }
-    finally { pending.current--; if (mounted.current) setAdding(false); }
-  }, [apply, positionForNewItem]);
+    finally { pending.current--; presentPending(); if (mounted.current) setAdding(false); }
+  }, [apply, positionForNewItem, presentPending]);
   const insert = useCallback((item: CanvasRecord, x: number, y: number, size: number, source?: CanvasSource) => {
     audition.current.stop(); cancel(); setPicker(false); setTools(false);
     const generation = ++playbackGeneration.current;
@@ -302,7 +306,11 @@ export function Square() {
             window.dispatchEvent(new Event('nt:canvas-open-queue'));
           }
         } catch (error) { if (mounted.current) live.current.toast((error as Error).message); void refresh().catch(() => {}); }
-        finally { pending.current--; if (mounted.current && generation === playbackGeneration.current) setInsertion(null); }
+        finally {
+          pending.current--;
+          presentPending();
+          if (mounted.current && generation === playbackGeneration.current) setInsertion(null);
+        }
       })();
     };
     if (item.kind !== 'song') { takeAndPlay(); return; }
@@ -311,7 +319,7 @@ export function Square() {
     setInsertion({ item, x: rect.left + rect.width / 2, slotY: rect.top + rect.height * .46, size, fromX: x, fromY: y, source });
     playerSound.current?.insert();
     finishAnimation.current = setTimeout(takeAndPlay, RECORD_INSERT_MS);
-  }, [apply, cancel, dismissGuide, dismissPlaybackGuide, primeSound, receiver, refresh]);
+  }, [apply, cancel, dismissGuide, dismissPlaybackGuide, presentPending, primeSound, receiver, refresh]);
   const activate = useCallback((operation: Drag) => {
     if (drag.current !== operation || operation.cancelled || operation.active) return;
     if (!operation.source && isCanvasMusic(operation.item)) void audition.current.play(operation.item, false);
@@ -348,25 +356,29 @@ export function Square() {
     const finish = (event: PointerEvent) => {
       const operation = drag.current; if (!operation || event.pointerId !== operation.pointer) return;
       clearTimeout(operation.timer); clearDragFrame(); drag.current = null; setDraggingId(null); setOverPlayer(false);
-      if (event.type === 'pointercancel' || operation.cancelled) { setGhost(null); return; }
-      if (!operation.active) {
-        if (!operation.source) {
-          setSelected(operation.item.id);
-          if (isCanvasMusic(operation.item)) void audition.current.play(operation.item);
+      try {
+        if (event.type === 'pointercancel' || operation.cancelled) { setGhost(null); return; }
+        if (!operation.active) {
+          if (!operation.source) {
+            setSelected(operation.item.id);
+            if (isCanvasMusic(operation.item)) void audition.current.play(operation.item);
+          }
+          return;
         }
-        return;
-      }
-      setPicker(false); setGhost(null); window.dispatchEvent(new Event('nt:canvas-source-dropped'));
-      if (isCanvasMusic(operation.item) && over(event.clientX, event.clientY)) insert(operation.item, event.clientX, event.clientY, operation.size, operation.source);
-      else if (onBoard(event.clientX, event.clientY)) {
-        const position = point(event.clientX, event.clientY);
-        if (operation.source) void add(operation.source, position);
-        else {
-          const before = stateRef.current;
-          const current = before.records.find(r => r.id === operation.item.id);
-          if (current) apply({ ...before, records: [...before.records.filter(r => r.id !== current.id), { ...current, ...position }] });
-          void change({ action: 'move', id: operation.item.id, ...position }).catch(() => { apply(before); void refresh().catch(() => {}); });
+        setPicker(false); setGhost(null); window.dispatchEvent(new Event('nt:canvas-source-dropped'));
+        if (isCanvasMusic(operation.item) && over(event.clientX, event.clientY)) insert(operation.item, event.clientX, event.clientY, operation.size, operation.source);
+        else if (onBoard(event.clientX, event.clientY)) {
+          const position = point(event.clientX, event.clientY);
+          if (operation.source) void add(operation.source, position);
+          else {
+            const before = stateRef.current;
+            const current = before.records.find(r => r.id === operation.item.id);
+            if (current) apply({ ...before, records: [...before.records.filter(r => r.id !== current.id), { ...current, ...position }] });
+            void change({ action: 'move', id: operation.item.id, ...position }).catch(() => { apply(before); void refresh().catch(() => {}); });
+          }
         }
+      } finally {
+        presentPending();
       }
     };
     const fromTouch = (event: Event) => {
@@ -379,7 +391,7 @@ export function Square() {
     document.addEventListener('pointermove', move, { passive: false }); document.addEventListener('touchmove', touchMove, { passive: false });
     document.addEventListener('pointerup', finish); document.addEventListener('pointercancel', finish); window.addEventListener('blur', cancel); window.addEventListener('nt:canvas-source', fromTouch);
     return () => { document.removeEventListener('pointermove', move); document.removeEventListener('touchmove', touchMove); document.removeEventListener('pointerup', finish); document.removeEventListener('pointercancel', finish); window.removeEventListener('blur', cancel); window.removeEventListener('nt:canvas-source', fromTouch); };
-  }, [activate, add, apply, cancel, change, clearDragFrame, insert, onBoard, over, point, primeSound, refresh]);
+  }, [activate, add, apply, cancel, change, clearDragFrame, insert, onBoard, over, point, presentPending, primeSound, refresh]);
   useEffect(() => {
     const native = (event: Event) => { const source = (event as CustomEvent<CanvasSource | null>).detail; nativeRef.current = source; setNativeSource(source); setOverPlayer(false); if (source) primeSound(); else setDropOver(false); };
     const dragging = (event: DragEvent) => {
