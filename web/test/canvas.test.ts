@@ -56,20 +56,21 @@ it('pauses new graffiti while leaving existing paint readable', async () => {
   expect(canvas.readCanvas().wall).toEqual(before.wall);
 });
 
-it('uses the new zoom default with older settings and syncs a changed limit', async () => {
+it('uses the new overview default with older settings and syncs a changed overview', async () => {
   const { saveCanvasSettings } = await import('@/server/canvas-settings');
   const { readCanvasSync } = await import('@/server/canvas-sync');
-  const { zoomLimitPercent, ...oldSettings } = DEFAULT_CANVAS_SETTINGS;
+  const { minZoomPercent, ...oldSettings } = { ...DEFAULT_CANVAS_SETTINGS, zoomLimitPercent: 825 };
   database.kvSet('canvas:settings', JSON.stringify(oldSettings));
-  expect(canvas.readCanvas().settings.zoomLimitPercent).toBe(zoomLimitPercent);
+  expect(canvas.readCanvas().settings.minZoomPercent).toBe(minZoomPercent);
   const initial = readCanvasSync(null);
-  const customized = saveCanvasSettings({ ...oldSettings, zoomLimitPercent: 825 });
+  const customized = saveCanvasSettings({ ...oldSettings, minZoomPercent: 2 });
   expect(readCanvasSync(initial.token)).toMatchObject({ kind: 'delta', settings: customized, upserts: [], removed: [] });
-  expect(saveCanvasSettings(oldSettings).zoomLimitPercent).toBe(825);
-  for (const value of [99, 1001, 200.5, '500', null]) {
-    expect(() => saveCanvasSettings({ ...oldSettings, zoomLimitPercent: value })).toThrow('最大缩放比例');
+  expect(customized.zoomLimitPercent).toBe(825);
+  expect(saveCanvasSettings(oldSettings).minZoomPercent).toBe(2);
+  for (const value of [1, 21, 2.5, '5', null]) {
+    expect(() => saveCanvasSettings({ ...oldSettings, minZoomPercent: value })).toThrow('最远视角');
   }
-  expect(canvas.readCanvas().settings.zoomLimitPercent).toBe(825);
+  expect(canvas.readCanvas().settings.minZoomPercent).toBe(2);
 });
 
 it('updates wall pixels in place across tile boundaries and syncs tile versions', async () => {

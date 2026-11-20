@@ -33,6 +33,7 @@ type MusicChoice = { source: CanvasSource; subtitle: string };
 type PickerResult = { path: string; kind: MusicKind; choices: MusicChoice[]; playlistCover?: string | null; warnings?: string[]; error?: string };
 type AlbumSummary = { id: string; name: string; cover: string | null };
 const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
+const GRAFFITI_MIN_ZOOM = .2;
 const EMOJI = ['🎵','🎧','💿','📼','🎸','🎹','❤️','✨','⭐','🌙','☀️','🌈','🌷','🌻','🍀','🍒','☕','🍰','🐱','🐶','🫶','🥹','😎','🤍'];
 function sourceItem(source: CanvasSource): CanvasRecord {
   const song = source.previewSong ?? { id: source.songId ?? '', name: source.name, cover: source.cover ?? null, artists: [], duration: 0, album: { id: source.albumId ?? null, name: source.name } };
@@ -217,6 +218,7 @@ export function Square() {
   const practiceWall = useCallback((practicing: boolean) => wallPainter.current?.setPractice(practicing), []);
   const camera = useCanvasCamera({
     board, world, onFrame: paintWall, user: app.me?.id,
+    minZoom: loaded ? (graffiti ? GRAFFITI_MIN_ZOOM : (canvasSettings.minZoomPercent ?? DEFAULT_CANVAS_SETTINGS.minZoomPercent) / 100) : undefined,
     maxZoom: loaded ? (canvasSettings.zoomLimitPercent ?? DEFAULT_CANVAS_SETTINGS.zoomLimitPercent) / 100 : undefined,
     isDragging: () => !!drag.current?.active,
     onGesture: () => {
@@ -245,6 +247,7 @@ export function Square() {
   }, [point]);
   function startGraffiti() {
     if (graffiti) return;
+    if (camera.camera.zoom < GRAFFITI_MIN_ZOOM) camera.zoom(GRAFFITI_MIN_ZOOM / camera.camera.zoom);
     const view = graffitiView();
     if (!view) return;
     setGraffiti(view);

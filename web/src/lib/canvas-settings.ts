@@ -9,18 +9,22 @@ export type CanvasSettings = {
   wallpaper: CanvasWallpaper;
   personalLimit: number;
   totalLimit: number;
+  minZoomPercent: number;
   zoomLimitPercent: number;
   allowGraffiti: boolean;
 };
 
 export const CANVAS_OBJECT_LIMIT = 500;
+export const MIN_CANVAS_OVERVIEW_PERCENT = 2;
+export const MAX_CANVAS_OVERVIEW_PERCENT = 20;
 export const MIN_CANVAS_ZOOM_LIMIT_PERCENT = 100;
 export const MAX_CANVAS_ZOOM_LIMIT_PERCENT = 1000;
 export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   wallpaper: 'concrete',
   personalLimit: 30,
   totalLimit: 200,
-  zoomLimitPercent: 500,
+  minZoomPercent: 5,
+  zoomLimitPercent: 250,
   allowGraffiti: true,
 };
 

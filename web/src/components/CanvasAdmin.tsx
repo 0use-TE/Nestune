@@ -2,15 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { api, put } from '@/lib/api';
-import { CANVAS_OBJECT_LIMIT, CANVAS_WALLPAPERS, DEFAULT_CANVAS_SETTINGS, MAX_CANVAS_ZOOM_LIMIT_PERCENT, MIN_CANVAS_ZOOM_LIMIT_PERCENT, type CanvasSettings, type CanvasWallpaper } from '@/lib/canvas-settings';
+import { CANVAS_OBJECT_LIMIT, CANVAS_WALLPAPERS, DEFAULT_CANVAS_SETTINGS, MAX_CANVAS_OVERVIEW_PERCENT,
+  MIN_CANVAS_OVERVIEW_PERCENT, type CanvasSettings, type CanvasWallpaper } from '@/lib/canvas-settings';
 import { Loading } from './Loading';
 
 type CanvasAdminData = { settings: CanvasSettings; objectCount: number };
-type NumberField = 'personalLimit' | 'totalLimit' | 'zoomLimitPercent';
-type Draft = Omit<CanvasSettings, NumberField> & Record<NumberField, string>;
+type NumberField = 'personalLimit' | 'totalLimit' | 'minZoomPercent';
+type Draft = Pick<CanvasSettings, 'wallpaper' | 'allowGraffiti'> & Record<NumberField, string>;
 const makeDraft = (settings: CanvasSettings): Draft => ({
-  ...settings, personalLimit: String(settings.personalLimit), totalLimit: String(settings.totalLimit),
-  zoomLimitPercent: String(settings.zoomLimitPercent ?? DEFAULT_CANVAS_SETTINGS.zoomLimitPercent),
+  wallpaper: settings.wallpaper, allowGraffiti: settings.allowGraffiti,
+  personalLimit: String(settings.personalLimit), totalLimit: String(settings.totalLimit),
+  minZoomPercent: String(settings.minZoomPercent ?? DEFAULT_CANVAS_SETTINGS.minZoomPercent),
 });
 const wallpapers = Object.keys(CANVAS_WALLPAPERS) as CanvasWallpaper[];
 
@@ -35,7 +37,7 @@ export function CanvasAdmin({ guard, toast }: { guard: (error: unknown) => void;
     try {
       const settings = await put<CanvasSettings>('/api/admin/canvas', {
         ...draft, personalLimit: Number(draft.personalLimit), totalLimit: Number(draft.totalLimit),
-        zoomLimitPercent: Number(draft.zoomLimitPercent),
+        minZoomPercent: Number(draft.minZoomPercent),
       });
       setDraft(makeDraft(settings));
       setData(previous => previous && { ...previous, settings });
@@ -63,11 +65,12 @@ export function CanvasAdmin({ guard, toast }: { guard: (error: unknown) => void;
       </div>
       <div className="box pad">
         <h2>画布视角</h2>
+        <p className="sub">数值越小，缩到最远时能看到的画布范围越大。</p>
         <div className="adm-canvas-limits">
-          <label className="field">最大缩放比例（%）
-            <input type="number" required min={MIN_CANVAS_ZOOM_LIMIT_PERCENT} max={MAX_CANVAS_ZOOM_LIMIT_PERCENT}
-              value={draft.zoomLimitPercent} disabled={saving}
-              onChange={event => setDraft({ ...draft, zoomLimitPercent: event.target.value })} />
+          <label className="field">最远视角（缩小到 %）
+            <input type="number" required min={MIN_CANVAS_OVERVIEW_PERCENT} max={MAX_CANVAS_OVERVIEW_PERCENT}
+              value={draft.minZoomPercent} disabled={saving}
+              onChange={event => setDraft({ ...draft, minZoomPercent: event.target.value })} />
           </label>
         </div>
       </div>
