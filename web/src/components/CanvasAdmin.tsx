@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { api, put } from '@/lib/api';
-import { CANVAS_OBJECT_LIMIT, CANVAS_WALLPAPERS, type CanvasSettings, type CanvasWallpaper } from '@/lib/canvas-settings';
+import { CANVAS_OBJECT_LIMIT, CANVAS_WALLPAPERS, DEFAULT_CANVAS_SETTINGS, MAX_CANVAS_ZOOM_LIMIT_PERCENT, MIN_CANVAS_ZOOM_LIMIT_PERCENT, type CanvasSettings, type CanvasWallpaper } from '@/lib/canvas-settings';
 import { Loading } from './Loading';
 
 type CanvasAdminData = { settings: CanvasSettings; objectCount: number };
-type Draft = Omit<CanvasSettings, 'personalLimit' | 'totalLimit'> & { personalLimit: string; totalLimit: string };
+type NumberField = 'personalLimit' | 'totalLimit' | 'zoomLimitPercent';
+type Draft = Omit<CanvasSettings, NumberField> & Record<NumberField, string>;
 const makeDraft = (settings: CanvasSettings): Draft => ({
   ...settings, personalLimit: String(settings.personalLimit), totalLimit: String(settings.totalLimit),
+  zoomLimitPercent: String(settings.zoomLimitPercent ?? DEFAULT_CANVAS_SETTINGS.zoomLimitPercent),
 });
 const wallpapers = Object.keys(CANVAS_WALLPAPERS) as CanvasWallpaper[];
 
@@ -33,6 +35,7 @@ export function CanvasAdmin({ guard, toast }: { guard: (error: unknown) => void;
     try {
       const settings = await put<CanvasSettings>('/api/admin/canvas', {
         ...draft, personalLimit: Number(draft.personalLimit), totalLimit: Number(draft.totalLimit),
+        zoomLimitPercent: Number(draft.zoomLimitPercent),
       });
       setDraft(makeDraft(settings));
       setData(previous => previous && { ...previous, settings });
@@ -55,6 +58,16 @@ export function CanvasAdmin({ guard, toast }: { guard: (error: unknown) => void;
           <label className="field">整个画布最多放置
             <input type="number" required min={1} max={CANVAS_OBJECT_LIMIT} value={draft.totalLimit}
               disabled={saving} onChange={event => setDraft({ ...draft, totalLimit: event.target.value })} />
+          </label>
+        </div>
+      </div>
+      <div className="box pad">
+        <h2>画布视角</h2>
+        <div className="adm-canvas-limits">
+          <label className="field">最大缩放比例（%）
+            <input type="number" required min={MIN_CANVAS_ZOOM_LIMIT_PERCENT} max={MAX_CANVAS_ZOOM_LIMIT_PERCENT}
+              value={draft.zoomLimitPercent} disabled={saving}
+              onChange={event => setDraft({ ...draft, zoomLimitPercent: event.target.value })} />
           </label>
         </div>
       </div>

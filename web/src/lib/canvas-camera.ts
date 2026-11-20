@@ -1,9 +1,13 @@
+import { DEFAULT_CANVAS_SETTINGS, MAX_CANVAS_ZOOM_LIMIT_PERCENT } from './canvas-settings';
+
 export type Camera = { x: number; y: number; zoom: number };
 export const CANVAS_DRAG_THRESHOLD = 7;
-export const MIN_ZOOM = .2, MAX_ZOOM = 2.5, WORLD_LIMIT = 1_000_000;
+export const MIN_ZOOM = .2, MAX_ZOOM = MAX_CANVAS_ZOOM_LIMIT_PERCENT / 100, WORLD_LIMIT = 1_000_000;
 export const worldPoint = (p: { x: number; y: number }, camera: Camera) => ({ x: (p.x - camera.x) / camera.zoom, y: (p.y - camera.y) / camera.zoom });
-export function zoomAt(camera: Camera, point: { x: number; y: number }, zoom: number): Camera {
-  const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom)), world = worldPoint(point, camera);
+export function zoomAt(camera: Camera, point: { x: number; y: number }, zoom: number, limit = DEFAULT_CANVAS_SETTINGS.zoomLimitPercent / 100): Camera {
+  const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, limit, zoom));
+  if (next === camera.zoom) return camera;
+  const world = worldPoint(point, camera);
   return { x: point.x - world.x * next, y: point.y - world.y * next, zoom: next };
 }
 export function fitCamera(width: number, height: number, points: { x: number; y: number }[]): Camera {

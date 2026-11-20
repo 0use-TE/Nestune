@@ -217,6 +217,7 @@ export function Square() {
   const practiceWall = useCallback((practicing: boolean) => wallPainter.current?.setPractice(practicing), []);
   const camera = useCanvasCamera({
     board, world, onFrame: paintWall, user: app.me?.id,
+    maxZoom: loaded ? (canvasSettings.zoomLimitPercent ?? DEFAULT_CANVAS_SETTINGS.zoomLimitPercent) / 100 : undefined,
     isDragging: () => !!drag.current?.active,
     onGesture: () => {
       if (graffitiEditor.current) graffitiEditor.current.cancelGesture();

@@ -56,6 +56,22 @@ it('pauses new graffiti while leaving existing paint readable', async () => {
   expect(canvas.readCanvas().wall).toEqual(before.wall);
 });
 
+it('uses the new zoom default with older settings and syncs a changed limit', async () => {
+  const { saveCanvasSettings } = await import('@/server/canvas-settings');
+  const { readCanvasSync } = await import('@/server/canvas-sync');
+  const { zoomLimitPercent, ...oldSettings } = DEFAULT_CANVAS_SETTINGS;
+  database.kvSet('canvas:settings', JSON.stringify(oldSettings));
+  expect(canvas.readCanvas().settings.zoomLimitPercent).toBe(zoomLimitPercent);
+  const initial = readCanvasSync(null);
+  const customized = saveCanvasSettings({ ...oldSettings, zoomLimitPercent: 825 });
+  expect(readCanvasSync(initial.token)).toMatchObject({ kind: 'delta', settings: customized, upserts: [], removed: [] });
+  expect(saveCanvasSettings(oldSettings).zoomLimitPercent).toBe(825);
+  for (const value of [99, 1001, 200.5, '500', null]) {
+    expect(() => saveCanvasSettings({ ...oldSettings, zoomLimitPercent: value })).toThrow('最大缩放比例');
+  }
+  expect(canvas.readCanvas().settings.zoomLimitPercent).toBe(825);
+});
+
 it('updates wall pixels in place across tile boundaries and syncs tile versions', async () => {
   const { readCanvasSync } = await import('@/server/canvas-sync');
   const { wallTileImage } = await import('@/server/canvas-wall');

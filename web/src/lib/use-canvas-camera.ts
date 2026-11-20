@@ -1,16 +1,22 @@
 'use client';
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { CANVAS_DRAG_THRESHOLD, fitCamera, worldPoint, zoomAt, type Camera } from './canvas-camera';
+import { CANVAS_DRAG_THRESHOLD, fitCamera, MAX_ZOOM, MIN_ZOOM, WORLD_LIMIT, worldPoint, zoomAt, type Camera } from './canvas-camera';
 
 type Point = { x: number; y: number };
 type Contact = Point & { panFrom?: Point };
 type Surface = RefObject<HTMLDivElement | null>;
-export function useCanvasCamera({ board, world, onFrame, user, onGesture, isDragging }: {
+const center = (board: HTMLDivElement) => ({ x: board.clientWidth / 2, y: board.clientHeight / 2 });
+const panLimit = (MAX_ZOOM + 1) * WORLD_LIMIT;
+
+export function useCanvasCamera({ board, world, onFrame, user, maxZoom, onGesture, isDragging }: {
   board: Surface; world: Surface; onFrame: (view: Camera) => void; user: number | undefined;
+  maxZoom?: number;
   onGesture: () => void; isDragging: () => boolean;
 }) {
   const [camera, setCamera] = useState<Camera>({ x: 0, y: 0, zoom: 1 });
   const live = useRef(camera);
+  const limit = useRef(maxZoom);
+  limit.current = maxZoom;
   const frame = useRef<number | null>(null);
   const paintedZoom = useRef(1);
   const gesture = useRef(onGesture); gesture.current = onGesture;
@@ -59,7 +65,10 @@ export function useCanvasCamera({ board, world, onFrame, user, onGesture, isDrag
     const el = board.current; if (!el) return;
     let saved: Camera | null = null;
     try { saved = JSON.parse(localStorage.getItem(key) || 'null'); } catch {}
-    if (saved && [saved.x, saved.y, saved.zoom].every(Number.isFinite) && saved.zoom >= .2 && saved.zoom <= 2.5 && Math.abs(saved.x) < 3_000_000 && Math.abs(saved.y) < 3_000_000) update(saved, true);
+    if (saved && [saved.x, saved.y, saved.zoom].every(Number.isFinite) && saved.zoom >= MIN_ZOOM && saved.zoom <= MAX_ZOOM
+      && Math.abs(saved.x) < panLimit && Math.abs(saved.y) < panLimit) {
+      update(zoomAt(saved, center(el), saved.zoom, limit.current ?? MAX_ZOOM), true);
+    }
     else {
       const zoom = Math.max(.65, fitCamera(el.clientWidth, el.clientHeight, []).zoom);
       update({ x: el.clientWidth / 2 - 500 * zoom, y: el.clientHeight / 2 - 325 * zoom, zoom }, true);
@@ -85,7 +94,7 @@ export function useCanvasCamera({ board, world, onFrame, user, onGesture, isDrag
         if (pan.current === null && !pinching.current) { commit(); setMoving(false); }
       }, 140);
       const rect = el.getBoundingClientRect();
-      if (event.ctrlKey || event.metaKey) update(zoomAt(live.current, { x: event.clientX - rect.left, y: event.clientY - rect.top }, live.current.zoom * Math.exp(-event.deltaY * .007)));
+      if (event.ctrlKey || event.metaKey) update(zoomAt(live.current, { x: event.clientX - rect.left, y: event.clientY - rect.top }, live.current.zoom * Math.exp(-event.deltaY * .007), limit.current));
       else update({ ...live.current, x: live.current.x - event.deltaX, y: live.current.y - event.deltaY });
     };
     const spaceStart = (event: KeyboardEvent) => {
@@ -129,9 +138,16 @@ export function useCanvasCamera({ board, world, onFrame, user, onGesture, isDrag
       frame.current = null;
     };
   }, [board, commit, key, release, update]);
+  useEffect(() => {
+    if (board.current && maxZoom !== undefined && live.current.zoom > maxZoom) {
+      update(zoomAt(live.current, center(board.current), live.current.zoom, maxZoom), true);
+    }
+  }, [board, maxZoom, update]);
   useEffect(() => { const timer = setTimeout(() => { try { localStorage.setItem(key, JSON.stringify(camera)); } catch {} }, 300); return () => clearTimeout(timer); }, [camera, key]);
   const point = useCallback((x: number, y: number) => { const rect = board.current!.getBoundingClientRect(); return worldPoint({ x: x - rect.left, y: y - rect.top }, live.current); }, [board]);
-  const zoom = useCallback((factor: number) => { const el = board.current!; update(zoomAt(live.current, { x: el.clientWidth / 2, y: el.clientHeight / 2 }, live.current.zoom * factor), true); }, [board, update]);
+  const zoom = useCallback((factor: number) => {
+    if (board.current) update(zoomAt(live.current, center(board.current), live.current.zoom * factor, limit.current), true);
+  }, [board, update]);
   const fit = useCallback((items: Point[]) => { const el = board.current!; update(fitCamera(el.clientWidth, el.clientHeight, items), true); }, [board, update]);
   const handlers = {
     onPointerDownCapture(event: React.PointerEvent) {
@@ -169,7 +185,7 @@ export function useCanvasCamera({ board, world, onFrame, user, onGesture, isDrag
         const next = [...pointers.current.values()], rect = event.currentTarget.getBoundingClientRect();
         const mid = (a: typeof old) => ({ x: (a[0].x + a[1].x) / 2 - rect.left, y: (a[0].y + a[1].y) / 2 - rect.top });
         const distance = (a: typeof old) => Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
-        const a = mid(old), b = mid(next), z = zoomAt(live.current, a, live.current.zoom * distance(next) / Math.max(1, distance(old)));
+        const a = mid(old), b = mid(next), z = zoomAt(live.current, a, live.current.zoom * distance(next) / Math.max(1, distance(old)), limit.current);
         update({ ...z, x: z.x + b.x - a.x, y: z.y + b.y - a.y }); event.stopPropagation(); event.preventDefault();
         return;
       }

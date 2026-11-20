@@ -5,7 +5,14 @@ it('preserves the world point under the cursor while zooming and accepts negativ
   const camera = { x: 200, y: -300, zoom: .6 }, cursor = { x: 500, y: 180 };
   expect(worldPoint(cursor, zoomAt(camera, cursor, 1.7))).toEqual(worldPoint(cursor, camera));
   expect(worldPoint({ x: 0, y: -400 }, camera).x).toBeLessThan(0);
-  expect(zoomAt(camera, cursor, 100).zoom).toBe(2.5);
+  expect(zoomAt(camera, cursor, 100).zoom).toBe(5);
+});
+it('clamps to the chosen zoom limit without moving the focused world point', () => {
+  const before = { x: -200, y: 100, zoom: 8 }, focus = { x: 400, y: 200 };
+  const after = zoomAt(before, focus, before.zoom, 3.75);
+  expect(after.zoom).toBe(3.75);
+  expect(worldPoint(focus, after)).toEqual(worldPoint(focus, before));
+  expect(zoomAt(before, focus, 100, 20).zoom).toBe(10);
 });
 it('fits separated objects into the viewport with padding', () => {
   const points = [{ x: -800, y: -200 }, { x: 2800, y: 1200 }], camera = fitCamera(1200, 700, points);
