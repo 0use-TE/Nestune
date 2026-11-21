@@ -120,7 +120,7 @@ main{overflow-y:auto;padding:38px 48px 150px}
 .hero .cv{width:190px;flex:none;border-radius:18px;box-shadow:0 20px 40px -10px rgba(0,0,0,.4);z-index:1}
 .hero .in{z-index:1;min-width:0}
 .hero h1{font-size:40px;margin:6px 0 4px}
-.detail-back{margin-bottom:16px}
+.detail-back{margin-bottom:12px}
 .tag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;background:rgba(255,255,255,.18)}
 .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 22px;border-radius:999px;background:var(--accent);color:var(--on-accent);font-weight:600}
 .btn:hover{opacity:.88}.btn:disabled{opacity:.5;cursor:default}
@@ -238,7 +238,6 @@ main{overflow-y:auto;padding:38px 48px 150px}
   #np.open{opacity:1;translate:none;transition-delay:0s}
 }
 #np .close{position:absolute;top:24px;left:28px}
-#np .np-more{position:absolute;top:24px;right:28px;z-index:3}
 .mobile-art-toggle,.np-needle,.np-mobile-backdrop,.np-mobile-queue,.np-quality{display:none}
 #np .left{max-width:430px;margin:0 auto;width:100%;height:100%;max-height:900px;min-height:0;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:clamp(10px,2dvh,24px)}
 #np .np-art{min-height:0;container-type:size;display:grid;place-items:center}
@@ -551,7 +550,6 @@ main{overflow-y:auto;padding:38px 48px 150px}
   #np:has(.together-chat-dock){--panel-height:clamp(184px,calc(100dvh - 478px),420px)}
   #np .left,#np .np-details,#np .np-stage{display:contents}
   #np .close{top:calc(14px + env(safe-area-inset-top));left:13px;z-index:3;width:44px;height:44px}
-  #np .np-more{top:calc(14px + env(safe-area-inset-top));right:13px;width:44px;height:44px}
   #np .mobile-art-toggle{display:block;position:absolute;inset:0;z-index:1;border-radius:20px}
   #np .mobile-art-toggle:focus-visible{outline:2px solid var(--sub);outline-offset:-3px}
   #np .np-art,#np .lyric-view{grid-area:art;position:relative;width:min(100%,520px);height:100%;min-height:0}

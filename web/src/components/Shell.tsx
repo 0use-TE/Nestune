@@ -166,8 +166,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </Link>
         </aside>
         <main id="main" ref={main}><div className="wrap">
-          {detail && <button className="btn ghost sm detail-back" onClick={backFromDetail}>
-            <Icon n="back" s={17} />返回上一级
+          {detail && <button type="button" className="ib detail-back" aria-label="返回上一级" title="返回上一级" onClick={backFromDetail}>
+            <Icon n="back" />
           </button>}
           {children}
         </div></main>

@@ -188,12 +188,6 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           <button id="np-tab-chat" role="tab" aria-selected={mobilePage === 'chat'} aria-controls="np-chat-page" tabIndex={mobilePage === 'chat' ? 0 : -1} onClick={() => setMobilePage('chat')}>聊天</button>
         </div>}
         <div id="np-playback-page" className="np-playback-page">
-        <button type="button" className="ib np-more" aria-label="歌曲更多操作" title="歌曲更多操作"
-          aria-expanded={app.menu?.song.id === songId} aria-controls={app.menu?.song.id === songId ? 'song-actions' : undefined}
-          onClick={event => {
-            const rect = event.currentTarget.getBoundingClientRect();
-            app.openMenu(s, { clientX: rect.left, clientY: rect.bottom + 6 });
-          }}><Icon n="more" s={22} /></button>
         <div className="left">
           <div className="np-art">
             <div className="np-record" key={songId}><Cover src={s.cover} seed={s.id} /></div>
@@ -227,6 +221,12 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
                 {desktopLyrics.supported && <button type="button" className={`ib ${desktopLyrics.enabled ? 'act' : ''}`} aria-label={desktopLyrics.windowLabel} aria-pressed={desktopLyrics.enabled} title={desktopLyrics.windowLabel} disabled={desktopLyrics.busy} onClick={() => void desktopLyrics.setEnabled(!desktopLyrics.enabled)}><Icon n="popout" s={18} /></button>}
                 {!deviceSong && <button className={`ib heartb ${sourceIds(s).some(id => app.favIds.has(id)) ? 'on' : ''}`} aria-label="收藏" title="收藏" onClick={() => app.toggleFav(s)}><Icon n="heart" s={18} /></button>}
                 {!deviceSong && <button type="button" className="ib" aria-label="下载到设备" title="下载到设备" onClick={() => app.openSave(s)}><Icon n="download" s={18} /></button>}
+                <button type="button" className="ib np-more" aria-label="歌曲更多操作" title="歌曲更多操作"
+                  aria-expanded={app.menu?.song.id === songId} aria-controls={app.menu?.song.id === songId ? 'song-actions' : undefined}
+                  onClick={event => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    app.openMenu(s, { clientX: rect.left, clientY: rect.bottom + 6 });
+                  }}><Icon n="more" s={20} /></button>
                 {lines.some(line => line.tr) && <button className={`ib ${app.showTr ? 'act' : ''}`} aria-label="歌词翻译" aria-pressed={app.showTr} title="歌词翻译" onClick={() => app.setShowTr(!app.showTr)}><Icon n="translation" s={18} /></button>}
                 <span className="np-desktop-queue">{queueButton}</span>
                 {!hasRoom && !deviceSong && <button className={`ib ${inviting ? 'act' : ''}`} aria-label="一起听" aria-pressed={inviting} title="一起听" onClick={() => setInviting(open => !open)}><Icon n="users" s={18} /></button>}
