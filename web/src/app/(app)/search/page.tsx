@@ -22,13 +22,14 @@ export default function SearchPage() {
 }
 
 function SearchRoute() {
-  const keywords = useSearchParams().get('q')?.trim() || '';
-  return <SearchView key={keywords} initialQuery={keywords} />;
+  const params = useSearchParams();
+  const keywords = params.get('q')?.trim() || '';
+  const type = TYPES.find(([value]) => value === params.get('type'))?.[0] ?? 'song';
+  return <SearchView key={`${type}:${keywords}`} initialQuery={keywords} type={type} />;
 }
 
-function SearchView({ initialQuery }: { initialQuery: string }) {
+function SearchView({ initialQuery, type }: { initialQuery: string; type: SearchType }) {
   const [q, setQ] = useState(initialQuery);
-  const [type, setType] = useState<SearchType>('song');
   const [items, setItems] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
   const [nextOffset, setNextOffset] = useState(0);
@@ -73,11 +74,23 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
   }, []);
 
   useEffect(() => {
-    if (initialQuery) run(initialQuery, 'song');
+    if (initialQuery) run(initialQuery, type);
     return () => { pendingSearch.current?.abort(); };
-  }, [initialQuery, run]);
+  }, [initialQuery, run, type]);
 
-  const pick = (k: string) => { setQ(k); run(k, type); };
+  const search = (value: string, nextType = type) => {
+    const keywords = value.trim();
+    if (keywords === initialQuery && nextType === type) {
+      setQ(keywords);
+      void run(keywords, nextType);
+      return;
+    }
+    const url = new URL(window.location.href);
+    if (keywords) url.searchParams.set('q', keywords); else url.searchParams.delete('q');
+    if (nextType === 'song') url.searchParams.delete('type'); else url.searchParams.set('type', nextType);
+    window.history.replaceState(null, '', url);
+  };
+  const pick = (k: string) => search(k);
   function updateRecent(keywords: string[]) {
     saveRecentSearches(keywords);
     setRecent(keywords);
@@ -88,7 +101,7 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
   return (
     <>
       <h1 style={{ marginBottom: 22 }}>搜索</h1>
-      <form className="search" role="search" onSubmit={e => { e.preventDefault(); run(q, type); }}>
+      <form className="search" role="search" onSubmit={e => { e.preventDefault(); search(q); }}>
         <Icon n="search" />
         <input ref={input} aria-label="搜索歌曲、歌手、专辑、歌单" value={q} onChange={e => setQ(e.target.value)} placeholder="搜索歌曲、歌手、专辑、歌单" />
         {sugg.length > 0 && q.trim() && (
@@ -96,7 +109,7 @@ function SearchView({ initialQuery }: { initialQuery: string }) {
         )}
       </form>
       <div className="chips">
-        {TYPES.map(([k, label]) => <button key={k} className={`chip ${type === k ? 'on' : ''}`} onClick={() => { setType(k); run(q, k); }}>{label}</button>)}
+        {TYPES.map(([k, label]) => <button key={k} className={`chip ${type === k ? 'on' : ''}`} onClick={() => search(q, k)}>{label}</button>)}
       </div>
 
       {!searched && (

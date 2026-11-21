@@ -27,13 +27,16 @@ import { FriendSongDrop } from './FriendSongDrop';
 import { UsageGuide } from './UsageGuide';
 
 const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/square', '画布', 'dash']] as const;
+const DETAIL_PATH = /^\/(album|artist|playlist|shared|my|people)\/[^/]+$/;
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const app = useApp();
   const desktopLyrics = useDesktopLyrics();
   const unread = useOptionalSocial()?.state?.inbox?.reduce((total, thread) => total + thread.unread, 0) ?? 0;
   const path = usePathname();
+  const router = useRouter();
   const main = useRef<HTMLElement>(null);
+  const previousPath = useRef<string | null>(null);
   const [newPl, setNewPl] = useState<{ song?: Song } | null>(null);
   const [lyricsPinned, setLyricsPinned] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
@@ -73,18 +76,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => { delete target.__nestuneBack; };
   }, [app, queueOpen, newPl, closeQueue]);
   useEffect(() => {
-    if (!app.nowOpen) return;
-    const key = `player-${Date.now()}`;
-    history.pushState({ ...history.state, ntPlayer: key }, '', location.href);
-    const back = () => { if (history.state?.ntPlayer !== key) app.setNowOpen(false); };
-    window.addEventListener('popstate', back);
+    const syncPlayer = () => app.setNowOpen(hasSong && !!history.state?.ntPlayer);
+    window.addEventListener('popstate', syncPlayer);
+    return () => window.removeEventListener('popstate', syncPlayer);
+  }, [hasSong, app.setNowOpen]);
+  useEffect(() => {
+    if (!app.nowOpen || !hasSong) return;
+    const key = history.state?.ntPlayer ?? `player-${Date.now()}`;
+    if (!history.state?.ntPlayer) history.pushState({ ...history.state, ntPlayer: key }, '', location.href);
     return () => {
-      window.removeEventListener('popstate', back);
       if (history.state?.ntPlayer === key) history.back();
     };
-  }, [app.nowOpen, app.setNowOpen]);
+  }, [app.nowOpen, hasSong]);
 
-  useEffect(() => { main.current?.scrollTo({ top: 0 }); }, [path]);
+  useEffect(() => {
+    const previous = previousPath.current;
+    previousPath.current = path;
+    if (typeof history.state?.ntAppBack !== 'boolean') {
+      const referrer = document.referrer;
+      const fromApp = (previous !== null && previous !== path)
+        || (history.length > 1 && !!referrer && new URL(referrer).origin === location.origin);
+      history.replaceState({ ...history.state, ntAppBack: fromApp }, '', location.href);
+    }
+    if (!history.state?.ntPlayer) app.setNowOpen(false);
+    main.current?.scrollTo({ top: 0 });
+  }, [path, app.setNowOpen]);
   useEffect(() => { if (!app.me) setLyricsPinned(false); }, [app.me]);
   useEffect(() => {
     if (desktopLyrics.platform === 'android' && desktopLyrics.enabled) setLyricsPinned(false);
@@ -114,6 +130,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (!app.ready) return <StartupLoading fullscreen />;
   if (!app.me) return <><Login /><Toasts /></>;
   const on = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+  const detail = DETAIL_PATH.exec(path);
+  const backFromDetail = () => {
+    if (history.state?.ntAppBack) router.back();
+    else router.replace(detail?.[1] === 'people' ? '/social' : '/library');
+  };
 
   return (
     <>
@@ -144,7 +165,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <span style={{ minWidth: 0 }}><b className="t1" style={{ display: 'block' }}>{app.me.displayName}</b><span className="muted sm">个人资料与设置</span></span>
           </Link>
         </aside>
-        <main id="main" ref={main}><div className="wrap">{children}</div></main>
+        <main id="main" ref={main}><div className="wrap">
+          {detail && <button className="btn ghost sm detail-back" onClick={backFromDetail}>
+            <Icon n="back" s={17} />返回上一级
+          </button>}
+          {children}
+        </div></main>
       </div>
       <nav id="tabbar">
         {[...NAV, ['/my', '我的', 'user'] as const].map(([href, label, icon]) => (
@@ -195,16 +221,23 @@ function SongMenu({ onNewPlaylist }: { onNewPlaylist: (s: Song) => void }) {
   useEffect(() => {
     if (!m) return;
     const close = (e: Event) => { if (!ref.current?.contains(e.target as Node)) app.closeMenu(); };
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && app.closeMenu();
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); app.closeMenu(); }
+    };
     document.addEventListener('mousedown', close); document.addEventListener('keydown', key);
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', key); };
   }, [m, app]);
   if (!m) return null;
 
   const s = m.song, fav = sourceIds(s).some(id => app.favIds.has(id)), device = isDeviceSong(s.id);
+  const artists = [...new Map(s.artists.filter(artist => artist.id).map(artist => [artist.id, artist])).values()];
   const w = 232, h = Math.min(window.innerHeight * 0.7, 120 + 40 * (6 + app.playlists.length));
-  const x = Math.min(m.x, window.innerWidth - w - 12), y = Math.min(m.y, window.innerHeight - h - 12);
+  const x = Math.max(12, Math.min(m.x, window.innerWidth - w - 12)), y = Math.min(m.y, window.innerHeight - h - 12);
   const run = (fn: () => void) => () => { app.closeMenu(); fn(); };
+  const navigate = (href: string) => {
+    if (window.location.pathname === href) app.setNowOpen(false);
+    else router.push(href);
+  };
   const addTo = async (id: number) => {
     app.closeMenu();
     try { const r = await post(`/api/me/playlists/${id}/songs`, { songId: s.id }); app.toast(r.added ? '已添加到歌单' : '歌单里已经有这首歌了'); app.reloadPlaylists(); }
@@ -212,18 +245,20 @@ function SongMenu({ onNewPlaylist }: { onNewPlaylist: (s: Song) => void }) {
   };
 
   return (
-    <div className="menu" ref={ref} style={{ left: x, top: Math.max(12, y), width: w }}>
+    <div id="song-actions" className="menu" ref={ref} style={{ left: x, top: Math.max(12, y), width: w }}>
       <button onClick={run(() => app.playNext(s))}><Icon n="next1" s={18} />下一首播放</button>
       <button onClick={run(() => app.enqueue(s))}><Icon n="list" s={18} />加入播放队列</button>
       {!device && <>
         <button onClick={run(() => app.toggleFav(s))}><Icon n="heart" s={18} />{fav ? '取消收藏' : '收藏'}</button>
         <button onClick={run(() => app.openSave(s))}><Icon n="download" s={18} />下载到设备…</button>
+        {s.album.id && <button onClick={run(() => navigate(`/album/${s.album.id}`))}><Icon n="disk" s={18} />查看专辑</button>}
+        {artists.map(artist => {
+          const label = artists.length === 1 ? '查看歌手' : `查看歌手 · ${artist.name}`;
+          return <button key={artist.id} title={label} onClick={run(() => navigate(`/artist/${artist.id}`))}><Icon n="user" s={18} /><span className="t1">{label}</span></button>;
+        })}
         <hr /><div className="hd">添加到歌单</div>
         {app.playlists.map(p => <button key={p.id} onClick={() => addTo(p.id)}><Icon n="note" s={18} /><span className="t1">{p.name}</span></button>)}
         <button onClick={run(() => onNewPlaylist(s))}><Icon n="plus" s={18} />新建歌单…</button>
-        <hr />
-        {s.album.id && <button onClick={run(() => router.push(`/album/${s.album.id}`))}><Icon n="disk" s={18} />查看专辑</button>}
-        {s.artists[0]?.id && <button onClick={run(() => router.push(`/artist/${s.artists[0].id}`))}><Icon n="user" s={18} />查看歌手</button>}
       </>}
     </div>
   );

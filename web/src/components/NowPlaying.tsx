@@ -188,6 +188,12 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           <button id="np-tab-chat" role="tab" aria-selected={mobilePage === 'chat'} aria-controls="np-chat-page" tabIndex={mobilePage === 'chat' ? 0 : -1} onClick={() => setMobilePage('chat')}>聊天</button>
         </div>}
         <div id="np-playback-page" className="np-playback-page">
+        <button type="button" className="ib np-more" aria-label="歌曲更多操作" title="歌曲更多操作"
+          aria-expanded={app.menu?.song.id === songId} aria-controls={app.menu?.song.id === songId ? 'song-actions' : undefined}
+          onClick={event => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            app.openMenu(s, { clientX: rect.left, clientY: rect.bottom + 6 });
+          }}><Icon n="more" s={22} /></button>
         <div className="left">
           <div className="np-art">
             <div className="np-record" key={songId}><Cover src={s.cover} seed={s.id} /></div>
