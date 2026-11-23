@@ -9,6 +9,7 @@ import { loadTint, seededTint } from './util';
 import { playbackVolume } from './volume';
 import { PLAYBACK_MODES, type PlaybackMode, type QueueCommand, type QueueSeed, type SharedQueue } from './shared-queue';
 import { createShuffle, emptyShuffle, shuffleNext, shufflePrevious, type ShuffleState } from './shuffle';
+import { iosAudioSession, isIosHomeScreen, readIosProgress, saveIosProgress, updateIosMediaState } from './ios-audio';
 
 /* ---------- playback clock (kept out of React context so ticks do not re-render the app) ---------- */
 type Clock = { time: number; duration: number };
@@ -56,6 +57,12 @@ export const useApp = () => useContext(Ctx);
 const lsGet = (k: string, d: string) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
 
+function persistIosQueue(userId: number, queue: readonly Song[], index: number, position: number) {
+  const ids = queue.filter(song => !isDeviceSong(song.id)).slice(0, 500).map(song => song.id);
+  const at = queue.slice(0, index).filter(song => !isDeviceSong(song.id)).length;
+  saveIosProgress(userId, ids, at, position);
+}
+
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -92,6 +99,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const roomKeys = useRef<string[]>([]);
   const roomSignature = useRef('');
   const audio = useRef<HTMLAudioElement | null>(null);
+  const ios = useRef(false);
+  const audioSong = useRef<string | null>(null);
+  const currentUser = useRef<number | undefined>(undefined);
+  currentUser.current = me?.id;
+  const iosHandoff = useRef<{ id: string; url: string } | null>(null);
+  const iosPendingResume = useRef<string | null>(null);
+  const iosPoint = useRef<{ id: string; position: number } | null>(null);
   const live = useRef({ queue, index, playbackMode, playing });
   live.current = { queue, index, playbackMode, playing };
   const autoplay = useRef(false);
@@ -107,8 +121,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const current = index >= 0 ? queue[index] ?? null : null;
 
   const playbackSource = sourceOverride && sourceOverride.id === current?.id ? sourceOverride.provider : 'auto';
+  const streamFor = useCallback((id: string) => {
+    const params = new URLSearchParams({ prefer: sourcePreferenceRef.current });
+    const forced = sourceOverrideRef.current?.id === id ? sourceOverrideRef.current.provider : 'auto';
+    if (forced !== 'auto') params.set('source', forced);
+    return { params, url: `/api/songs/${id}/stream?${params}` };
+  }, []);
   const reloadAtPosition = useCallback(() => {
-    pendingSeek.current = audio.current?.currentTime || 0;
+    const point = iosPoint.current;
+    pendingSeek.current = audio.current?.currentTime || (point && point.id === audioSong.current ? point.position : 0);
     autoplay.current = !!audio.current && !audio.current.paused;
     setLoadKey(k => k + 1);
   }, []);
@@ -167,6 +188,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   /* ----- session ----- */
   const resetUserState = useCallback(() => {
+    iosPendingResume.current = null; iosHandoff.current = null; iosPoint.current = null; audioSong.current = null;
     audio.current?.pause();
     if (audio.current) audio.current.removeAttribute('src');
     setQueue([]); setIndex(-1); setPlaying(false); setFavIds(new Set()); setPlaylists([]); setNowOpen(false);
@@ -174,14 +196,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     shuffle.current = emptyShuffle();
   }, []);
 
-  const loadUserData = useCallback(async () => {
+  const loadUserData = useCallback(async (userId: number) => {
     const [f, p, q] = await Promise.allSettled([get('/api/me/favorites'), get('/api/me/playlists'), get('/api/me/queue')]);
     if (f.status === 'fulfilled') setFavIds(new Set(f.value.ids));
     if (p.status === 'fulfilled') setPlaylists(p.value.playlists);
     if (q.status === 'fulfilled' && q.value.songs.length) {
       autoplay.current = false;
-      pendingSeek.current = q.value.position || 0;
-      const at = Math.max(0, Math.min(q.value.index, q.value.songs.length - 1));
+      const local = isIosHomeScreen() ? readIosProgress(userId, (q.value.songs as Song[]).map(song => song.id)) : null;
+      pendingSeek.current = local?.position ?? (q.value.position || 0);
+      const at = local?.index ?? Math.max(0, Math.min(q.value.index, q.value.songs.length - 1));
       const mode = PLAYBACK_MODES.includes(q.value.mode) ? q.value.mode : 'off';
       shuffle.current = createShuffle(q.value.songs, at, q.value.shuffle);
       live.current = { ...live.current, queue: q.value.songs, index: at, playbackMode: mode };
@@ -194,7 +217,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const r = await get('/api/me');
       setMe(r.user);
-      await loadUserData();
+      await loadUserData(r.user.id);
     } catch { setMe(null); }
     setReady(true);
   }, [loadUserData]);
@@ -212,12 +235,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [resetUserState]);
 
   /* ----- audio element ----- */
-  const go = useCallback((n: number, state?: ShuffleState) => {
-    if (!live.current.queue[n]) return;
+  const go = useCallback((n: number, state?: ShuffleState, fromEnded = false) => {
+    const song = live.current.queue[n];
+    if (!song) return;
     shuffle.current = state ?? createShuffle(live.current.queue, n, shuffle.current);
     live.current = { ...live.current, index: n };
-    autoplay.current = true; pendingSeek.current = 0; setIndex(n); setLoadKey(k => k + 1);
-  }, []);
+    autoplay.current = true; pendingSeek.current = 0;
+    const a = audio.current;
+    if (a && ios.current && (fromEnded || document.hidden) && !isDeviceSong(song.id)) {
+      // Safari can suspend the standalone page as soon as its current track ends.
+      // Start the next URL from the same audio element before yielding to React or fetch.
+      const { url } = streamFor(song.id);
+      iosHandoff.current = { id: song.id, url };
+      iosPendingResume.current = song.id;
+      iosPoint.current = { id: song.id, position: 0 };
+      if (currentUser.current !== undefined) persistIosQueue(currentUser.current, live.current.queue, n, 0);
+      audioSong.current = song.id;
+      recorded.current = false; preloaded.current = false;
+      setPlaying(false); setLoading(true);
+      a.src = url;
+      updateIosMediaState(a, false);
+      a.play().catch(() => {
+        if (a.getAttribute('src') === url && audioSong.current === song.id) {
+          setLoading(false); setPlaying(false); updateIosMediaState(a, false);
+        }
+      });
+    }
+    setIndex(n); setLoadKey(k => k + 1);
+  }, [streamFor]);
 
   const next = useCallback((fromEnded = false) => {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'next', automatic: fromEnded }); return; }
@@ -226,7 +271,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let n: number;
     if (mode === 'shuffle') {
       const pick = shuffleNext(q, i, shuffle.current);
-      go(pick.index, pick.state); return;
+      go(pick.index, pick.state, fromEnded); return;
     }
     else {
       n = i + 1;
@@ -235,7 +280,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         else { const a = audio.current; if (a) { a.pause(); a.currentTime = 0; } setPlaying(false); setClock(0, clock.duration); return; }
       }
     }
-    go(n);
+    go(n, undefined, fromEnded);
   }, [go]);
 
   useEffect(() => {
@@ -243,9 +288,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     a.preload = 'auto';
     a.volume = volumeRef.current;
     audio.current = a;
+    ios.current = isIosHomeScreen();
+    const session = ios.current ? iosAudioSession() : undefined;
+    if (ios.current) {
+      a.hidden = true;
+      document.body.append(a);
+      if (session) {
+        try { session.type = 'playback'; } catch { /* Optional WebKit API. */ }
+      }
+    }
     const dur = () => (Number.isFinite(a.duration) && a.duration > 0 ? a.duration : (live.current.queue[live.current.index]?.duration ?? 0));
+    const audible = () => !a.paused && !a.ended && !a.error && a.readyState >= 2 && session?.state !== 'interrupted';
+    let lastSaved = 0;
+    function saveProgress(force = false, allowZero = false) {
+      if (!ios.current || a.readyState < 1 || a.seeking || personalQueue.current || followingRoom.current) return;
+      const { queue: songs, index } = live.current;
+      const id = songs[index]?.id;
+      if (!id || id !== audioSong.current || isDeviceSong(id) || !Number.isFinite(a.currentTime)) return;
+      if (!allowZero && a.currentTime <= .1 && iosPoint.current?.id === id && iosPoint.current.position > .1) return;
+      iosPoint.current = { id, position: a.currentTime };
+      if (currentUser.current !== undefined && (force || Date.now() - lastSaved >= 5000)) {
+        lastSaved = Date.now();
+        persistIosQueue(currentUser.current, songs, index, a.currentTime);
+        updateIosMediaState(a, audible() && iosPendingResume.current !== id, dur());
+      }
+    }
+    function wakeAudio() {
+      if (document.hidden) { saveProgress(true); return; }
+      const id = audioSong.current;
+      if (!id || !a.getAttribute('src')) return;
+      const restore = iosPoint.current;
+      if (!a.ended && !a.seeking && a.readyState >= 1 && a.currentTime <= .1 && restore?.id === id && restore.position > .1 && restore.position < dur()) {
+        a.currentTime = restore.position;
+      }
+      const confirmed = audible() && iosPendingResume.current !== id;
+      setPlaying(confirmed);
+      setLoading(!a.error && !a.paused && a.readyState < 2);
+      updateIosMediaState(a, confirmed, dur());
+      if (iosPendingResume.current === id && !a.ended && !a.error) {
+        a.play().catch(() => { if (audioSong.current === id) { setPlaying(false); setLoading(false); updateIosMediaState(a, false, dur()); } });
+      }
+    }
+    const beforeHide = () => saveProgress(true);
+    const sessionChanged = () => {
+      const playing = audible() && iosPendingResume.current !== audioSong.current;
+      setPlaying(playing);
+      if (!playing) setLoading(false);
+      updateIosMediaState(a, playing, dur());
+      if (!playing) saveProgress(true);
+    };
     const onTime = () => {
       setClock(a.currentTime, dur());
+      if (ios.current) {
+        if (iosPendingResume.current && iosPendingResume.current === audioSong.current && a.currentTime > .1 && audible() && !a.seeking) {
+          iosPendingResume.current = null;
+          onPlaying();
+          saveProgress(true);
+        } else saveProgress();
+      }
       const left = dur() - a.currentTime;
       if (!preloaded.current && left > 0 && left < 25) {
         preloaded.current = true;
@@ -257,6 +357,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     const onPlaying = () => {
       setClock(a.currentTime, dur());
+      if (ios.current) {
+        if (iosPendingResume.current && iosPendingResume.current === audioSong.current) return;
+        updateIosMediaState(a, audible(), dur());
+        if (!audible()) return;
+      }
       setPlaying(true); setLoading(false); failures.current = 0;
       if (!recorded.current) {
         recorded.current = true;
@@ -266,40 +371,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     const onMeta = () => {
       const duration = dur();
-      if (pendingSeek.current > 0 && pendingSeek.current < duration) a.currentTime = pendingSeek.current;
+      const point = iosPoint.current;
+      const recovered = ios.current && point && point.id === audioSong.current && a.currentTime <= .1 ? point.position : 0;
+      const position = pendingSeek.current || recovered;
+      if (position > 0 && position < duration) a.currentTime = position;
       pendingSeek.current = 0;
       setClock(a.currentTime, duration);
+      if (ios.current) updateIosMediaState(a, audible() && !iosPendingResume.current, duration);
     };
     const onErr = () => {
       if (!a.getAttribute('src')) return;
       setLoading(false); setPlaying(false);
+      if (ios.current) updateIosMediaState(a, false, dur());
       failures.current++;
       setError(e => e || '这首歌暂时无法播放');
+      if (ios.current && iosPendingResume.current === audioSong.current && (a.error?.code === 1 || a.error?.code === 2)) return;
       const { queue: q } = live.current;
       if (failures.current < Math.min(3, q.length) && q.length > 1) setTimeout(() => next(true), 800);
     };
     a.addEventListener('timeupdate', onTime);
     a.addEventListener('playing', onPlaying);
-    a.addEventListener('pause', () => { setClock(a.currentTime, dur()); if (!a.ended) setPlaying(false); });
-    a.addEventListener('waiting', () => { setClock(a.currentTime, dur()); setLoading(true); });
+    a.addEventListener('pause', () => {
+      setClock(a.currentTime, dur());
+      if (!a.ended) setPlaying(false);
+      if (ios.current) { saveProgress(true); updateIosMediaState(a, false, dur()); }
+    });
+    a.addEventListener('waiting', () => {
+      setClock(a.currentTime, dur()); setLoading(true);
+      if (ios.current) updateIosMediaState(a, false, dur());
+    });
     a.addEventListener('canplay', () => setLoading(false));
     a.addEventListener('loadedmetadata', onMeta);
     a.addEventListener('ended', () => {
+      if (ios.current) { iosPendingResume.current = null; updateIosMediaState(a, false, dur()); }
       if (roomQueueHandler.current) { next(true); return; }
       if (followingRoom.current) { setPlaying(false); return; }
-      if (live.current.playbackMode === 'one') { a.currentTime = 0; a.play().catch(() => {}); } else next(true);
+      if (live.current.playbackMode === 'one') { iosPoint.current = null; a.currentTime = 0; a.play().catch(() => { setPlaying(false); }); } else next(true);
     });
     a.addEventListener('error', onErr);
-    return () => { a.pause(); a.removeAttribute('src'); };
+    const onSeeked = () => saveProgress(true, true);
+    if (ios.current) {
+      a.addEventListener('seeked', onSeeked);
+      document.addEventListener('visibilitychange', wakeAudio);
+      window.addEventListener('pagehide', beforeHide);
+      window.addEventListener('pageshow', wakeAudio);
+      session?.addEventListener('statechange', sessionChanged);
+    }
+    return () => {
+      document.removeEventListener('visibilitychange', wakeAudio);
+      window.removeEventListener('pagehide', beforeHide);
+      window.removeEventListener('pageshow', wakeAudio);
+      session?.removeEventListener('statechange', sessionChanged);
+      a.removeEventListener('seeked', onSeeked);
+      a.pause(); a.removeAttribute('src'); a.remove();
+    };
   }, [next]);
 
   // load the current song whenever the track (or an explicit reload) changes
   useEffect(() => {
     const a = audio.current;
-    if (!a || !current) return;
-    setError(null); recorded.current = false; preloaded.current = false; setLoading(autoplay.current);
+    if (!a) return;
+    if (!current) { audioSong.current = null; iosPendingResume.current = null; return; }
+    const handoff = iosHandoff.current;
+    const alreadyStarted = handoff?.id === current.id && a.getAttribute('src') === handoff.url;
+    iosHandoff.current = null;
+    setError(null);
+    if (!alreadyStarted) {
+      iosPendingResume.current = null; audioSong.current = null;
+      if (ios.current) iosPoint.current = { id: current.id, position: pendingSeek.current };
+      recorded.current = false; preloaded.current = false; setLoading(autoplay.current);
+      setClock(ios.current ? pendingSeek.current : 0, current.duration);
+    }
     setAudioInfo(null);
-    setClock(0, current.duration);
     if (isDeviceSong(current.id)) {
       let live = true;
       let source: string | undefined;
@@ -310,6 +453,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!live) return;
         if (!file.size) throw Error('此音乐文件为空');
         source = URL.createObjectURL(file);
+        audioSong.current = current.id;
         a.src = source;
         setAudioInfo({ source: 'device' });
         if (shouldPlay) return a.play();
@@ -323,13 +467,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return () => { live = false; if (source) URL.revokeObjectURL(source); };
     }
     const sid = current.id;
-    const forced = sourceOverrideRef.current?.id === sid ? sourceOverrideRef.current.provider : 'auto';
-    const params = new URLSearchParams({ prefer: sourcePreferenceRef.current });
-    if (forced !== 'auto') params.set('source', forced);
-    const streamUrl = `/api/songs/${sid}/stream?${params}`;
+    const { params, url } = streamFor(sid);
+    const streamUrl = alreadyStarted ? handoff.url : url;
     const controller = new AbortController();
     const shouldPlay = autoplay.current;
-    a.pause(); a.removeAttribute('src');
+    if (!alreadyStarted) { a.pause(); a.removeAttribute('src'); }
     fetch(streamUrl, { headers: { Range: 'bytes=0-0' }, signal: controller.signal }).then(async r => {
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw Error(j.error || '无法加载歌曲'); }
       await r.body?.cancel();
@@ -348,10 +490,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setFavIds(old => sourceIds({ ...current, sources, canonicalId }).some(id => old.has(id)) ? new Set([...old, ...sources.map(x => x.id), canonicalId]) : old);
         } catch { /* Metadata headers are optional for older servers. */ }
       }
+      if (alreadyStarted) return;
+      audioSong.current = sid;
       a.src = `/api/songs/${sid}/stream?${params}`;
       if (shouldPlay) a.play().catch(() => { setLoading(false); setPlaying(false); });
       else setPlaying(false);
-    }).catch(e => { if (!controller.signal.aborted) { setError(e.message || '无法加载歌曲'); setLoading(false); setPlaying(false); } });
+    }).catch(e => { if (!controller.signal.aborted && !alreadyStarted) { setError(e.message || '无法加载歌曲'); setLoading(false); setPlaying(false); } });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadKey, current?.id, getFile]);
@@ -365,22 +509,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // lock-screen / media-key integration
   useEffect(() => {
-    if (!('mediaSession' in navigator) || !current) return;
-    navigator.mediaSession.metadata = new MediaMetadata({
+    if (!('mediaSession' in navigator) || typeof MediaMetadata === 'undefined') return;
+    navigator.mediaSession.metadata = current ? new MediaMetadata({
       title: current.name, artist: current.artists.map(a => a.name).join(' / '), album: current.album.name,
       artwork: current.cover ? [{ src: current.cover, sizes: '400x400' }] : [],
-    });
+    }) : null;
   }, [current]);
   useEffect(() => {
     if (!('mediaSession' in navigator)) return;
     const ms = navigator.mediaSession;
-    ms.setActionHandler('play', () => { if (!roomTransport.current?.(true)) audio.current?.play().catch(() => {}); });
-    ms.setActionHandler('pause', () => { if (!roomTransport.current?.(false)) audio.current?.pause(); });
-    ms.setActionHandler('previoustrack', () => prevRef.current());
-    ms.setActionHandler('nexttrack', () => next());
-    ms.setActionHandler('seekto', d => { if (d.seekTime != null) { if (roomQueueHandler.current) roomQueueHandler.current({ type: 'seek', position: d.seekTime }); else if (audio.current) audio.current.currentTime = d.seekTime; } });
-    ms.playbackState = playing ? 'playing' : 'paused';
-  }, [playing, next]);
+    const actions: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', () => { if (!roomTransport.current?.(true)) audio.current?.play().catch(() => {}); }],
+      ['pause', () => { iosPendingResume.current = null; if (!roomTransport.current?.(false)) audio.current?.pause(); }],
+      ['previoustrack', () => prevRef.current()],
+      ['nexttrack', () => next()],
+      ['seekto', d => { if (d.seekTime != null) { if (roomQueueHandler.current) roomQueueHandler.current({ type: 'seek', position: d.seekTime }); else if (audio.current) audio.current.currentTime = d.seekTime; } }],
+    ];
+    for (const [action, handler] of actions) {
+      try { ms.setActionHandler(action, handler); } catch { /* Older WebKit supports a subset. */ }
+    }
+    return () => {
+      for (const [action] of actions) {
+        try { ms.setActionHandler(action, null); } catch { /* Unsupported action. */ }
+      }
+    };
+  }, [next]);
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    if (!current) navigator.mediaSession.playbackState = 'none';
+    else if (!ios.current) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
+  }, [current, playing]);
 
   // remember the queue between visits
   useEffect(() => {
@@ -417,7 +575,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const onlineIndex = queue.slice(0, Math.max(0, index)).filter(song => !isDeviceSong(song.id)).length;
     const t = setTimeout(() => {
       if (followingRoom.current || personalQueue.current) return;
-      put('/api/me/queue', { ids: onlineIds, index: onlineIndex, position: Math.floor(audio.current?.currentTime || 0), mode: playbackMode, shuffle: createShuffle(online, onlineIndex, shuffle.current) }).catch(() => {});
+      const point = iosPoint.current;
+      const position = ios.current && point?.id === queue[index]?.id ? point?.position ?? 0 :
+        ios.current && audioSong.current !== queue[index]?.id ? pendingSeek.current : audio.current?.currentTime || 0;
+      put('/api/me/queue', { ids: onlineIds, index: onlineIndex, position: Math.floor(position), mode: playbackMode, shuffle: createShuffle(online, onlineIndex, shuffle.current) }).catch(() => {});
     }, 1500);
     return () => clearTimeout(t);
   }, [queue, index, me, playbackMode]);
@@ -444,8 +605,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (roomTransport.current?.()) return;
     const a = audio.current;
     if (!a || !live.current.queue.length) return;
-    if (!a.getAttribute('src') || a.error) { autoplay.current = true; setLoadKey(k => k + 1); return; }
-    if (a.paused) { setError(null); a.play().catch(() => {}); } else a.pause();
+    if (!a.getAttribute('src') || a.error) {
+      const point = iosPoint.current;
+      if (point?.id === live.current.queue[live.current.index]?.id) pendingSeek.current = point?.position ?? 0;
+      autoplay.current = true; setLoadKey(k => k + 1); return;
+    }
+    if (a.paused || iosPendingResume.current) { setError(null); a.play().catch(() => {}); }
+    else { iosPendingResume.current = null; a.pause(); }
   }, []);
   const prev = useCallback(() => {
     if (roomQueueHandler.current) { roomQueueHandler.current({ type: 'prev' }); return; }
@@ -474,7 +640,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     };
   }, []);
-  const playbackRunning = useCallback(() => !!audio.current && !audio.current.paused && !audio.current.ended && audio.current.readyState >= 2, []);
+  const playbackRunning = useCallback(() => !!audio.current && !audio.current.paused && !audio.current.ended &&
+    audio.current.readyState >= 2 && (!ios.current || !iosPendingResume.current && iosAudioSession()?.state !== 'interrupted'), []);
   const setRoomTransport = useCallback((handler: ((playing?: boolean) => boolean) | null) => { roomTransport.current = handler; }, []);
   const setFollowingRoom = useCallback((following: boolean) => { followingRoom.current = following; }, []);
   const followPlayback = useCallback((song: Song | null, position: number, shouldPlay: boolean) => {

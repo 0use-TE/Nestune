@@ -8,6 +8,15 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.30',
+    date: '2026 年 11 月 24 日',
+    title: 'iOS 桌面版后台播放修复',
+    summary: '修复从 iPhone 或 iPad 桌面打开 Nestune 后，后台换歌可能无声、控制中心仍显示播放，以及重新打开时进度归零的问题。',
+    sections: [
+      { title: '从桌面打开的 Nestune', paragraphs: ['后台换歌会立即交接音频，控制中心跟随实际播放状态。这台设备会保存当前歌曲进度，重新打开时可从保存的位置继续。已有桌面图标可直接使用。'] },
+    ],
+  },
+  {
     version: '1.2.29',
     date: '2026 年 11 月 23 日',
     title: '好友房间一起听',
