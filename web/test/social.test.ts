@@ -108,6 +108,24 @@ describe('invitation history', () => {
       expect(social.readMessages(2, 1)[0].invite?.status).toBe('pending');
     }
   });
+
+  it('migrates the former one-invite-per-room constraint without breaking private chat cards', async () => {
+    makeFriends(1, 2);
+    social.inviteListener(listener(1), 2);
+    const card = social.readMessages(2, 1)[0];
+    const connection = database.db();
+    const { sql } = database.one<{ sql: string }>("SELECT sql FROM sqlite_master WHERE name='listening_invites'")!;
+    connection.exec(`PRAGMA foreign_keys=OFF;
+      ${sql.replace('listening_invites', 'legacy_invites').replace('room_id INTEGER NOT NULL', 'room_id INTEGER NOT NULL UNIQUE')};
+      INSERT INTO legacy_invites SELECT * FROM listening_invites;
+      DROP TABLE listening_invites;
+      ALTER TABLE legacy_invites RENAME TO listening_invites;`);
+    connection.close();
+    delete (globalThis as { __nt_db?: unknown }).__nt_db;
+    expect(database.db().prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(social.readMessages(2, 1)[0]).toEqual(card);
+    expect(database.all<{ origin: string }>('PRAGMA index_list(listening_invites)').some(index => index.origin === 'u')).toBe(false);
+  });
 });
 
 describe('social visibility and permissions', () => {

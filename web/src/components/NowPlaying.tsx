@@ -16,6 +16,7 @@ import { Icon } from './Icon';
 import { PlayerLyrics } from './PlayerLyrics';
 import { KaraokeText } from './KaraokeText';
 import { PlayerTogether } from './PlayerTogether';
+import { ListeningRoomChat, ListeningRoomControls } from './ListeningRoom';
 import { Sheet } from './Sheet';
 import { VolumeControl } from './VolumeControl';
 import { useDesktopLyrics } from './DesktopLyrics';
@@ -63,11 +64,13 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const showPlayerContents = app.nowOpen || keepPlayerContents;
   const hasRoom = !!social.state?.rooms.length;
   const room = social.state?.rooms.find(item => item.active && item.onThisDevice);
-  const partner = room && social.state?.people.find(person => person.id === (room.hostId === app.me?.id ? room.guestId : room.hostId));
+  const groupRoom = room?.group ? room : null;
+  const partner = room && !groupRoom && social.state?.people.find(person => person.id === (room.hostId === app.me?.id ? room.guestId : room.hostId));
   const activeRoom = room && partner ? { room, peer: partner } : null;
   const pendingRoom = social.state?.rooms.find(item => !item.active && item.guestId === app.me?.id) ?? social.state?.rooms.find(item => !item.active);
   const pendingPeer = pendingRoom && social.state?.people.find(person => person.id === (pendingRoom.hostId === app.me?.id ? pendingRoom.guestId : pendingRoom.hostId));
   const conversationPeer = partner || pendingPeer || chatPeer;
+  const hasChat = !!(groupRoom || conversationPeer);
   useEffect(() => {
     if (partner || pendingPeer) setChatPeer(partner || pendingPeer || null);
   }, [partner, pendingPeer]);
@@ -153,10 +156,10 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
 
   return (
     <>
-      <div id="np" ref={panel} className={app.nowOpen ? 'open' : ''} inert={!app.nowOpen} data-mobile-page={mobilePage} data-has-chat={!!conversationPeer || undefined} data-mobile-cover={mobileCover || undefined} data-playing={app.playing || undefined}
+      <div id="np" ref={panel} className={app.nowOpen ? 'open' : ''} inert={!app.nowOpen} data-mobile-page={mobilePage} data-has-chat={hasChat || undefined} data-mobile-cover={mobileCover || undefined} data-playing={app.playing || undefined}
         onTouchStart={event => {
           const target = event.target as HTMLElement;
-          if (!conversationPeer || !window.matchMedia('(max-width: 860px)').matches || event.touches.length !== 1 || target.closest('input,textarea,button:not(.mobile-art-toggle):not(.ln),.track,.chat-song-picker')) { swipe.current = null; return; }
+          if (!hasChat || !window.matchMedia('(max-width: 860px)').matches || event.touches.length !== 1 || target.closest('input,textarea,select,button:not(.mobile-art-toggle):not(.ln),.track,.chat-song-picker')) { swipe.current = null; return; }
           swipe.current = { x: event.touches[0].clientX, y: event.touches[0].clientY };
         }} onTouchCancel={() => { swipe.current = null; }} onTouchEnd={event => {
           const start = swipe.current; swipe.current = null;
@@ -177,7 +180,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
         }}>
         {showPlayerContents && s.cover && <div className="np-mobile-backdrop" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(s.cover)})` }} />}
         <button className="ib close" aria-label="收起" onClick={() => app.setNowOpen(false)}><Icon n="down" s={24} /></button>
-        {conversationPeer && <div className="np-page-tabs" role="tablist" aria-label="播放与聊天" onKeyDown={event => {
+        {hasChat && <div className="np-page-tabs" role="tablist" aria-label="播放与聊天" onKeyDown={event => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();
           const page = event.key === 'ArrowRight' ? 'chat' : 'playback';
@@ -234,7 +237,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
               <div className="np-audio sub sm"><PlaybackSource key={songId} quality={qualityText} /></div>
             </div>
             <div className="np-room">
-              {showPlayerContents && <PlayerTogether inviting={inviting && !deviceSong} onClose={() => setInviting(false)} active={activeRoom} />}
+              {showPlayerContents && (groupRoom ? <ListeningRoomControls key={groupRoom.id} room={groupRoom} />
+                : <PlayerTogether inviting={inviting && !deviceSong} onClose={() => setInviting(false)} active={activeRoom} />)}
               {app.error && <div className="err center" style={{ padding: '8px 0 0' }}>{app.error}</div>}
             </div>
           </div>
@@ -242,15 +246,17 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
         <div className="np-stage">
           {showPlayerContents && <PlayerLyrics key={songId} flowSeed={lyricFlowSeed} lines={lines} active={active} position={time} playing={app.playing && !app.loading} duration={duration} status={lyricStatus} plainText={currentLyrics?.plainText} showTranslation={app.showTr} onSeek={app.seek}
             onBackgroundClick={() => { if (window.matchMedia('(max-width: 860px)').matches) toggleMobileArt(); }} />}
-          {showPlayerContents && activeRoom && (
+          {showPlayerContents && (groupRoom || activeRoom) && (
             <div className="together-chat-dock">
-              <Conversation compact key={activeRoom.room.id} person={activeRoom.peer} userId={app.me!.id} visible={app.nowOpen} />
+              {groupRoom ? <ListeningRoomChat compact key={groupRoom.id} room={groupRoom} />
+                : activeRoom && <Conversation compact key={activeRoom.room.id} person={activeRoom.peer} userId={app.me!.id} visible={app.nowOpen} />}
             </div>
           )}
         </div>
         </div>
-        {showPlayerContents && conversationPeer && <div id="np-chat-page" className="np-chat-page" role="tabpanel" aria-labelledby="np-tab-chat">
-          <Conversation key={conversationPeer.id} person={conversationPeer} userId={app.me!.id} visible={app.nowOpen && mobilePage === 'chat'} />
+        {showPlayerContents && hasChat && <div id="np-chat-page" className="np-chat-page" role="tabpanel" aria-labelledby="np-tab-chat">
+          {groupRoom ? <ListeningRoomChat key={groupRoom.id} room={groupRoom} />
+            : conversationPeer && <Conversation key={conversationPeer.id} person={conversationPeer} userId={app.me!.id} visible={app.nowOpen && mobilePage === 'chat'} />}
         </div>}
       </div>
       {creditsOpen && app.nowOpen && currentLyrics?.credits.length ? <Sheet title="制作信息" onClose={() => setCreditsOpen(false)}><ul className="credits-list">{currentLyrics.credits.map((credit, index) => <li key={index}>{credit}</li>)}</ul></Sheet> : null}

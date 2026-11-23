@@ -9,7 +9,7 @@ const get = id => {
   return elements.get(id);
 };
 const state = { enabled: true, locked: false, panel: false };
-const window = { NestuneKaraoke: { create: () => ({ clear(text) { get('line-content').textContent = text; }, render(line) { get('line-content').textContent = line.text; } }) }, __TAURI_INTERNALS__: { invoke: async (command, payload) => {
+const window = { addEventListener() {}, NestuneKaraoke: { create: () => ({ clear(text) { get('line-content').textContent = text; }, render(line) { get('line-content').textContent = line.text; } }) }, __TAURI_INTERNALS__: { invoke: async (command, payload) => {
   calls.push({ command, payload });
   if (payload.data?.type === 'lyricsSnapshot') return { state: { ...state }, data: null, media: null };
   if (payload.data?.type === 'lyricsLock') state.locked = payload.data.locked;
@@ -19,9 +19,11 @@ const window = { NestuneKaraoke: { create: () => ({ clear(text) { get('line-cont
 } } };
 const body = { classList: { toggle() {} }, dataset: {} };
 const controls = ['mode', 'previous', 'toggle', 'next'].map(get);
-let idleCallback;
+let idleCallback, painting = false;
 vm.runInNewContext(script, { window, document: { getElementById: get, querySelectorAll: () => controls, body },
-  performance: { now: () => 0 }, URLSearchParams, location: {search:''}, setInterval() {},
+  performance: { now: () => 0 }, URLSearchParams, location: {search:''},
+  setInterval(callback, delay) { assert.equal(delay, 33); assert.equal(painting, false); painting = true; return 1; },
+  clearInterval(id) { assert.equal(id, 1); painting = false; },
   clearTimeout() {}, setTimeout(callback, delay) { assert.equal(delay, 3000); idleCallback = callback; } });
 await Promise.resolve();
 calls.length = 0;
@@ -35,6 +37,7 @@ window.nestuneLyricsData({ id: 'a', title: 'song', lines: [{ t: 0, text: 'first'
 window.nestuneLyricsMedia({ id: 'a', position: 3.5, playing: false });
 assert.equal(get('line-content').textContent, 'second');
 window.nestuneLyricsMedia({ id: 'a', position: .5, playing: false });
+assert.equal(painting, false, 'Paused lyrics do not maintain a paint timer');
 assert.equal(get('line-content').textContent, 'first');
 assert.equal(get('translation-content').textContent, 'translation');
 await get('lock').onclick();
@@ -50,6 +53,10 @@ assert.equal(body.dataset.idle, '');
 get('drag').listeners.pointerdown();
 assert.equal(body.dataset.idle, undefined);
 window.nestuneLyricsMedia({ id: 'a', position: .5, playing: true, mode: 'one' });
+assert.equal(painting, true, 'Playing timed lyrics update between media messages');
+window.nestuneLyricsMedia({ id: 'a', position: .5, playing: false, mode: 'one' });
+assert.equal(painting, false, 'Pausing clears the paint timer');
+window.nestuneLyricsMedia({ id: 'a', position: .5, playing: true, mode: 'one' });
 assert.equal(get('mode').attributes['aria-label'], '切换播放模式，当前单曲循环');
 assert.equal(get('toggle').attributes['aria-label'], '暂停');
 for (const item of controls) {
@@ -61,7 +68,19 @@ await get('panel').onclick();
 assert.equal(state.panel, true, 'Background remains interactive while locked');
 await get('close').onclick();
 assert.equal(state.enabled, false, 'Locked lyrics can still be closed');
+window.nestuneLyricsState({ ...state });
+assert.equal(painting, false, 'Hidden lyrics stop painting even if the song continues');
 await get('lock').onclick();
 assert.equal(state.locked, false, 'The same lock button also unlocks');
 assert.notEqual(get('lock').icon.innerHTML, closedIcon, 'Lock and unlock must render different SVGs');
+const toolsWindow = { ...window, NestuneKaraoke: { create() { assert.fail('Toolbar-only window must not initialize a lyric renderer'); } } };
+vm.runInNewContext(script, {
+  window: toolsWindow, document: { getElementById: get, querySelectorAll: () => controls, body: { ...body, classList: { ...body.classList, add() {} } } },
+  performance: { now: () => 0 }, URLSearchParams, location: { search: '?tools=1' },
+  setInterval() { assert.fail('Toolbar-only window must not run a paint timer'); },
+  clearTimeout() {}, setTimeout() {},
+});
+await Promise.resolve();
+toolsWindow.nestuneLyricsData({ id: 'a', lines: [{ t: 0, text: 'first' }] });
+toolsWindow.nestuneLyricsMedia({ id: 'a', position: 0, playing: true });
 console.log('Desktop renderer passed: drag wiring, locked drag denial, unlock/background/close while locked, seek and translation');

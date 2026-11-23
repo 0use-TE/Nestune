@@ -4,6 +4,47 @@ import { DATA_DIR, dir } from './config';
 
 const g = globalThis as unknown as { __nt_db?: DatabaseSync };
 
+const listeningInviteColumns = `
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  room_id INTEGER NOT NULL,
+  host_id INTEGER NOT NULL,
+  guest_id INTEGER NOT NULL,
+  low_id INTEGER NOT NULL,
+  high_id INTEGER NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending','accepted','cancelled','declined','expired','ended')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  group_invite INTEGER NOT NULL DEFAULT 0,
+  FOREIGN KEY (low_id,high_id) REFERENCES friendships(low_id,high_id) ON DELETE CASCADE
+`;
+
+function migrateListeningInvites(db: DatabaseSync) {
+  const hasLegacyConstraint = () => db.prepare('PRAGMA index_list(listening_invites)').all().some(index => index.origin === 'u');
+  if (!hasLegacyConstraint()) return;
+  // Preserve invitation IDs referenced by existing private chat messages.
+  db.exec('PRAGMA foreign_keys = OFF');
+  try {
+    db.exec('BEGIN IMMEDIATE');
+    if (hasLegacyConstraint()) db.exec(`
+      CREATE TABLE listening_invites_next (${listeningInviteColumns});
+      INSERT INTO listening_invites_next(id,room_id,host_id,guest_id,low_id,high_id,status,created_at,updated_at,expires_at)
+        SELECT id,room_id,host_id,guest_id,low_id,high_id,status,created_at,updated_at,expires_at FROM listening_invites;
+      UPDATE sqlite_sequence SET seq=max(seq,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='listening_invites'),0))
+        WHERE name='listening_invites_next';
+      DROP TABLE listening_invites;
+      ALTER TABLE listening_invites_next RENAME TO listening_invites;
+    `);
+    if (db.prepare('PRAGMA foreign_key_check(friend_messages)').get()) throw new Error('Invalid invitation references after migration');
+    db.exec('COMMIT');
+  } catch (error) {
+    if (db.isTransaction) db.exec('ROLLBACK');
+    throw error;
+  } finally {
+    db.exec('PRAGMA foreign_keys = ON');
+  }
+}
+
 function open() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   for (const d of ['cache', 'library', 'avatars', 'runtime', 'uploads']) fs.mkdirSync(dir(d), { recursive: true });
@@ -218,20 +259,26 @@ function open() {
       updated_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS listening_room_pair ON listening_rooms(min(host_id, guest_id), max(host_id, guest_id));
-    CREATE TABLE IF NOT EXISTS listening_invites (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      room_id INTEGER NOT NULL UNIQUE,
-      host_id INTEGER NOT NULL,
-      guest_id INTEGER NOT NULL,
-      low_id INTEGER NOT NULL,
-      high_id INTEGER NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('pending','accepted','cancelled','declined','expired','ended')),
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL,
-      expires_at INTEGER NOT NULL,
-      FOREIGN KEY (low_id,high_id) REFERENCES friendships(low_id,high_id) ON DELETE CASCADE
+    CREATE TABLE IF NOT EXISTS listening_room_members (
+      room_id INTEGER NOT NULL REFERENCES listening_rooms(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      session_id TEXT NOT NULL,
+      joined_at INTEGER NOT NULL,
+      last_seen INTEGER NOT NULL,
+      PRIMARY KEY (room_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS listening_room_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      room_id INTEGER NOT NULL REFERENCES listening_rooms(id) ON DELETE CASCADE,
+      sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      sent_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS listening_room_message_history ON listening_room_messages(room_id, id DESC);
+    CREATE TABLE IF NOT EXISTS listening_invites (${listeningInviteColumns});
   `);
+  try { migrateListeningInvites(db); }
+  catch (error) { db.close(); throw error; }
   db.exec('BEGIN IMMEDIATE');
   try {
     const wallColumns = db.prepare('PRAGMA table_info(canvas_wall_tiles)').all();
@@ -250,6 +297,8 @@ function open() {
     if (!db.prepare('PRAGMA table_info(playlists)').all().some(column => column.name === 'is_public')) db.exec('ALTER TABLE playlists ADD COLUMN is_public INTEGER NOT NULL DEFAULT 0');
     const columns = db.prepare('PRAGMA table_info(listening_rooms)').all();
     if (!columns.some(column => column.name === 'queue_data')) db.exec('ALTER TABLE listening_rooms ADD COLUMN queue_data TEXT');
+    if (!columns.some(column => column.name === 'group_room')) db.exec('ALTER TABLE listening_rooms ADD COLUMN group_room INTEGER NOT NULL DEFAULT 0');
+    if (!columns.some(column => column.name === 'playback_version')) db.exec('ALTER TABLE listening_rooms ADD COLUMN playback_version INTEGER NOT NULL DEFAULT 0');
     if (!columns.some(column => column.name === 'transport_version')) {
       db.exec('ALTER TABLE listening_rooms ADD COLUMN transport_version INTEGER NOT NULL DEFAULT 0');
     }
@@ -266,10 +315,18 @@ function open() {
       db.exec('ALTER TABLE friend_messages ADD COLUMN invite_id INTEGER REFERENCES listening_invites(id) ON DELETE SET NULL');
     }
     // Preserve existing live invitations when upgrading, without creating duplicate chat cards.
-    db.exec(`INSERT OR IGNORE INTO listening_invites(room_id,host_id,guest_id,low_id,high_id,status,created_at,updated_at,expires_at)
+    if (!db.prepare('PRAGMA table_info(listening_invites)').all().some(column => column.name === 'group_invite')) {
+      db.exec('ALTER TABLE listening_invites ADD COLUMN group_invite INTEGER NOT NULL DEFAULT 0');
+      db.exec('UPDATE listening_invites SET group_invite=1 WHERE room_id IN (SELECT id FROM listening_rooms WHERE group_room=1)');
+    }
+    db.exec(`CREATE INDEX IF NOT EXISTS listening_invites_room ON listening_invites(room_id);
+      CREATE UNIQUE INDEX IF NOT EXISTS listening_invites_legacy_room ON listening_invites(room_id) WHERE group_invite=0;
+      CREATE INDEX IF NOT EXISTS listening_invites_guest ON listening_invites(guest_id,status);
+      CREATE UNIQUE INDEX IF NOT EXISTS listening_invites_pending ON listening_invites(room_id,guest_id) WHERE status='pending';
+      INSERT INTO listening_invites(room_id,host_id,guest_id,low_id,high_id,status,created_at,updated_at,expires_at)
       SELECT r.id,r.host_id,r.guest_id,min(r.host_id,r.guest_id),max(r.host_id,r.guest_id),
         CASE WHEN r.active=1 THEN 'accepted' ELSE 'pending' END,r.updated_at,r.updated_at,r.updated_at+600000
-      FROM listening_rooms r WHERE EXISTS(SELECT 1 FROM friendships f
+      FROM listening_rooms r WHERE r.group_room=0 AND NOT EXISTS(SELECT 1 FROM listening_invites i WHERE i.room_id=r.id) AND EXISTS(SELECT 1 FROM friendships f
         WHERE f.low_id=min(r.host_id,r.guest_id) AND f.high_id=max(r.host_id,r.guest_id) AND f.accepted=1);
       INSERT INTO friend_messages(low_id,high_id,sender_id,text,sent_at,invite_id)
       SELECT i.low_id,i.high_id,i.host_id,'一起听邀请',i.created_at,i.id FROM listening_invites i

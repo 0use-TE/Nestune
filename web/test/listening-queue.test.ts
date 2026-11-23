@@ -9,6 +9,7 @@ vi.mock('@/server/netease', () => ({ songs: vi.fn(async (ids: string[]) => ids.m
 let database: typeof import('@/server/db');
 let social: typeof import('@/server/social');
 let queues: typeof import('@/server/listening-queue');
+let groups: typeof import('@/server/listening-rooms');
 let directory: string;
 let roomId: number;
 const listener = (userId: number, device = 1) => ({ userId, sessionId: `u${userId}-${device}` });
@@ -19,6 +20,7 @@ beforeAll(async () => {
   directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nestune-room-queue-'));
   vi.stubEnv('DATA_DIR', directory);
   database = await import('@/server/db'); social = await import('@/server/social'); queues = await import('@/server/listening-queue');
+  groups = await import('@/server/listening-rooms');
 });
 beforeEach(() => {
   database.run("DELETE FROM kv WHERE key LIKE 'canvas:%'");
@@ -33,6 +35,61 @@ beforeEach(() => {
   roomId = room(2).id; social.acceptListening(listener(2), roomId);
 });
 afterAll(() => { database.db().close(); fs.rmSync(directory, { recursive: true, force: true }); vi.unstubAllEnvs(); });
+
+it('shares the current queue and chat with three members, restricts control, and transfers the playback state', async () => {
+  social.leaveListening(listener(1), roomId);
+  social.requestFriend(1, 3); social.answerFriend(3, 1, true);
+  const group = groups.createGroupRoom(listener(1));
+  await queues.initializeListeningQueue(listener(1), group, seed);
+  groups.inviteGroupGuest(listener(1), group, 2);
+  groups.inviteGroupGuest(listener(1), group, 3);
+  expect(room(3)).toMatchObject({ active: false, queue: null });
+  expect(room(3).group).toBeUndefined();
+  social.acceptListening(listener(2), group);
+  groups.sendGroupMessage(listener(2), group, 'hello');
+  expect(() => groups.sendGroupMessage(listener(3), group, 'blocked')).toThrow(/设备/);
+  social.acceptListening(listener(3), group);
+  expect(room(3)).toMatchObject({ group: { memberIds: [1, 2, 3], messages: [{ senderId: 2, text: 'hello' }] },
+    playback: { songId: '101', position: 41, playing: true } });
+  expect(room(3, 2)).toMatchObject({ onThisDevice: false, playback: null, queue: null });
+  expect(room(3, 2).group).toBeUndefined();
+  await expect(queues.editListeningQueue(listener(3), group, { type: 'seek', position: 20 })).rejects.toThrow(/房主/);
+  expect(() => social.controlListening(listener(3), group, '101', false)).toThrow(/房主/);
+  const playbackVersion = room().group!.playbackVersion;
+  await Promise.all([queues.editListeningQueue(listener(2), group, { type: 'append', songId: '104' }),
+    queues.editListeningQueue(listener(3), group, { type: 'appendMany', songIds: ['105'] })]);
+  expect(room(3).queue?.entries.map(entry => entry.song.id)).toEqual([...seed.ids, '104', '105']);
+  expect(room().group?.playbackVersion).toBe(playbackVersion);
+  social.leaveListening(listener(1), group);
+  expect(room(3)).toMatchObject({ hostId: 2, group: { memberIds: [2, 3] }, playback: { songId: '101', playing: true } });
+  const next = { type: 'next', automatic: true, version: playbackVersion };
+  await queues.editListeningQueue(listener(2), group, next);
+  await queues.editListeningQueue(listener(2), group, next);
+  expect(room(3).playback?.songId).toBe('103');
+  social.leaveListening(listener(3), group);
+  expect(room(2).group?.memberIds).toEqual([2]);
+  social.leaveListening(listener(2), group);
+  expect(groups.groupRoom(group)).toBeUndefined();
+});
+
+it('does not let an expired host block the room or a ninth listener bypass its capacity', () => {
+  social.leaveListening(listener(1), roomId);
+  const group = groups.createGroupRoom(listener(1));
+  for (let id = 3; id <= 9; id++) {
+    if (id > 3) {
+      database.run("INSERT INTO users(id,username,status,created_at) VALUES(?,?,'active',?)", id, 'u' + id, Date.now());
+      database.run("INSERT INTO sessions(id,kind,user_id,created_at,expires_at,last_seen) VALUES(?,'user',?,?,?,?)",
+        listener(id).sessionId, id, Date.now(), Date.now() + 600_000, Date.now());
+    }
+    social.requestFriend(1, id); social.answerFriend(id, 1, true);
+  }
+  for (let id = 2; id <= 9; id++) groups.inviteGroupGuest(listener(1), group, id);
+  for (let id = 2; id <= 8; id++) social.acceptListening(listener(id), group);
+  expect(() => social.acceptListening(listener(9), group)).toThrow(/已满/);
+  database.run('UPDATE listening_room_members SET last_seen=? WHERE user_id=1', Date.now() - 121_000);
+  expect(room(2)).toMatchObject({ hostId: 2, group: { memberIds: [2, 3, 4, 5, 6, 7, 8] } });
+  expect(room(9)).toBeUndefined();
+});
 
 it('plays a single selection without replacing the shared queue, and reuses an existing entry', async () => {
   await queues.initializeListeningQueue(listener(1), roomId, seed);

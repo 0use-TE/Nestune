@@ -15,7 +15,7 @@ export const GUIDE_STEPS: Record<GuideTopic, GuideStep[]> = {
   social: [
     { target: '.together-tabs', title: '先加好友，再一起听', text: '好友页用于聊天；在“所有用户”里可以添加好友，等待对方接受。' },
     { target: '.chat-share,.together-tabs', title: '把歌单里的音乐发给好友', text: '打开聊天，点击音符按钮，在“我的歌单”选一首歌。可以直接点发送，也可以拖到好友头像或聊天区域；手机上先长按。' },
-    { target: '.social-chat header,.chat-list', title: '邀请对方一起听', text: '在聊天里发起一起听邀请，对方接受后使用共同播放列表。公开在线状态和消息通知都可以在设置里调整。' },
+    { target: '.together-heading,.social-chat header,.chat-list', title: '邀请好友一起听', text: '点“创建房间”可以邀请多位好友。房主控制播放，成员可把歌曲加到共享队列末尾，也能在房间里聊天。' },
   ],
   songs: [
     { target: '.song-list-locate', title: '定位当前歌曲', text: '点击定位可以找到本列表中正在听的歌。如果它不在这份列表里，打开底部播放列表即可找到。' },

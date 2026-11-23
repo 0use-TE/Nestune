@@ -34,7 +34,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
   const lastMarked = useRef(0);
   const inView = useRef(false);
   const path = `/api/social?peer=${person.id}`;
-  const peerRoom = state?.rooms.find(room => room.hostId === person.id || room.guestId === person.id);
+  const peerRoom = state?.rooms.find(room => !room.group && (room.hostId === person.id || room.guestId === person.id));
   const canInvite = person.friendship === 'friend' && !inviteBusy && !peerRoom && !state?.rooms.some(room => room.active);
   useEffect(() => {
     const sent = (event: Event) => {
@@ -207,7 +207,7 @@ export function Conversation({ person, userId, onClose, compact = false, visible
                   {incoming && <button type="button" className="btn sm" disabled={inviteBusy || !!state?.rooms.some(room => room.active)}
                     onClick={() => changeInvite({ action: 'acceptInvite', roomId: invite.roomId })}>接受邀请</button>}
                   {(incoming || liveRoom?.onThisDevice) ? <button type="button" className="link" disabled={inviteBusy}
-                    onClick={() => changeInvite({ action: 'leave', roomId: invite.roomId })}>{incoming ? '拒绝' : '取消邀请'}</button>
+                    onClick={() => changeInvite({ action: 'leave', roomId: invite.roomId, inviteId: invite.id })}>{incoming ? '拒绝' : '取消邀请'}</button>
                     : <small className="sub">请在发出邀请的设备上操作</small>}
                 </div>}
               </section>;

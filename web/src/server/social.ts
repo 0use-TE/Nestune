@@ -5,7 +5,8 @@ import { isUploadSong } from '@/lib/upload-types';
 import { all, db, now, one, run } from './db';
 import { fail } from './http';
 import { visibleUpload } from './uploads';
-import { readSharedQueue } from './listening-queue';
+import { canListenTogether, readSharedQueue } from './listening-queue';
+import { acceptGroupGuest, expireGroupRooms, groupMembers, groupMessages, groupRoom, hasListeningRoom, leaveGroupRoom, pendingGroupGuests, requireGroupMember, touchGroupMember, type Room as RoomRow } from './listening-rooms';
 
 type MessageRow = Omit<Message, 'song' | 'invite' | 'playlist'> & { song: string | null; inviteId: number | null };
 function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRow): Message {
@@ -25,21 +26,15 @@ function decodeMessage(viewer: number, { song, inviteId, ...message }: MessageRo
   return { ...message, song: sharedSong };
 }
 type Friendship = { requested_by: number; accepted: number };
-type RoomRow = { queue_data: string | null; id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null; active: number; song_id: string | null; position: number; playing: number; updated_at: number; transport_version: number };
 type Listener = { userId: number; sessionId: string };
 type DirectoryRow = { id: number; username: string; name: string; avatar: string; visible: number; last_seen: number; track: string | null; requested_by: number | null; accepted: number | null };
 const pair = (a: number, b: number) => a < b ? [a, b] : [b, a];
 const friendship = (a: number, b: number) => one<Friendship>('SELECT requested_by,accepted FROM friendships WHERE low_id=? AND high_id=?', ...pair(a, b));
-const hasActiveRoom = (user: number) => !!one('SELECT 1 FROM listening_rooms WHERE active=1 AND (host_id=? OR guest_id=?)', user, user);
 
 function publicTrack(owner: number, track: ListeningTrack | null): ListeningTrack | null {
   if (!track || !isUploadSong(track.id)) return track;
   const upload = visibleUpload(owner, track.id);
   return upload?.visibility === 'public' ? { id: upload.id, name: upload.name, artist: upload.artist } : null;
-}
-
-function canListenTogether(host: number, guest: number, song: string) {
-  return !isUploadSong(song) || (!!visibleUpload(host, song) && !!visibleUpload(guest, song));
 }
 
 function requirePeer(user: number, peer: number) {
@@ -49,10 +44,11 @@ function requireFriend(user: number, peer: number) {
   requirePeer(user, peer);
   if (!friendship(user, peer)?.accepted) throw fail(403, '添加好友后才能聊天或一起听');
 }
-function expireRooms() {
+export function expireRooms() {
   transaction(() => {
     const time = now();
-    run('DELETE FROM listening_rooms WHERE (active=1 AND updated_at<?) OR (active=0 AND updated_at<?)', time - 90_000, time - 600_000);
+    run('DELETE FROM listening_rooms WHERE group_room=0 AND ((active=1 AND updated_at<?) OR (active=0 AND updated_at<?))', time - 90_000, time - 600_000);
+    expireGroupRooms(time);
     run(`UPDATE listening_invites SET status=CASE WHEN status='accepted' THEN 'ended' ELSE 'expired' END,updated_at=?
       WHERE status IN ('pending','accepted') AND NOT EXISTS(SELECT 1 FROM listening_rooms r WHERE r.id=room_id)`, time);
   });
@@ -82,17 +78,30 @@ export function socialState({ userId: user, sessionId }: Listener, queues: Recor
   const rooms = all<RoomRow>(`SELECT r.* FROM listening_rooms r
     JOIN users host ON host.id=r.host_id AND host.status='active'
     JOIN users guest ON guest.id=r.guest_id AND guest.status='active'
-    WHERE r.host_id=? OR r.guest_id=? ORDER BY r.active DESC,r.id DESC`, user, user).map((row): ListeningRoom => {
-      const onThisDevice = row.host_id === user ? row.host_session_id === sessionId : !row.active || row.guest_session_id === sessionId;
+    WHERE (r.group_room=0 AND (r.host_id=? OR r.guest_id=?)) OR
+      (r.group_room=1 AND EXISTS(SELECT 1 FROM listening_room_members m WHERE m.room_id=r.id AND m.user_id=?))
+    ORDER BY r.active DESC,r.id DESC`, user, user, user).map((row): ListeningRoom => {
+      const members = row.group_room ? groupMembers(row.id) : null;
+      const onThisDevice = members ? members.some(member => member.user_id === user && member.session_id === sessionId) :
+        row.host_id === user ? row.host_session_id === sessionId : !row.active || row.guest_session_id === sessionId;
       const reuseQueue = !!row.queue_data && !row.queue_data.includes('upload-') && queues[row.id] === row.transport_version;
       return {
         id: row.id, hostId: row.host_id, guestId: row.guest_id, active: !!row.active, onThisDevice, updatedAt: row.updated_at, transportVersion: row.transport_version,
         queue: onThisDevice && row.active && !reuseQueue ? readSharedQueue(row) : null,
         ...(onThisDevice && row.active && reuseQueue ? { queueUnchanged: true } : {}),
-        playback: onThisDevice && row.song_id && canListenTogether(row.host_id, row.guest_id, row.song_id)
+        playback: onThisDevice && row.song_id && canListenTogether(row, row.song_id)
           ? { songId: row.song_id, position: row.position, playing: !!row.playing } : null,
+        ...(members && onThisDevice ? { group: {
+          memberIds: members.map(member => member.user_id), pendingIds: row.host_id === user ? pendingGroupGuests(row.id) : [],
+          messages: groupMessages(row.id), playbackVersion: row.playback_version,
+        } } : {}),
       };
     });
+  rooms.push(...all<{ id: number; hostId: number; inviteId: number; updatedAt: number }>(`SELECT r.id,i.host_id hostId,i.id inviteId,i.updated_at updatedAt
+    FROM listening_invites i JOIN listening_rooms r ON r.id=i.room_id AND r.group_room=1
+    WHERE i.guest_id=? AND i.status='pending' ORDER BY i.id DESC`, user).map(invite => ({
+      ...invite, guestId: user, active: false, onThisDevice: true, transportVersion: 0, playback: null, queue: null,
+    })));
   return { people, rooms, inbox: listConversations(user), showOnline: people.find(person => person.id === user)?.online !== null, serverTime: time };
 }
 
@@ -120,9 +129,10 @@ export function syncSocial(listener: Listener, track: ListeningTrack | null, roo
   const { userId: user, sessionId } = listener;
   const time = now();
   const visibleTrack = publicTrack(user, track);
+  touchGroupMember(listener);
   if (room && playback && isUploadSong(playback.songId)) {
-    const target = one<{ guest_id: number }>('SELECT guest_id FROM listening_rooms WHERE id=? AND host_id=? AND host_session_id=?', room, user, sessionId);
-    if (!target || !canListenTogether(user, target.guest_id, playback.songId)) playback = null;
+    const target = one<RoomRow>('SELECT * FROM listening_rooms WHERE id=? AND host_id=? AND host_session_id=?', room, user, sessionId);
+    if (!target || !canListenTogether(target, playback.songId)) playback = null;
   }
   // One timeline per account keeps pulses from multiple devices from double-counting.
   run(`INSERT INTO social_presence(user_id,last_seen,track,activity_last_seen,activity_started_at)
@@ -137,7 +147,7 @@ export function syncSocial(listener: Listener, track: ListeningTrack | null, roo
     WHERE excluded.activity_last_seen>=activity_last_seen`, user, time, visibleTrack ? JSON.stringify(visibleTrack) : null,
     time, time, PRESENCE_TIMEOUT_MS, PRESENCE_TIMEOUT_MS);
   if (room) run(`UPDATE listening_rooms SET song_id=?,position=?,playing=?,updated_at=?
-    WHERE id=? AND host_id=? AND host_session_id=? AND active=1 AND updated_at>=? AND transport_version=? AND (queue_data IS NULL OR song_id IS ?)`, playback?.songId ?? null, playback?.position ?? 0,
+    WHERE id=? AND host_id=? AND host_session_id=? AND group_room=0 AND active=1 AND updated_at>=? AND transport_version=? AND (queue_data IS NULL OR song_id IS ?)`, playback?.songId ?? null, playback?.position ?? 0,
     Number(playback?.playing ?? false), time, room, user, sessionId, time - 90_000, version, playback?.songId ?? null);
   return known ? socialUpdate(listener, known) : socialState(listener);
 }
@@ -212,7 +222,7 @@ export function inviteListener({ userId: user, sessionId }: Listener, peer: numb
   requireFriend(user, peer);
   expireRooms();
   transaction(() => {
-    if (hasActiveRoom(user) || hasActiveRoom(peer)) throw fail(409, '有人已加入一起听');
+    if (hasListeningRoom(user) || hasListeningRoom(peer)) throw fail(409, '有人已加入一起听');
     const time = now();
     const result = run('INSERT OR IGNORE INTO listening_rooms(host_id,guest_id,host_session_id,updated_at) VALUES(?,?,?,?)', user, peer, sessionId, time);
     if (!result.changes) throw fail(409, '你们已有一条一起听邀请');
@@ -224,8 +234,11 @@ export function inviteListener({ userId: user, sessionId }: Listener, peer: numb
 }
 export function acceptListening({ userId: user, sessionId }: Listener, room: number) {
   expireRooms();
+  if (groupRoom(room)) return acceptGroupGuest({ userId: user, sessionId }, room);
   const time = now();
   transaction(() => {
+    const invite = one<RoomRow>('SELECT * FROM listening_rooms WHERE id=? AND guest_id=? AND group_room=0 AND active=0', room, user);
+    if (invite && (hasListeningRoom(invite.host_id) || hasListeningRoom(user))) throw fail(409, '有人已加入一起听');
     const result = run(`UPDATE listening_rooms AS invite SET active=1,guest_session_id=?,updated_at=? WHERE id=? AND guest_id=? AND active=0
       AND EXISTS (SELECT 1 FROM users WHERE id=invite.host_id AND status='active')
       AND NOT EXISTS (SELECT 1 FROM listening_rooms AS other WHERE other.active=1 AND
@@ -247,6 +260,16 @@ export function acceptListening({ userId: user, sessionId }: Listener, room: num
 export function controlListening({ userId: user, sessionId }: Listener, room: number, song: string, playing?: boolean) {
   const time = now();
   const target = playing === undefined ? null : Number(playing);
+  const group = groupRoom(room);
+  if (group) {
+    requireGroupMember({ userId: user, sessionId }, room);
+    if (group.host_id !== user) throw fail(403, '只有房主可以控制播放');
+    if (group.song_id !== song) throw fail(409, '房间或歌曲已切换');
+    if (target === group.playing) return;
+    run(`UPDATE listening_rooms SET position=min(86400,position+CASE WHEN playing=1 THEN max(0,?-updated_at)/1000.0 ELSE 0 END),
+      playing=COALESCE(?,1-playing),updated_at=?,transport_version=transport_version+1,playback_version=playback_version+1 WHERE id=?`, time, target, time, room);
+    return;
+  }
   const result = run(`UPDATE listening_rooms SET position=min(86400,position+CASE WHEN playing=1 THEN max(0,?-updated_at)/1000.0 ELSE 0 END),
     playing=COALESCE(?,1-playing),updated_at=?,transport_version=transport_version+1
     WHERE id=? AND song_id=? AND active=1 AND ((host_id=? AND host_session_id=?) OR (guest_id=? AND guest_session_id=?)) AND updated_at>=?
@@ -257,7 +280,8 @@ export function controlListening({ userId: user, sessionId }: Listener, room: nu
     throw fail(409, '房间或歌曲已切换');
   }
 }
-export function leaveListening({ userId: user, sessionId }: Listener, room: number) {
+export function leaveListening({ userId: user, sessionId }: Listener, room: number, inviteId?: number) {
+  if (groupRoom(room)) return leaveGroupRoom({ userId: user, sessionId }, room, inviteId);
   transaction(() => {
     const target = one<RoomRow>('SELECT * FROM listening_rooms WHERE id=?', room);
     const result = run(`DELETE FROM listening_rooms WHERE id=? AND

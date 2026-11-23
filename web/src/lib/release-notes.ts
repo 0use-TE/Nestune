@@ -8,6 +8,16 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.29',
+    date: '2026 年 11 月 23 日',
+    title: '好友房间一起听',
+    summary: '在「一起听」创建房间，最多邀请七位好友，共享播放队列和房间聊天。',
+    sections: [
+      { title: '多人一起听', paragraphs: ['中途加入会跟上歌曲和进度。成员可以往队列末尾加歌，房主控制播放，房主退出后由最早加入的成员接手。刷新网页或重新打开 Nestune 即可使用。'] },
+      { title: '桌面悬浮歌词', paragraphs: ['新版桌面客户端在歌词窗口暂停播放或关闭时停止定时重绘，独立控制窗也减少了渲染开销。'] },
+    ],
+  },
+  {
     version: '1.2.26',
     date: '2026 年 11 月 20 日',
     title: '共享画布实时同步',

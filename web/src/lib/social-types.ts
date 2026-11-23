@@ -1,5 +1,6 @@
 import type { SharedQueue } from './shared-queue';
 export const PRESENCE_TIMEOUT_MS = 35_000;
+export const LISTENING_ROOM_CAPACITY = 8;
 export type ListeningTrack = { id: string; name: string; artist: string };
 export type Person = {
   id: number; username: string; name: string; avatar: string | null;
@@ -24,6 +25,8 @@ export type ListeningRoom = {
   transportVersion: number;
   queue: SharedQueue | null;
   queueUnchanged?: boolean;
+  group?: { memberIds: number[]; pendingIds: number[]; messages: Message[]; playbackVersion: number };
+  inviteId?: number;
 };
 export type SocialState = { people: Person[]; rooms: ListeningRoom[]; inbox: ConversationSummary[]; showOnline: boolean; serverTime: number; peopleVersion?: string };
 export type SocialUpdate = Omit<SocialState, 'people'> & { people?: Person[] };

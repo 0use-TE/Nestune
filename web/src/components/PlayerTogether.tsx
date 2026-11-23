@@ -28,7 +28,7 @@ export function PlayerTogether({ inviting, onClose, active }: {
     setBusy(true);
     try {
       await action(data);
-      if (data.action === 'invite' || data.action === 'acceptInvite') onClose();
+      if (data.action === 'invite' || data.action === 'acceptInvite' || data.action === 'createRoom') onClose();
     }
     catch (e) { app.toast(e instanceof Error ? e.message : '一起听操作失败'); }
     finally { setBusy(false); }
@@ -59,7 +59,7 @@ export function PlayerTogether({ inviting, onClose, active }: {
         <span className="together-status">{incoming ? `${pendingPeer.name} 邀请你一起听` : `等待 ${pendingPeer.name} 接受邀请`}</span>
         {incoming && <button className="btn sm" disabled={busy} onClick={() => change({ action: 'acceptInvite', roomId: pending.id })}>接受</button>}
         {pending.onThisDevice
-          ? <button className="link" disabled={busy} onClick={() => change({ action: 'leave', roomId: pending.id })}>{incoming ? '拒绝' : '取消邀请'}</button>
+          ? <button className="link" disabled={busy} onClick={() => change({ action: 'leave', roomId: pending.id, inviteId: pending.inviteId })}>{incoming ? '拒绝' : '取消邀请'}</button>
           : <small className="sub">邀请由另一台设备发出</small>}
       </section>
     );
@@ -72,6 +72,7 @@ export function PlayerTogether({ inviting, onClose, active }: {
     }}>
       <FriendPicker friends={friends} selected={selected} onSelect={person => setPeerId(String(person.id))} />
       <button className="btn sm" disabled={!selected || busy}>邀请一起听</button>
+      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void change({ action: 'createRoom' })}>创建房间</button>
       <button type="button" className="ib" aria-label="关闭邀请" onClick={onClose}><Icon n="x" s={15} /></button>
     </form>
   );

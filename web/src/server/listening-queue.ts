@@ -12,24 +12,27 @@ import { enrichSong } from './recordings';
 import { uploadedSong, visibleUpload } from './uploads';
 import { createPlaylist, getPlaylist } from './playlists';
 import { createShuffle } from '@/lib/shuffle';
-
-type Listener = { userId: number; sessionId: string };
-type Room = { id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null;
-  active: number; queue_data: string | null; song_id: string | null; position: number; playing: number; updated_at: number; transport_version: number };
+import { requireGroupMember, type Listener, type Room } from './listening-rooms';
 
 function participating(listener: Listener, id: number) {
-  const room = one<Room>('SELECT * FROM listening_rooms WHERE id=? AND active=1 AND updated_at>=?', id, now() - 90_000);
+  const room = one<Room>('SELECT * FROM listening_rooms WHERE id=? AND active=1 AND (group_room=1 OR updated_at>=?)', id, now() - 90_000);
+  if (room?.group_room) { requireGroupMember(listener, id); return room; }
   if (!room || !(room.host_id === listener.userId && room.host_session_id === listener.sessionId ||
     room.guest_id === listener.userId && room.guest_session_id === listener.sessionId)) throw fail(409, '请在参与一起听的设备上操作');
   return room;
 }
 
-export function readSharedQueue(room: Pick<Room, 'queue_data' | 'host_id' | 'guest_id'>): SharedQueue | null {
+export function canListenTogether(room: Pick<Room, 'host_id' | 'guest_id' | 'group_room'>, song: string) {
+  if (!isUploadSong(song)) return true;
+  const upload = visibleUpload(room.host_id, song);
+  return room.group_room ? upload?.visibility === 'public' : !!upload && !!visibleUpload(room.guest_id, song);
+}
+
+export function readSharedQueue(room: Pick<Room, 'queue_data' | 'host_id' | 'guest_id' | 'group_room'>): SharedQueue | null {
   if (!room.queue_data) return null;
   const queue: SharedQueue = JSON.parse(room.queue_data);
   const selected = queue.entries[queue.index]?.key;
-  const entries = queue.entries.filter(({ song }) => !isUploadSong(song.id) ||
-    !!visibleUpload(room.host_id, song.id) && !!visibleUpload(room.guest_id, song.id));
+  const entries = queue.entries.filter(({ song }) => canListenTogether(room, song.id));
   const visible = entries.map(entry => ({ ...entry, song: enrichSong(entry.song) })), index = entries.findIndex(entry => entry.key === selected);
   return { ...queue, entries: visible, index, shuffle: createShuffle(visible.map(entry => entry.song), index, queue.shuffle) };
 }
@@ -54,8 +57,8 @@ async function resolve(room: Room, viewer: number, requested: string[], strict: 
   const metadata = new Map<string, Song>();
   for (let i = 0; i < online.length; i += 100) for (const song of await songs(online.slice(i, i + 100))) metadata.set(song.id, song);
   for (const id of unique.filter(isUploadSong)) {
-    if (visibleUpload(room.host_id, id) && visibleUpload(room.guest_id, id)) metadata.set(id, uploadedSong(viewer, id));
-    else if (strict) throw fail(403, '这首上传的歌曲需要先分享给对方');
+    if (canListenTogether(room, id)) metadata.set(id, uploadedSong(viewer, id));
+    else if (strict) throw fail(403, room.group_room ? '多人房间只支持公开上传的歌曲' : '这首上传的歌曲需要先分享给对方');
   }
   if (strict && requested.some(id => !metadata.has(id) || metadata.get(id)?.access?.playable === false)) throw fail(400, '部分歌曲暂时无法一起播放');
   return requested.flatMap(id => {
@@ -111,6 +114,9 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
   if (!room.queue_data) throw fail(409, '共同列表正在准备中');
   if (!value || typeof value !== 'object') throw fail(400, '列表操作无效');
   const raw = value as Record<string, unknown>;
+  if (room.group_room && room.host_id !== listener.userId && !['append', 'appendMany', 'appendCanvas'].includes(String(raw.type))) {
+    throw fail(403, '只有房主可以控制播放，成员可将歌曲加入队列末尾');
+  }
   let command: QueueCommand;
   let requested: string[] = [];
   switch (raw.type) {
@@ -138,18 +144,21 @@ export async function editListeningQueue(listener: Listener, id: number, value: 
   }
   const commit = (additions: SharedQueue['entries']) => {
     const current = participating(listener, id);
-    if (additions.some(({ song }) => isUploadSong(song.id) && (!visibleUpload(current.host_id, song.id) || !visibleUpload(current.guest_id, song.id)))) throw fail(403, '歌曲的分享权限已改变');
+    if (current.group_room && current.host_id !== listener.userId && !['append', 'appendMany', 'appendCanvas'].includes(command.type)) throw fail(403, '只有房主可以控制播放');
+    if (additions.some(({ song }) => !canListenTogether(current, song.id))) throw fail(403, '歌曲的分享权限已改变');
     if (command.type === 'next' && command.automatic &&
-      (current.host_id !== listener.userId || current.transport_version !== command.version)) return;
+      (current.host_id !== listener.userId || (current.group_room ? current.playback_version : current.transport_version) !== command.version)) return;
     const queue = readSharedQueue(current)!;
     if ((command.type === 'append' || command.type === 'appendMany' || command.type === 'appendCanvas' || command.type === 'insertNext' || command.type === 'playNow' && !queue.entries.some(entry => entry.song.id === command.songId)) && queue.entries.length + additions.length > 500) throw fail(400, '共同列表最多 500 首歌曲');
     const elapsed = current.playing ? Math.max(0, now() - current.updated_at) / 1000 : 0;
     let changed;
     try { changed = changeQueue(queue, command, Math.min(86400, current.position + elapsed), !!current.playing, additions); }
     catch (e) { throw fail(409, e instanceof Error ? e.message : '列表已更新'); }
-    run(`UPDATE listening_rooms SET queue_data=?,song_id=?,position=?,playing=?,updated_at=?,transport_version=transport_version+1 WHERE id=?`,
+    const onlyAppended = ['append', 'appendMany', 'appendCanvas', 'insertNext'].includes(command.type) && queue.index >= 0;
+    run(`UPDATE listening_rooms SET queue_data=?,song_id=?,position=?,playing=?,updated_at=?,transport_version=transport_version+1,
+      playback_version=playback_version+? WHERE id=?`,
       JSON.stringify(changed.queue), changed.queue.entries[changed.queue.index]?.song.id ?? null,
-      changed.position, Number(changed.playing), now(), id);
+      changed.position, Number(changed.playing), now(), Number(!onlyAppended), id);
   };
   if (command.type === 'appendCanvas') {
     await takeCanvasItem(listener.userId, command.id, item => {

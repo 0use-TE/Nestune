@@ -6,7 +6,9 @@ import { userRoute } from '@/server/guard';
 import { body, fail, numericId, str } from '@/server/http';
 import { requireUpload } from '@/server/uploads';
 import { editListeningQueue, initializeListeningQueue, saveListeningQueue } from '@/server/listening-queue';
-import { acceptListening, answerFriend, controlListening, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, sharePlaylist, socialDirectory, socialState, syncSocial } from '@/server/social';
+import { acceptListening, answerFriend, controlListening, expireRooms, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, sharePlaylist, socialDirectory, socialState, syncSocial } from '@/server/social';
+import { createGroupRoom, groupRoomAudience, inviteGroupGuest, sendGroupMessage } from '@/server/listening-rooms';
+import { notifyListeningUsers } from '@/server/listening-events';
 
 const options = { bucket: 'social' };
 
@@ -46,11 +48,19 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
   const data = await body(req, 131072);
   if (!data || typeof data !== 'object') throw fail(400, '请求无效');
   const listener = { userId: user.id, sessionId };
+  let room = ['createRoom', 'inviteRoom', 'acceptInvite', 'leave', 'roomMessage', 'roomPlayback', 'roomQueue', 'saveRoomQueue'].includes(String(data.action))
+    && data.action !== 'createRoom' ? id(data.roomId) : undefined;
+  const affectsInvites = data.action === 'inviteRoom' || data.action === 'acceptInvite' || data.action === 'leave';
+  const audience = room === undefined ? [] : groupRoomAudience(room, affectsInvites);
   switch (data.action) {
     case 'sync': {
       const version = data.transportVersion ?? 0;
       if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 0) throw fail(400, '播放版本无效');
-      if (data.seed !== undefined) await initializeListeningQueue(listener, id(data.roomId), data.seed);
+      if (data.seed !== undefined) {
+        const seededRoom = id(data.roomId);
+        await initializeListeningQueue(listener, seededRoom, data.seed);
+        notifyListeningUsers(groupRoomAudience(seededRoom).filter(id => id !== user.id));
+      }
       let known: { peopleVersion?: string; queues?: Record<string, number> } | undefined;
       if (data.known !== undefined) {
         if (!data.known || typeof data.known !== 'object' || Array.isArray(data.known)) throw fail(400, '同步版本无效');
@@ -89,15 +99,21 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
     case 'sharePlaylist': return { message: sharePlaylist(user.id, id(data.peerId), id(data.playlistId)) };
     case 'read': markMessagesRead(user.id, id(data.peerId), id(data.throughId)); break;
     case 'invite': inviteListener(listener, id(data.peerId)); break;
-    case 'acceptInvite': acceptListening(listener, id(data.roomId)); break;
+    case 'createRoom': expireRooms(); room = createGroupRoom(listener); break;
+    case 'inviteRoom': expireRooms(); inviteGroupGuest(listener, room!, id(data.peerId)); break;
+    case 'roomMessage': expireRooms(); sendGroupMessage(listener, room!, str(data.text, 1, 1000, '消息')); break;
+    case 'acceptInvite': acceptListening(listener, room!); break;
     case 'roomPlayback':
       if (data.playing !== undefined && typeof data.playing !== 'boolean') throw fail(400, '播放状态无效');
-      controlListening(listener, id(data.roomId), catalogId(data.songId), data.playing);
+      expireRooms();
+      controlListening(listener, room!, catalogId(data.songId), data.playing);
       break;
-    case 'leave': leaveListening(listener, id(data.roomId)); break;
-    case 'saveRoomQueue': return { playlist: saveListeningQueue(listener, id(data.roomId), data.name) };
-    case 'roomQueue': await editListeningQueue(listener, id(data.roomId), data.command); break;
+    case 'leave': leaveListening(listener, room!, data.inviteId == null ? undefined : id(data.inviteId)); break;
+    case 'saveRoomQueue': expireRooms(); return { playlist: saveListeningQueue(listener, room!, data.name) };
+    case 'roomQueue': expireRooms(); await editListeningQueue(listener, room!, data.command); break;
     default: throw fail(400, '未知操作');
   }
-  return socialState(listener);
+  const state = socialState(listener);
+  if (room !== undefined) notifyListeningUsers([...audience, ...groupRoomAudience(room, affectsInvites)].filter(id => id !== user.id));
+  return state;
 }, options);

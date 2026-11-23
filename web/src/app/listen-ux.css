@@ -6,6 +6,20 @@
 .queue-header-actions{flex-wrap:nowrap}.queue-header-actions .guide-help{padding:5px}
 .together-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .together-heading h1{margin:0}.guide-directory{align-items:flex-start;gap:16px}.guide-directory>.row{justify-content:flex-end;max-width:430px}
+.listening-room-page{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:16px;margin:12px 0 18px}
+.listening-room-page .listening-room{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:14px}
+.listening-room-page .listening-room-chat{height:230px;min-height:0}
+.listening-room-chat h2{font-size:15px;margin:0}
+.listening-members{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;padding:0;list-style:none}
+.listening-members li{display:flex;align-items:center;gap:5px;min-width:0;max-width:135px;padding:2px 7px 2px 2px;border:1px solid var(--line);border-radius:999px;font-size:12px}
+.listening-members li .avatar{width:22px;height:22px;flex:none}
+.listening-members li small{white-space:nowrap}
+#np .listening-members{flex-wrap:nowrap;overflow-x:auto}
+#np .listening-members li{flex:none}
+.listening-invite{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.listening-invite select{max-width:min(210px,100%);min-height:30px;background:var(--surface);color:inherit;border:1px solid var(--line);border-radius:8px;padding:3px 8px}
+.listening-invite .btn{white-space:nowrap}
+@media(max-width:640px){.together-heading>.row{gap:6px}.listening-room-page{grid-template-columns:1fr}.listening-room-page .listening-room-chat{height:185px}}
 .usage-guide-layer{position:fixed;inset:0;z-index:115;pointer-events:none}
 .usage-guide-ring{position:fixed;border:2px solid #9caab5;border-radius:13px;box-shadow:0 0 0 4px #7b9eb21a;pointer-events:none}
 .usage-guide{position:fixed;pointer-events:auto;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:15px 17px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow)}

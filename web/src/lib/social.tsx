@@ -39,7 +39,7 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
   const receivedAt = useRef(0);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
   const mounted = useRef(true);
-  const applied = useRef<{ id: number; version: number } | null>(null);
+  const applied = useRef<{ id: number; version: number; hostId: number; queue: NonNullable<ListeningRoom['queue']> } | null>(null);
   const openedRoom = useRef<number | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const noticeRef = useRef(NOTICE_DEFAULTS);
@@ -106,7 +106,7 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
         const invite = next.rooms.find(room => !room.active && room.guestId === userId && !existing.has(room.id));
         if (invite && options.inviteToast) player.current.toast((next.people.find(person => person.id === invite.hostId)?.name ?? '好友') + ' 邀请你一起听', 'invite');
       }
-      if (data.action === 'invite' && options.inviteToast) player.current.toast('一起听邀请已发送', 'invite');
+      if ((data.action === 'invite' || data.action === 'inviteRoom') && options.inviteToast) player.current.toast('一起听邀请已发送', 'invite');
       receivedAt.current = Date.now();
       latest.current = next;
       setState(next); setDirectory(next.people);
@@ -119,29 +119,42 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
 
   useEffect(() => {
     setRoomTransport(playing => {
-      const room = latest.current?.rooms.find(item => item.active && item.onThisDevice);
+      const snapshot = latest.current;
+      if (!snapshot) return false;
+      const room = snapshot.rooms.find(item => item.active && item.onThisDevice);
+      if (room?.group && room.hostId !== userId) {
+        const song = room.queue?.entries[room.queue.index]?.song;
+        if (playing !== false && room.playback?.playing && song && !player.current.playbackRunning()) {
+          player.current.followPlayback(song, roomPosition(room, snapshot.serverTime, receivedAt.current), true);
+        } else {
+          player.current.toast('只有房主可以控制播放');
+        }
+        return true;
+      }
       if (!room?.playback || room.playback.songId !== player.current.current?.id) return false;
       action({ action: 'roomPlayback', roomId: room.id, songId: room.playback.songId, playing })
         .catch(e => player.current.toast(e instanceof Error ? e.message : '无法切换播放状态'));
       return true;
     });
     return () => setRoomTransport(null);
-  }, [action, setRoomTransport]);
+  }, [action, setRoomTransport, userId]);
 
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout>;
     let running = false;
     let bootstrapped = false;
+    let pending = false;
     async function pulse() {
-      if (!live || running) return;
+      if (!live) return;
+      if (running) { pending = true; return; }
       clearTimeout(timer);
       if (document.hidden && !latest.current?.rooms.some(room => room.active && room.onThisDevice)) return;
       running = true;
       const current = player.current;
       const room = latest.current?.rooms.find(item => item.active && item.onThisDevice);
       const seed = room?.hostId === userId && !room.queue ? current.queueSeed() : undefined;
-      const hostCanPublish = room?.hostId === userId && !current.loading && (room.transportVersion === 0 ||
+      const hostCanPublish = !room?.group && room?.hostId === userId && !current.loading && (room.transportVersion === 0 ||
         (applied.current?.id === room.id && applied.current.version === room.transportVersion));
       const song = current.current && !isDeviceSong(current.current.id) ? current.current : null;
       const playing = current.playing && !current.loading;
@@ -159,24 +172,42 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
         if (live) setError(e instanceof Error ? e.message : '暂时无法连接');
       } finally {
         running = false;
-        if (live) timer = setTimeout(pulse, latest.current?.rooms.some(item => item.active && item.onThisDevice) ? 1700 : pathRef.current === '/social' || pathRef.current === '/chat' ? 5000 : 10000);
+        if (live) {
+          const active = latest.current?.rooms.find(item => item.active && item.onThisDevice);
+          const delay = active ? active.group ? events?.readyState === EventSource.OPEN ? 20_000 : 5000 : 1700
+            : pathRef.current === '/social' || pathRef.current === '/chat' ? 5000 : 10000;
+          timer = setTimeout(pulse, pending ? 75 : delay);
+          pending = false;
+        }
       }
     }
     // Show the small user directory before downloading presence, inbox and queues.
     get<{ people: Person[] }>('/api/social?scope=directory').then(data => { if (live && !latest.current) setDirectory(data.people); }).catch(() => {}).finally(() => { bootstrapped = true; if (live) void pulse(); });
     const wake = () => { if (bootstrapped && !document.hidden) void pulse(); };
+    const roomWake = () => { if (bootstrapped) void pulse(); };
+    const events = typeof EventSource === 'undefined' ? null : new EventSource('/api/social/events');
+    events?.addEventListener('open', roomWake);
+    events?.addEventListener('room', roomWake);
+    events?.addEventListener('error', () => {
+      if (latest.current?.rooms.some(room => room.active && room.onThisDevice && room.group)) roomWake();
+    });
     document.addEventListener('visibilitychange', wake);
     window.addEventListener('nt:social-refresh', wake);
-    return () => { live = false; clearTimeout(timer); document.removeEventListener('visibilitychange', wake); window.removeEventListener('nt:social-refresh', wake); };
+    return () => { live = false; clearTimeout(timer); events?.close(); document.removeEventListener('visibilitychange', wake); window.removeEventListener('nt:social-refresh', wake); };
   }, [action, userId]);
 
   useEffect(() => { if (path === '/social' || path === '/chat') window.dispatchEvent(new Event('nt:social-refresh')); }, [path]);
 
   const activeRoom = state?.rooms.find(room => room.active && room.onThisDevice);
+  const needsRoomSeed = !!activeRoom?.group && activeRoom.hostId === userId && !activeRoom.queue;
+  useEffect(() => {
+    if (needsRoomSeed && app.ready) window.dispatchEvent(new Event('nt:social-refresh'));
+  }, [needsRoomSeed, app.ready]);
   useEffect(() => {
     if (!activeRoom || !app.current || openedRoom.current === activeRoom.id) return;
-    if (activeRoom.guestId === userId && activeRoom.playback?.songId !== app.current.id) return;
+    if (activeRoom.hostId !== userId && activeRoom.playback?.songId !== app.current.id) return;
     openedRoom.current = activeRoom.id;
+    if (activeRoom.group && activeRoom.hostId === userId && pathRef.current === '/social') return;
     app.setNowOpen(true);
   }, [activeRoom, app.current, app.setNowOpen, userId]);
   useEffect(() => {
@@ -186,19 +217,36 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
       return;
     }
     beginSharedQueue();
-    setFollowingRoom(activeRoom.guestId === userId);
+    setFollowingRoom(activeRoom.hostId !== userId);
     setRoomQueueHandler(command => {
       const current = latest.current?.rooms.find(room => room.active && room.onThisDevice);
       if (!current?.queue) { if (command.type === 'appendCanvas' || command.type === 'appendMany') throw new Error('共同列表正在准备中'); player.current.toast('共同列表正在准备中'); return; }
       if (command.type === 'next' && command.automatic && current.hostId !== userId) return;
-      return action({ action: 'roomQueue', roomId: current.id, command: command.type === 'next' && command.automatic ? { ...command, version: current.transportVersion } : command })
+      if (current.group && current.hostId !== userId && !['append', 'appendMany', 'appendCanvas'].includes(command.type)) {
+        player.current.toast('只有房主可以控制播放，你可以将歌曲加入队列');
+        return;
+      }
+      return action({ action: 'roomQueue', roomId: current.id, command: command.type === 'next' && command.automatic
+        ? { ...command, version: current.group?.playbackVersion ?? current.transportVersion } : command })
         .then(() => {}).catch(e => { if (command.type === 'appendMany' || command.type === 'appendCanvas') throw e; player.current.toast(e instanceof Error ? e.message : '无法更新共同列表'); });
     });
-    if (!activeRoom.queue) { if (activeRoom.guestId === userId) player.current.followPlayback(null, 0, false); return; }
+    if (!activeRoom.queue) { if (activeRoom.hostId !== userId) player.current.followPlayback(null, 0, false); return; }
     const playback = activeRoom.playback;
-    if (activeRoom.guestId === userId || applied.current?.id !== activeRoom.id || applied.current.version !== activeRoom.transportVersion) {
-      applyRoomQueue(activeRoom.queue, roomPosition(activeRoom, state.serverTime, receivedAt.current), !!playback?.playing);
-      applied.current = { id: activeRoom.id, version: activeRoom.transportVersion };
+    const previous = applied.current;
+    const queue = activeRoom.queue;
+    const position = roomPosition(activeRoom, state.serverTime, receivedAt.current);
+    if (previous?.id !== activeRoom.id || previous.version !== activeRoom.transportVersion || previous.queue !== queue) {
+      applyRoomQueue(queue, position, !!playback?.playing);
+    } else if (activeRoom.group || activeRoom.hostId !== userId) {
+      player.current.followPlayback(queue.entries[queue.index]?.song ?? null, position, !!playback?.playing);
+    }
+    applied.current = { id: activeRoom.id, version: activeRoom.transportVersion, hostId: activeRoom.hostId, queue };
+    if (activeRoom.group && previous?.id === activeRoom.id && previous.hostId !== userId && activeRoom.hostId === userId && playback?.playing) {
+      const duration = queue.entries[queue.index]?.song.duration;
+      if (duration && position >= duration && !player.current.playbackRunning()) {
+        void action({ action: 'roomQueue', roomId: activeRoom.id, command: { type: 'next', automatic: true, version: activeRoom.group.playbackVersion } })
+          .catch(error => player.current.toast(error instanceof Error ? error.message : '暂时无法播放下一首'));
+      }
     }
     setPlaybackError('');
     return () => { setRoomQueueHandler(null); };
