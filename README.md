@@ -30,6 +30,31 @@
 | --- | --- | --- |
 | ![手机播放器的唱片视图与播放控制](docs/assets/showcase-mobile.webp) | ![手机端的域群聊，展示一起听入口、分享的歌曲和加歌按钮](docs/assets/showcase-domain-mobile.webp) | ![手机端好友聊天和底部迷你播放器](docs/assets/showcase-chat-mobile.webp) |
 
+## 音源与平台
+
+- **网易云音乐、QQ 音乐**：一次搜索即可查找两个平台的歌曲。同一录音有多个来源时，可以选择优先音源，也可以在播放中切换并保留进度。
+- **本地音乐**：可以播放设备上的音频文件，也可以上传到自己的音乐库，在其他设备上登录收听。
+
+| 平台 | 使用方式 |
+| --- | --- |
+| Android | 安装 APK |
+| iPhone、iPad | 用 Safari 打开网页版，在分享菜单中选择「添加到主屏幕」 |
+| Windows | 安装桌面客户端，或使用便携版 |
+| macOS | 安装通用版 DMG，支持 Intel 和 Apple 芯片 |
+| Linux | 使用 AppImage 或 DEB 包 |
+| 网页 | 在浏览器中直接打开，支持 PWA |
+
+[打开网页版](https://nestune.0use.net:8443/) · [下载各平台客户端](https://nestune.0use.net:8443/downloads)
+
+## 让 AI 帮你部署
+
+把下面这段复制给能操作终端的 AI 助手：
+
+```text
+帮我部署 Nestune：https://github.com/0use-TE/Nestune
+请先阅读仓库首页和 web/README.md，根据我的系统配置并启动服务，保留已有数据。部署完成后检查 /api/health，告诉我访问地址，以及如何创建第一个账号和配置音乐源。
+```
+
 <details>
 <summary>1.2.1 历史功能与安装包</summary>
 
