@@ -6,9 +6,12 @@
 .queue-header-actions{flex-wrap:nowrap}.queue-header-actions .guide-help{padding:5px}
 .together-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
 .together-heading h1{margin:0}.guide-directory{align-items:flex-start;gap:16px}.guide-directory>.row{justify-content:flex-end;max-width:430px}
-.listening-room-page{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:16px;margin:12px 0 18px}
-.listening-room-page .listening-room{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:14px}
-.listening-room-page .listening-room-chat{height:230px;min-height:0}
+.domain-legacy{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:16px;margin:12px 0 18px}
+.domain-legacy .listening-room{margin:0;padding:12px 14px;border:1px solid var(--line);border-radius:14px}
+.domain-legacy .listening-room-chat{height:230px;min-height:0}
+.domain-temporary{margin-top:8px}
+.domain-temporary summary{cursor:pointer;list-style:none}
+.domain-temporary summary::-webkit-details-marker{display:none}
 .listening-room-chat h2{font-size:15px;margin:0}
 .listening-members{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;padding:0;list-style:none}
 .listening-members li{display:flex;align-items:center;gap:5px;min-width:0;max-width:135px;padding:2px 7px 2px 2px;border:1px solid var(--line);border-radius:999px;font-size:12px}
@@ -19,7 +22,36 @@
 .listening-invite{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .listening-invite select{max-width:min(210px,100%);min-height:30px;background:var(--surface);color:inherit;border:1px solid var(--line);border-radius:8px;padding:3px 8px}
 .listening-invite .btn{white-space:nowrap}
-@media(max-width:640px){.together-heading>.row{gap:6px}.listening-room-page{grid-template-columns:1fr}.listening-room-page .listening-room-chat{height:185px}}
+.domains{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding-bottom:4px}
+.domain-list-toolbar{display:flex;justify-content:flex-end;margin:2px 0 12px}
+.domain-list,.domain-song-list{list-style:none;padding:0;margin:0;display:grid;gap:7px}
+.domain-row,.domain-player{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:13px;text-align:left}
+.domain-row{width:100%}
+button.domain-row:hover,a.domain-row:hover{background:var(--soft)}
+.domain-row>svg,.domain-player>svg{flex:none;color:var(--sub)}
+.domain-row>button,.domain-player>button{flex:none;white-space:nowrap}
+.domain-row-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:10px;background:var(--soft);color:var(--sub)}
+.domain-row-info,.domain-playing-link{flex:1;min-width:0;display:grid}
+.domain-row-info small{font-size:12px}
+.domain-empty{text-align:center;margin:16px 0}
+.domain-page{display:flex;flex-direction:column;flex:1;gap:9px;min-height:0}
+.domain-heading{display:flex;align-items:center;gap:7px;min-width:0}
+.domain-heading h2{font-size:22px;margin:0;flex:1}
+.domain-heading .ib{flex:none;width:38px;height:38px}
+.domain-tools,.domain-sheet-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.domain-sheet-actions{margin-bottom:10px}
+.domain-page .domain-chat{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) auto}
+.domain-page .domain-chat .social-messages{grid-row:1}
+.domain-page .domain-chat .chat-composer{grid-row:2}
+.domain-song-card .ib{flex:none}
+.domain-song-list li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}
+.domain-song-list .cv{width:38px;flex:none}
+.domain-song-list .ib{flex:none;width:32px;height:32px}
+.domain-create{display:grid;gap:13px}
+.domain-create label{display:grid;gap:4px}
+.domain-create input{width:100%;padding:9px;border:1px solid var(--line);background:var(--soft);color:var(--text);border-radius:9px;font-size:16px}
+.domain-create .btn{justify-self:end}
+@media(max-width:640px){.domain-legacy{grid-template-columns:1fr}.domain-legacy .listening-room-chat{height:185px}.domain-page .domain-chat{padding:0 9px 7px}.domain-heading h2{font-size:19px}.domain-player{gap:7px}.domain-row{gap:8px}.domain-row-icon{width:34px;height:34px}}
 .usage-guide-layer{position:fixed;inset:0;z-index:115;pointer-events:none}
 .usage-guide-ring{position:fixed;border:2px solid #9caab5;border-radius:13px;box-shadow:0 0 0 4px #7b9eb21a;pointer-events:none}
 .usage-guide{position:fixed;pointer-events:auto;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:15px 17px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow)}

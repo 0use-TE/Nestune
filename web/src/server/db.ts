@@ -259,6 +259,42 @@ function open() {
       updated_at INTEGER NOT NULL
     );
     CREATE UNIQUE INDEX IF NOT EXISTS listening_room_pair ON listening_rooms(min(host_id, guest_id), max(host_id, guest_id));
+    CREATE TABLE IF NOT EXISTS listening_domains (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS listening_domain_members (
+      domain_id INTEGER NOT NULL REFERENCES listening_domains(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      joined_at INTEGER NOT NULL,
+      PRIMARY KEY (domain_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS listening_domain_members_user ON listening_domain_members(user_id, domain_id);
+    CREATE TABLE IF NOT EXISTS listening_domain_invites (
+      domain_id INTEGER NOT NULL REFERENCES listening_domains(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      PRIMARY KEY (domain_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS listening_domain_invites_user ON listening_domain_invites(user_id, domain_id);
+    CREATE TABLE IF NOT EXISTS listening_domain_songs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      domain_id INTEGER NOT NULL REFERENCES listening_domains(id) ON DELETE CASCADE,
+      song_id TEXT NOT NULL,
+      song TEXT NOT NULL,
+      added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      UNIQUE (domain_id, song_id)
+    );
+    CREATE TABLE IF NOT EXISTS listening_domain_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      domain_id INTEGER NOT NULL REFERENCES listening_domains(id) ON DELETE CASCADE,
+      sender_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      text TEXT NOT NULL,
+      song TEXT,
+      sent_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS listening_domain_messages_history ON listening_domain_messages(domain_id, id DESC);
     CREATE TABLE IF NOT EXISTS listening_room_members (
       room_id INTEGER NOT NULL REFERENCES listening_rooms(id) ON DELETE CASCADE,
       user_id INTEGER NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -299,6 +335,8 @@ function open() {
     if (!columns.some(column => column.name === 'queue_data')) db.exec('ALTER TABLE listening_rooms ADD COLUMN queue_data TEXT');
     if (!columns.some(column => column.name === 'group_room')) db.exec('ALTER TABLE listening_rooms ADD COLUMN group_room INTEGER NOT NULL DEFAULT 0');
     if (!columns.some(column => column.name === 'playback_version')) db.exec('ALTER TABLE listening_rooms ADD COLUMN playback_version INTEGER NOT NULL DEFAULT 0');
+    if (!columns.some(column => column.name === 'domain_id')) db.exec('ALTER TABLE listening_rooms ADD COLUMN domain_id INTEGER REFERENCES listening_domains(id) ON DELETE CASCADE');
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS listening_live_domain ON listening_rooms(domain_id) WHERE domain_id IS NOT NULL');
     if (!columns.some(column => column.name === 'transport_version')) {
       db.exec('ALTER TABLE listening_rooms ADD COLUMN transport_version INTEGER NOT NULL DEFAULT 0');
     }

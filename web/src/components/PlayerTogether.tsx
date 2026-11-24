@@ -72,7 +72,7 @@ export function PlayerTogether({ inviting, onClose, active }: {
     }}>
       <FriendPicker friends={friends} selected={selected} onSelect={person => setPeerId(String(person.id))} />
       <button className="btn sm" disabled={!selected || busy}>邀请一起听</button>
-      <button type="button" className="btn ghost sm" disabled={busy} onClick={() => void change({ action: 'createRoom' })}>创建房间</button>
+      <Link href="/social?tab=domains" className="btn ghost sm" onClick={() => { app.setNowOpen(false); onClose(); }}>查看域</Link>
       <button type="button" className="ib" aria-label="关闭邀请" onClick={onClose}><Icon n="x" s={15} /></button>
     </form>
   );

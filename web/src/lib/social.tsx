@@ -110,6 +110,7 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
       receivedAt.current = Date.now();
       latest.current = next;
       setState(next); setDirectory(next.people);
+      if (data.action === 'joinDomain' || data.action === 'leave') window.dispatchEvent(new Event('nt:domain-refresh'));
       setError('');
       return next;
     });
@@ -184,7 +185,10 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
     // Show the small user directory before downloading presence, inbox and queues.
     get<{ people: Person[] }>('/api/social?scope=directory').then(data => { if (live && !latest.current) setDirectory(data.people); }).catch(() => {}).finally(() => { bootstrapped = true; if (live) void pulse(); });
     const wake = () => { if (bootstrapped && !document.hidden) void pulse(); };
-    const roomWake = () => { if (bootstrapped) void pulse(); };
+    const roomWake = () => {
+      if (bootstrapped) void pulse();
+      window.dispatchEvent(new Event('nt:domain-refresh'));
+    };
     const events = typeof EventSource === 'undefined' ? null : new EventSource('/api/social/events');
     events?.addEventListener('open', roomWake);
     events?.addEventListener('room', roomWake);
@@ -207,7 +211,7 @@ function SocialSession({ userId, children }: { userId: number; children: ReactNo
     if (!activeRoom || !app.current || openedRoom.current === activeRoom.id) return;
     if (activeRoom.hostId !== userId && activeRoom.playback?.songId !== app.current.id) return;
     openedRoom.current = activeRoom.id;
-    if (activeRoom.group && activeRoom.hostId === userId && pathRef.current === '/social') return;
+    if (activeRoom.group && (activeRoom.domain || activeRoom.hostId === userId) && pathRef.current === '/social') return;
     app.setNowOpen(true);
   }, [activeRoom, app.current, app.setNowOpen, userId]);
   useEffect(() => {

@@ -70,7 +70,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
   const pendingRoom = social.state?.rooms.find(item => !item.active && item.guestId === app.me?.id) ?? social.state?.rooms.find(item => !item.active);
   const pendingPeer = pendingRoom && social.state?.people.find(person => person.id === (pendingRoom.hostId === app.me?.id ? pendingRoom.guestId : pendingRoom.hostId));
   const conversationPeer = partner || pendingPeer || chatPeer;
-  const hasChat = !!(groupRoom || conversationPeer);
+  const hasChat = !room?.domain && !!(groupRoom || conversationPeer);
+  useEffect(() => { if (!hasChat) setMobilePage('playback'); }, [hasChat]);
   useEffect(() => {
     if (partner || pendingPeer) setChatPeer(partner || pendingPeer || null);
   }, [partner, pendingPeer]);
@@ -246,7 +247,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
         <div className="np-stage">
           {showPlayerContents && <PlayerLyrics key={songId} flowSeed={lyricFlowSeed} lines={lines} active={active} position={time} playing={app.playing && !app.loading} duration={duration} status={lyricStatus} plainText={currentLyrics?.plainText} showTranslation={app.showTr} onSeek={app.seek}
             onBackgroundClick={() => { if (window.matchMedia('(max-width: 860px)').matches) toggleMobileArt(); }} />}
-          {showPlayerContents && (groupRoom || activeRoom) && (
+          {showPlayerContents && !room?.domain && (groupRoom || activeRoom) && (
             <div className="together-chat-dock">
               {groupRoom ? <ListeningRoomChat compact key={groupRoom.id} room={groupRoom} />
                 : activeRoom && <Conversation compact key={activeRoom.room.id} person={activeRoom.peer} userId={app.me!.id} visible={app.nowOpen} />}

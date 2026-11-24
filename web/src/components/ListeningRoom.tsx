@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
@@ -7,7 +8,7 @@ import { Avatar } from './Cover';
 import { Icon } from './Icon';
 
 export function ListeningRoomControls({ room }: { room: ListeningRoom }) {
-  const { me, toast } = useApp();
+  const { me, toast, setNowOpen } = useApp();
   const { action, state } = useSocial();
   const [peer, setPeer] = useState('');
   const [busy, setBusy] = useState(false);
@@ -20,6 +21,11 @@ export function ListeningRoomControls({ room }: { room: ListeningRoom }) {
     catch (error) { toast(error instanceof Error ? error.message : '房间操作失败'); }
     finally { setBusy(false); }
   }
+  if (room.domain) return <div className="domain-player player-together">
+    <Icon n="users" s={19} />
+    <Link href={`/social?tab=domains&domain=${room.domain.id}`} className="t1 domain-playing-link" onClick={() => setNowOpen(false)}>{room.domain.name}</Link>
+    <button type="button" className="link" disabled={busy} onClick={() => void change({ action:'leave' })}>退出同步</button>
+  </div>;
   return <section className="player-together active listening-room" aria-label="一起听房间">
     <header className="together-header">
       <div className="together-status"><b>一起听房间 · {group.memberIds.length}/{LISTENING_ROOM_CAPACITY}</b>

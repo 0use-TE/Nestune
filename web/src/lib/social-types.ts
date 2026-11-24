@@ -1,4 +1,5 @@
 import type { SharedQueue } from './shared-queue';
+import type { Song } from './types';
 export const PRESENCE_TIMEOUT_MS = 35_000;
 export const LISTENING_ROOM_CAPACITY = 8;
 export type ListeningTrack = { id: string; name: string; artist: string };
@@ -27,6 +28,18 @@ export type ListeningRoom = {
   queueUnchanged?: boolean;
   group?: { memberIds: number[]; pendingIds: number[]; messages: Message[]; playbackVersion: number };
   inviteId?: number;
+  domain?: { id: number; name: string };
+};
+export type DomainSummary = {
+  id: number; name: string; ownerId: number | null; members: number;
+  invited: boolean; listeners: number; track: string | null;
+};
+export type DomainMessage = Omit<Message, 'senderId'> & { senderId: number | null };
+export type DomainDetail = DomainSummary & {
+  memberIds: number[]; pendingIds: number[];
+  songs: { song: Song; addedBy: number | null }[];
+  messages: DomainMessage[];
+  hasEarlier: boolean;
 };
 export type SocialState = { people: Person[]; rooms: ListeningRoom[]; inbox: ConversationSummary[]; showOnline: boolean; serverTime: number; peopleVersion?: string };
 export type SocialUpdate = Omit<SocialState, 'people'> & { people?: Person[] };

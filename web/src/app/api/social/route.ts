@@ -9,6 +9,7 @@ import { editListeningQueue, initializeListeningQueue, saveListeningQueue } from
 import { acceptListening, answerFriend, controlListening, expireRooms, inviteListener, leaveListening, markMessagesRead, peerReadThrough, readMessages, requestFriend, sendMessage, setOnlineVisibility, shareSong, sharePlaylist, socialDirectory, socialState, syncSocial } from '@/server/social';
 import { createGroupRoom, groupRoomAudience, inviteGroupGuest, sendGroupMessage } from '@/server/listening-rooms';
 import { notifyListeningUsers } from '@/server/listening-events';
+import { joinDomainPlayback } from '@/server/listening-domains';
 
 const options = { bucket: 'social' };
 
@@ -100,6 +101,7 @@ export const POST = userRoute(async (req, _ctx, user, sessionId) => {
     case 'read': markMessagesRead(user.id, id(data.peerId), id(data.throughId)); break;
     case 'invite': inviteListener(listener, id(data.peerId)); break;
     case 'createRoom': expireRooms(); room = createGroupRoom(listener); break;
+    case 'joinDomain': expireRooms(); room = joinDomainPlayback(listener, id(data.domainId)); break;
     case 'inviteRoom': expireRooms(); inviteGroupGuest(listener, room!, id(data.peerId)); break;
     case 'roomMessage': expireRooms(); sendGroupMessage(listener, room!, str(data.text, 1, 1000, '消息')); break;
     case 'acceptInvite': acceptListening(listener, room!); break;

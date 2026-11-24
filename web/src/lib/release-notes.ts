@@ -8,6 +8,16 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.31',
+    date: '2026 年 11 月 24 日',
+    title: '一起听新增「域」',
+    summary: '在「一起听」的第三个分页创建域，邀请好友聊天、分享歌曲和一起听。每个域都有自己的歌单。',
+    sections: [
+      { title: '域群聊与同步播放', paragraphs: ['打开域即可查看成员和消息，点「加入一起听」跟上播放进度。退出同步后，成员、聊天和域歌单仍会保留。'] },
+      { title: '添加歌曲', paragraphs: ['点击群聊歌曲卡片上的加号，或从歌曲的「⋯」菜单选择「添加到域歌单」。也可以在域歌单里从当前歌曲、我的歌单或搜索添加。'] },
+    ],
+  },
+  {
     version: '1.2.30',
     date: '2026 年 11 月 24 日',
     title: 'iOS 桌面版后台播放修复',

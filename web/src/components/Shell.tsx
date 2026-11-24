@@ -25,6 +25,7 @@ import { ReleaseNotice } from './ReleaseNotice';
 import { PlaylistQueueDrop } from './PlaylistQueueDrop';
 import { FriendSongDrop } from './FriendSongDrop';
 import { UsageGuide } from './UsageGuide';
+import { AddToDomain } from './Domains';
 
 const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/library', '音乐库', 'lib'], ['/social', '一起听', 'users'], ['/square', '画布', 'dash']] as const;
 const DETAIL_PATH = /^\/(album|artist|playlist|shared|my|people)\/[^/]+$/;
@@ -38,6 +39,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const main = useRef<HTMLElement>(null);
   const previousPath = useRef<string | null>(null);
   const [newPl, setNewPl] = useState<{ song?: Song } | null>(null);
+  const [domainSong, setDomainSong] = useState<Song | null>(null);
   const [lyricsPinned, setLyricsPinned] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
   const canvasQueueRequested = useRef(false);
@@ -183,9 +185,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
         onToggleQueue={toggleQueue} onDetails={() => { closeQueue(); app.setNowOpen(true); }} />
       <NowPlaying lyricsPinned={lyricsPinned} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && app.nowOpen} onToggleQueue={toggleQueue} />
       {queueOpen && app.current && <QueuePopover inPlayer={app.nowOpen} onClose={closeQueue} />}
-      <SongMenu onNewPlaylist={s => setNewPl({ song: s })} />
+      <SongMenu onNewPlaylist={s => setNewPl({ song: s })} onDomainSong={setDomainSong} />
       {app.saveDialog && <SaveDialog song={app.saveDialog} />}
       {newPl && <NewPlaylist song={newPl.song} onClose={() => setNewPl(null)} />}
+      {domainSong && <AddToDomain song={domainSong} onClose={() => setDomainSong(null)} />}
       <Toasts />
     </>
   );
@@ -212,7 +215,7 @@ function Toasts() {
   </>;
 }
 
-function SongMenu({ onNewPlaylist }: { onNewPlaylist: (s: Song) => void }) {
+function SongMenu({ onNewPlaylist, onDomainSong }: { onNewPlaylist: (s: Song) => void; onDomainSong: (s: Song) => void }) {
   const app = useApp();
   const router = useRouter();
   const ref = useRef<HTMLDivElement>(null);
@@ -256,6 +259,7 @@ function SongMenu({ onNewPlaylist }: { onNewPlaylist: (s: Song) => void }) {
           const label = artists.length === 1 ? '查看歌手' : `查看歌手 · ${artist.name}`;
           return <button key={artist.id} title={label} onClick={run(() => navigate(`/artist/${artist.id}`))}><Icon n="user" s={18} /><span className="t1">{label}</span></button>;
         })}
+        <button onClick={run(() => onDomainSong(s))}><Icon n="users" s={18} />添加到域歌单…</button>
         <hr /><div className="hd">添加到歌单</div>
         {app.playlists.map(p => <button key={p.id} onClick={() => addTo(p.id)}><Icon n="note" s={18} /><span className="t1">{p.name}</span></button>)}
         <button onClick={run(() => onNewPlaylist(s))}><Icon n="plus" s={18} />新建歌单…</button>

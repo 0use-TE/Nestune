@@ -28,6 +28,7 @@ const P: Record<string, string> = {
   repeatOff: '<path d="m3 3 18 18m-4-19 4 4-4 4M9 6h12M3 11v-1c0-1.2.5-2.2 1.3-2.9M7 22l-4-4 4-4m-4 4h11m6-1.5c.6-.7 1-1.5 1-2.5v-1"/>',
   down: '<path d="m6 9 6 6 6-6"/>',
   back: '<path d="m15 6-6 6 6 6"/>',
+  forward: '<path d="m9 6 6 6-6 6"/>',
   send: '<path d="m21 3-7.6 18-3.2-7.2L3 10.6 21 3ZM10.2 13.8l4.5-4.5"/>',
   download: '<path d="M12 3v12m-5-5 5 5 5-5M4 16v4h16v-4"/>',
   list: '<path d="M3 6h18M3 12h18M3 18h12"/>',

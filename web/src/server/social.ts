@@ -75,9 +75,10 @@ export function socialState({ userId: user, sessionId }: Listener, queues: Recor
       friendship: row.accepted ? 'friend' : row.requested_by === user ? 'outgoing' : row.requested_by ? 'incoming' : null,
     };
   });
-  const rooms = all<RoomRow>(`SELECT r.* FROM listening_rooms r
+  const rooms = all<RoomRow & { domain_name: string | null }>(`SELECT r.*,d.name domain_name FROM listening_rooms r
     JOIN users host ON host.id=r.host_id AND host.status='active'
     JOIN users guest ON guest.id=r.guest_id AND guest.status='active'
+    LEFT JOIN listening_domains d ON d.id=r.domain_id
     WHERE (r.group_room=0 AND (r.host_id=? OR r.guest_id=?)) OR
       (r.group_room=1 AND EXISTS(SELECT 1 FROM listening_room_members m WHERE m.room_id=r.id AND m.user_id=?))
     ORDER BY r.active DESC,r.id DESC`, user, user, user).map((row): ListeningRoom => {
@@ -93,8 +94,9 @@ export function socialState({ userId: user, sessionId }: Listener, queues: Recor
           ? { songId: row.song_id, position: row.position, playing: !!row.playing } : null,
         ...(members && onThisDevice ? { group: {
           memberIds: members.map(member => member.user_id), pendingIds: row.host_id === user ? pendingGroupGuests(row.id) : [],
-          messages: groupMessages(row.id), playbackVersion: row.playback_version,
+          messages: row.domain_id ? [] : groupMessages(row.id), playbackVersion: row.playback_version,
         } } : {}),
+        ...(row.domain_id && row.domain_name ? { domain: { id: row.domain_id, name: row.domain_name } } : {}),
       };
     });
   rooms.push(...all<{ id: number; hostId: number; inviteId: number; updatedAt: number }>(`SELECT r.id,i.host_id hostId,i.id inviteId,i.updated_at updatedAt

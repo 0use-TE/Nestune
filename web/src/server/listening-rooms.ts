@@ -1,11 +1,12 @@
 import { LISTENING_ROOM_CAPACITY, type Message } from '@/lib/social-types';
 import { all, db, now, one, run } from './db';
 import { fail } from './http';
+import { notifyListeningUsers } from './listening-events';
 
 export type Listener = { userId: number; sessionId: string };
 export type Room = {
   id: number; host_id: number; guest_id: number; host_session_id: string; guest_session_id: string | null;
-  active: number; group_room: number; queue_data: string | null; song_id: string | null;
+  active: number; group_room: number; domain_id: number | null; queue_data: string | null; song_id: string | null;
   position: number; playing: number; updated_at: number; transport_version: number; playback_version: number;
 };
 const MEMBER_TIMEOUT = 120_000;
@@ -30,7 +31,9 @@ export function pendingGroupGuests(id: number) {
 }
 
 export function groupRoomAudience(id: number, includeInvited = false) {
-  if (!groupRoom(id)) return [];
+  const room = groupRoom(id);
+  if (!room) return [];
+  if (room.domain_id) return all<{ user_id: number }>('SELECT user_id FROM listening_domain_members WHERE domain_id=?', room.domain_id).map(member => member.user_id);
   const users = groupMembers(id).map(member => member.user_id);
   return includeInvited ? [...users, ...pendingGroupGuests(id)] : users;
 }
@@ -46,9 +49,13 @@ export function requireGroupMember(listener: Listener, room: number) {
   }
 }
 
-function join(room: number, listener: Listener, time: number) {
+export function joinGroupDevice(room: number, listener: Listener, time: number) {
   run('INSERT INTO listening_room_members(room_id,user_id,session_id,joined_at,last_seen) VALUES(?,?,?,?,?)',
     room, listener.userId, listener.sessionId, time, time);
+}
+
+function join(room: number, listener: Listener, time: number) {
+  joinGroupDevice(room, listener, time);
   run("UPDATE listening_invites SET status='expired',updated_at=? WHERE guest_id=? AND room_id<>? AND status='pending'", time, listener.userId, room);
   run('DELETE FROM listening_rooms WHERE group_room=0 AND active=0 AND (host_id=? OR guest_id=?)', listener.userId, listener.userId);
 }
@@ -70,6 +77,7 @@ export function inviteGroupGuest(listener: Listener, id: number, peer: number) {
   roomTransaction(() => {
     const room = groupRoom(id);
     requireGroupMember(listener, id);
+    if (room?.domain_id) throw fail(409, '请在域详情里邀请好友');
     if (!room || room.host_id !== listener.userId) throw fail(403, '请由房主发出邀请');
     const [low, high] = [Math.min(listener.userId, peer), Math.max(listener.userId, peer)];
     if (!one(`SELECT 1 FROM friendships f JOIN users u ON u.id=? AND u.status='active'
@@ -87,6 +95,7 @@ export function inviteGroupGuest(listener: Listener, id: number, peer: number) {
 
 export function acceptGroupGuest(listener: Listener, id: number) {
   roomTransaction(() => {
+    if (groupRoom(id)?.domain_id) throw fail(409, '请从域列表接受邀请');
     const existing = groupMembers(id).find(member => member.user_id === listener.userId);
     if (existing?.session_id === listener.sessionId) return;
     if (hasListeningRoom(listener.userId)) throw fail(409, '你已加入一起听');
@@ -113,11 +122,15 @@ export function leaveGroupRoom(listener: Listener, id: number, inviteId?: number
         AND (? OR guest_id=?)`, host ? 'cancelled' : 'declined', time, inviteId, id, Number(host), listener.userId);
       return;
     }
-    requireGroupMember(listener, id);
-    run('DELETE FROM listening_room_members WHERE room_id=? AND user_id=?', id, listener.userId);
-    run("UPDATE listening_invites SET status='ended',updated_at=? WHERE room_id=? AND guest_id=? AND status='accepted'", time, id, listener.userId);
-    if (room.host_id === listener.userId) assignGroupHost(room, time);
+    dropGroupDevice(room, listener, time);
   });
+}
+
+export function dropGroupDevice(room: Room, listener: Listener, time: number) {
+  requireGroupMember(listener, room.id);
+  run('DELETE FROM listening_room_members WHERE room_id=? AND user_id=?', room.id, listener.userId);
+  run("UPDATE listening_invites SET status='ended',updated_at=? WHERE room_id=? AND guest_id=? AND status='accepted'", time, room.id, listener.userId);
+  if (room.host_id === listener.userId) assignGroupHost(room, time);
 }
 
 function assignGroupHost(room: Room, time: number) {
@@ -138,6 +151,13 @@ export function expireGroupRooms(time: number) {
     run('DELETE FROM listening_room_members WHERE room_id=? AND user_id=?', member.room_id, member.user_id);
     run("UPDATE listening_invites SET status='ended',updated_at=? WHERE room_id=? AND guest_id=? AND status='accepted'", time, member.room_id, member.user_id);
   }
+  const changed = new Set(expired.map(member => member.room_id));
+  for (const room of changed) {
+    if (groupRoom(room)?.domain_id) {
+      const audience = groupRoomAudience(room);
+      queueMicrotask(() => notifyListeningUsers(audience));
+    }
+  }
   const rooms = all<Room>(`SELECT * FROM listening_rooms r WHERE group_room=1
     AND NOT EXISTS(SELECT 1 FROM listening_room_members m WHERE m.room_id=r.id AND m.user_id=r.host_id)`);
   for (const room of rooms) assignGroupHost(room, time);
@@ -156,5 +176,6 @@ export function groupMessages(id: number): Message[] {
 
 export function sendGroupMessage(listener: Listener, id: number, text: string) {
   requireGroupMember(listener, id);
+  if (groupRoom(id)?.domain_id) throw fail(409, '请在域群聊中发送消息');
   run('INSERT INTO listening_room_messages(room_id,sender_id,text,sent_at) VALUES(?,?,?,?)', id, listener.userId, text, now());
 }
