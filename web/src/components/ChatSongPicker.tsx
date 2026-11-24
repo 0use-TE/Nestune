@@ -11,8 +11,8 @@ import { useApp } from '@/lib/app';
 import { personalPlaylistPath } from '@/lib/playlist-queue';
 import { CanvasSource } from './CanvasSource';
 
-export function ChatSongPicker({ current, busy, onShare, onClose, purpose = 'friend' }: {
-  current: Song | null; busy: boolean; onShare: (id: string) => void; onClose: () => void; purpose?: 'friend' | 'domain-share' | 'domain-add';
+export function ChatSongPicker({ current, busy, onShare, onClose, savedIds, purpose = 'friend' }: {
+  current: Song | null; busy: boolean; onShare: (id: string) => void; onClose: () => void; savedIds?: ReadonlySet<string>; purpose?: 'friend' | 'domain-share' | 'domain-add';
 }) {
   const app = useApp();
   const [tab, setTab] = useState<'current' | 'playlists' | 'search'>(current ? 'current' : 'playlists');
@@ -69,10 +69,11 @@ export function ChatSongPicker({ current, busy, onShare, onClose, purpose = 'fri
         {tab === 'search' && keyword && !songs.length && <p role="status" className="sub">{matches?.error || (matches ? '没有找到歌曲' : <Loading inline label="正在搜索歌曲" />)}</p>}
         {tab === 'playlists' && !songs.length && <p role="status" className="sub">{loadedPlaylist?.error || (loadedPlaylist ? '这个歌单还没有可分享的歌曲' : <Loading inline label="正在读取歌单" />)}</p>}
         {songs.map(song => {
-          const button = <button type="button" className="chat-song-row" key={song.id} aria-label={`${verb} ${song.name}`} disabled={busy} onClick={() => onShare(song.id)}>
+          const saved = adding && savedIds?.has(song.id);
+          const button = <button type="button" className="chat-song-row" key={song.id} aria-label={`${saved ? '已添加' : verb} ${song.name}`} disabled={busy || saved} onClick={() => onShare(song.id)}>
             <Cover src={song.cover} seed={song.id} />
             <span className="chat-song-text"><b className="t1">{song.name}</b><small className="t1">{song.artists.map(artist => artist.name).join(' / ')}</small></span>
-            <Icon n={adding ? 'plus' : 'send'} s={16} />
+            <Icon n={saved ? 'check' : adding ? 'plus' : 'send'} s={16} />
           </button>;
           return purpose === 'friend' ? <CanvasSource key={song.id} source={{ kind: 'song', songId: song.id, name: song.name, cover: song.cover, previewSong: song }}>{button}</CanvasSource> : button;
         })}

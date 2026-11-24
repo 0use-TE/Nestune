@@ -16,7 +16,7 @@ export function Sheet({ title, onClose, children, className = '' }: { title: str
     window.visualViewport?.addEventListener('resize', sync);
     window.visualViewport?.addEventListener('scroll', sync);
     window.addEventListener('resize', sync);
-    const frame = requestAnimationFrame(() => (panel.current?.querySelector<HTMLElement>('input,textarea') || panel.current?.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true }));
+    const frame = requestAnimationFrame(() => (panel.current?.querySelector<HTMLElement>('[data-sheet-initial-focus]') || panel.current?.querySelector<HTMLElement>('input,textarea') || panel.current?.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true }));
     const remove = registerOverlay(() => close.current());
     const key = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); }

@@ -8,6 +8,10 @@ export type Person = {
   online: boolean | null; track: ListeningTrack | null;
   friendship: 'friend' | 'incoming' | 'outgoing' | null;
 };
+export function inviteFriends(people: Person[] = [], memberIds: number[] = []) {
+  return people.filter(person => person.friendship === 'friend' && !memberIds.includes(person.id))
+    .sort((a, b) => Number(b.online === true) - Number(a.online === true) || a.name.localeCompare(b.name, 'zh-CN') || a.id - b.id);
+}
 export type SharedPlaylist = { id: number; name: string; cover: string | null; trackCount: number };
 export type SharedSong = ListeningTrack & { cover: string | null };
 export type InviteStatus = 'pending' | 'accepted' | 'cancelled' | 'declined' | 'expired' | 'ended';

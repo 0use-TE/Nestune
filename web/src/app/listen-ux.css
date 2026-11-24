@@ -24,6 +24,7 @@
 .listening-invite .btn{white-space:nowrap}
 .domains{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding-bottom:4px}
 .domain-list-toolbar{display:flex;justify-content:flex-end;margin:2px 0 12px}
+.domain-list-toolbar{gap:10px;align-items:center}.domain-list-toolbar .chat-song-search{flex:1;min-width:0}
 .domain-list,.domain-song-list{list-style:none;padding:0;margin:0;display:grid;gap:7px}
 .domain-row,.domain-player{display:flex;align-items:center;gap:12px;min-width:0;padding:10px 12px;background:var(--surface);border:1px solid var(--line);border-radius:13px;text-align:left}
 .domain-row{width:100%}
@@ -38,12 +39,21 @@ button.domain-row:hover,a.domain-row:hover{background:var(--soft)}
 .domain-heading{display:flex;align-items:center;gap:7px;min-width:0}
 .domain-heading h2{font-size:22px;margin:0;flex:1}
 .domain-heading .ib{flex:none;width:38px;height:38px}
+.domain-tool{display:inline-flex;align-items:center;gap:5px;min-height:36px;padding:0 8px;border-radius:9px;color:var(--sub);font-size:13px}.domain-tool:is(:hover,:focus-visible){background:var(--soft);color:var(--text)}
 .domain-tools,.domain-sheet-actions{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .domain-sheet-actions{margin-bottom:10px}
 .domain-page .domain-chat{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) auto}
 .domain-page .domain-chat .social-messages{grid-row:1}
 .domain-page .domain-chat .chat-composer{grid-row:2}
+.domain-song-card{display:flex;align-items:center;gap:2px;padding:3px}
+.domain-song-card .chat-song-row{flex:1;width:auto}
 .domain-song-card .ib{flex:none}
+.domain-sheet-actions,.sheet:has(.domain-scroll)>.chat-song-search{flex-shrink:0}
+.domain-scroll{min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--muted) transparent}
+.domain-people{list-style:none;padding:0;margin:8px 0}
+.domain-invite-row{display:flex;align-items:center;gap:10px;padding:8px 2px}
+.domain-latest{position:absolute;right:4px;bottom:calc(100% + 8px);box-shadow:var(--shadow-s)}
+.domain-chat .message-meta{margin:1px 3px 3px}
 .domain-song-list li{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--line)}
 .domain-song-list .cv{width:38px;flex:none}
 .domain-song-list .ib{flex:none;width:32px;height:32px}

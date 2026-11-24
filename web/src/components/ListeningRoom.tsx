@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
-import { LISTENING_ROOM_CAPACITY, type ListeningRoom } from '@/lib/social-types';
+import { inviteFriends, LISTENING_ROOM_CAPACITY, type ListeningRoom } from '@/lib/social-types';
 import { Avatar } from './Cover';
 import { Icon } from './Icon';
 
@@ -14,7 +14,7 @@ export function ListeningRoomControls({ room }: { room: ListeningRoom }) {
   const [busy, setBusy] = useState(false);
   const group = room.group!;
   const owner = room.hostId === me?.id;
-  const friends = state?.people.filter(person => person.friendship === 'friend' && !group.memberIds.includes(person.id) && !group.pendingIds.includes(person.id)) ?? [];
+  const friends = inviteFriends(state?.people, [...group.memberIds, ...group.pendingIds]);
   async function change(data: Record<string, unknown>) {
     setBusy(true);
     try { await action({ ...data, roomId: room.id }); setPeer(''); }
@@ -46,7 +46,7 @@ export function ListeningRoomControls({ room }: { room: ListeningRoom }) {
     }}>
       <select aria-label="选择好友" value={peer} onChange={event => setPeer(event.target.value)} disabled={busy || !friends.length}>
         <option value="">{friends.length ? '选择好友' : '暂无可邀请好友'}</option>
-        {friends.map(friend => <option key={friend.id} value={friend.id}>{friend.name}</option>)}
+        {friends.map(friend => <option key={friend.id} value={friend.id}>{friend.name}{friend.online && ' · 在线'}</option>)}
       </select>
       <button className="btn ghost sm" disabled={busy || !peer}>邀请</button>
       {!!group.pendingIds.length && <small className="sub">{group.pendingIds.length} 个待接受</small>}

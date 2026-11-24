@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
-import type { DomainDetail, DomainMessage, DomainSummary } from '@/lib/social-types';
+import { inviteFriends, type DomainDetail, type DomainMessage, type DomainSummary } from '@/lib/social-types';
 import type { Song } from '@/lib/types';
 import { Avatar, Cover } from './Cover';
 import { ChatSongPicker } from './ChatSongPicker';
@@ -64,10 +64,14 @@ function DomainList() {
   const { state } = useSocial();
   const { data, error } = useDomains<{ domains: DomainSummary[] }>('/api/domains');
   const [name, setName] = useState('');
+  const [domainQuery, setDomainQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const previous = state?.rooms.find(room => !room.domain && room.active);
   const pending = state?.rooms.some(room => !room.active && room.inviteId);
+
+  const domains = (data?.domains ?? []).filter(domain => domain.name.toLocaleLowerCase().includes(domainQuery.trim().toLocaleLowerCase()))
+    .sort((a, b) => Number(b.invited) - Number(a.invited));
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -90,12 +94,17 @@ function DomainList() {
   }
 
   return <section className="domains" aria-label="域列表">
-    <div className="domain-list-toolbar"><button type="button" className="btn sm" onClick={() => setCreating(true)}><Icon n="plus" s={16} />创建域</button></div>
+    <div className="domain-list-toolbar">
+      {(domainQuery || (data?.domains.length ?? 0) > 6) && <label className="chat-song-search"><Icon n="search" s={16} />
+        <input type="search" aria-label="搜索域" placeholder="搜索域" value={domainQuery} onChange={event => setDomainQuery(event.target.value)} />
+      </label>}
+      <button type="button" className="btn sm" onClick={() => setCreating(true)}><Icon n="plus" s={16} />创建域</button></div>
     {error && <p role="alert" className="err">{error}</p>}
     {!data && !error && <Loading />}
     {data?.domains.length === 0 && <p className="sub domain-empty">还没有加入域</p>}
+    {!!data?.domains.length && !domains.length && <p className="sub domain-empty">没有找到域</p>}
     <ul className="domain-list">
-      {data?.domains.map(domain => <li key={domain.id}>
+      {domains.map(domain => <li key={domain.id}>
         {domain.invited ? <div className="domain-row">
           <div className="domain-row-icon"><Icon n="users" s={20} /></div>
           <div className="domain-row-info"><b className="t1">{domain.name}</b><small className="sub">邀请你加入</small></div>
@@ -132,11 +141,13 @@ function DomainPage({ id }: { id: number }) {
   const router = useRouter();
   const { data, error } = useDomains<{ domain: DomainDetail }>('/api/domains?id=' + id);
   const domain = data?.domain;
-  const [panel, setPanel] = useState<'playlist' | 'members' | null>(null);
+  const [panel, setPanel] = useState<'playlist' | 'members' | 'invite' | null>(null);
   const [picker, setPicker] = useState<'domain-share' | 'domain-add' | null>(null);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState('');
-  const [peer, setPeer] = useState('');
+  const [songQuery, setSongQuery] = useState('');
+  const [friendQuery, setFriendQuery] = useState('');
+  const [awayFromLatest, setAwayFromLatest] = useState(false);
   const [older, setOlder] = useState<{ messages: DomainMessage[]; hasEarlier: boolean }>();
   const list = useRef<HTMLDivElement>(null);
   const followBottom = useRef(true);
@@ -161,7 +172,11 @@ function DomainPage({ id }: { id: number }) {
   async function send(event: FormEvent) {
     event.preventDefault();
     if (!draft.trim() || busy) return;
-    await doAction(async () => { followBottom.current = true; await write({ action:'message', text: draft.trim() }); setDraft(''); });
+    await doAction(async () => {
+      followBottom.current = true;
+      await write({ action:'message', text: draft.trim() });
+      setDraft(current => current === draft ? '' : current);
+    });
   }
   function chooseSong(songId: string) {
     if (!picker || busy) return;
@@ -169,7 +184,7 @@ function DomainPage({ id }: { id: number }) {
       if (picker === 'domain-share') followBottom.current = true;
       const result = await write({ action: picker === 'domain-add' ? 'add' : 'share', songId });
       if (picker === 'domain-add') app.toast(result.added ? '已添加到域歌单' : '域歌单里已经有这首歌了');
-      setPicker(null);
+      if (picker === 'domain-share') setPicker(null);
     });
   }
   async function loadEarlier() {
@@ -186,15 +201,33 @@ function DomainPage({ id }: { id: number }) {
   }
 
   const messages = [...(older?.messages ?? []), ...(recent ?? [])];
-  const friends = state?.people.filter(person => person.friendship === 'friend' && !domain?.memberIds.includes(person.id) && !domain?.pendingIds.includes(person.id)) ?? [];
-  const nameOf = (userId: number | null) => state?.people.find(person => person.id === userId)?.name || '成员';
+  const friends = inviteFriends(state?.people, domain?.memberIds);
+  const query = friendQuery.trim().toLocaleLowerCase();
+  const visibleFriends = friends.filter(friend => [friend.name, friend.username].some(value => value.toLocaleLowerCase().includes(query)));
+  const songFilter = songQuery.trim().toLocaleLowerCase();
+  const playlist = domain?.songs.filter(({ song }) => !songFilter || [song.name, ...song.artists.map(artist => artist.name)].some(value => value.toLocaleLowerCase().includes(songFilter))) ?? [];
+  const savedIds = new Set(domain?.songs.map(({ song }) => song.id));
+  const nameOf = (userId: number | null) => userId === app.me?.id ? app.me.displayName : state?.people.find(person => person.id === userId)?.name || '成员';
+  const activeRoom = state?.rooms.find(room => room.active && room.onThisDevice);
+  const canPlay = !!state && (!activeRoom || canControl);
+
+  async function playSong(songId: string, song?: Song) {
+    if (!canPlay || busy) return;
+    await doAction(async () => {
+      if (canControl && here) {
+        await socialAction({ action: 'roomQueue', roomId: here.id, command: { type: 'playNow', songId } });
+      } else {
+        app.playNow(song ?? (await api<{ song: Song }>('/api/songs/' + encodeURIComponent(songId))).song);
+      }
+    });
+  }
   return <article className="domain-page">
     <header className="domain-heading">
       <Link className="ib" href={domainListHref} aria-label="返回域列表" title="返回域列表"><Icon n="back" /></Link>
       <h2 className="t1">{domain?.name ?? '域'}</h2>
       {domain && <div className="domain-tools">
-        <button type="button" className="ib" aria-label="域成员" title="域成员" onClick={() => setPanel('members')}><Icon n="users" s={19} /></button>
-        <button type="button" className="ib" aria-label="域歌单" title="域歌单" onClick={() => setPanel('playlist')}><Icon n="list" s={19} /></button>
+        <button type="button" className="domain-tool" aria-label="域成员" title="域成员" onClick={() => setPanel('members')}><Icon n="users" s={17} /><span>成员</span></button>
+        <button type="button" className="domain-tool" aria-label="域歌单" title="域歌单" onClick={() => { setSongQuery(''); setPanel('playlist'); }}><Icon n="list" s={17} /><span>歌单</span></button>
       </div>}
     </header>
     {error && <p role="alert" className="err">{error}</p>}
@@ -216,67 +249,112 @@ function DomainPage({ id }: { id: number }) {
         <div className="social-messages" ref={list} role="log" onScroll={event => {
           const node = event.currentTarget;
           followBottom.current = node.scrollHeight - node.clientHeight - node.scrollTop < 70;
+          setAwayFromLatest(!followBottom.current);
         }}>
           {(older?.hasEarlier ?? domain.hasEarlier) && <button className="link social-earlier" disabled={busy} onClick={() => void loadEarlier()}>更早的消息</button>}
           {!messages.length && <p className="center sub">暂无消息</p>}
           {messages.map(message => {
             const mine = message.senderId === app.me?.id;
+            const song = message.song;
+            const saved = !!song && savedIds.has(song.id);
             return <div className={`message-entry ${mine ? 'mine' : ''}`} key={message.id}>
-              {!mine && <small className="message-meta">{nameOf(message.senderId)}</small>}
-              {message.song ? <div className="chat-song-card chat-song-row domain-song-card">
-                <Cover src={message.song.cover} seed={message.song.id} />
-                <span className="chat-song-text"><b className="t1">{message.song.name}</b><small className="t1">{message.song.artist}</small></span>
-                <button className="ib" aria-label="添加到域歌单" title="添加到域歌单" disabled={busy} onClick={() => void doAction(async () => {
-                  const saved = await write({ action:'add', songId:message.song!.id });
-                  app.toast(saved.added ? '已添加到域歌单' : '域歌单里已经有这首歌了');
-                })}><Icon n="plus" s={17} /></button>
+              <small className="message-meta">
+                {!mine && message.senderId && <Link href={`/people/${message.senderId}`}>{nameOf(message.senderId)} · </Link>}
+                <time dateTime={new Date(message.sentAt).toISOString()} title={new Date(message.sentAt).toLocaleString()}>{new Date(message.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</time>
+              </small>
+              {song ? <div className="chat-song-card domain-song-card">
+                <button type="button" className="chat-song-row" aria-label={`播放 ${song.name}`} disabled={busy || !canPlay}
+                  title={canPlay ? '播放' : here ? '同步播放由房主控制' : '正在其他房间同步播放'} onClick={() => void playSong(song.id)}>
+                  <Cover src={song.cover} seed={song.id} />
+                  <span className="chat-song-text"><b className="t1">{song.name}</b><small className="t1">{song.artist}</small></span>
+                  <Icon n="play" s={15} />
+                </button>
+                <button className="ib" aria-label={saved ? '已添加到域歌单' : '添加到域歌单'} title={saved ? '已添加到域歌单' : '添加到域歌单'} disabled={busy || saved} onClick={() => void doAction(async () => {
+                  const result = await write({ action:'add', songId:song.id });
+                  app.toast(result.added ? '已添加到域歌单' : '域歌单里已经有这首歌了');
+                })}><Icon n={saved ? 'check' : 'plus'} s={17} /></button>
               </div> : <p className={`social-message ${mine ? 'mine' : ''}`}>{message.text}</p>}
             </div>;
           })}
         </div>
-        <div className="chat-composer"><form onSubmit={send}>
-          <button type="button" className="ib" aria-label="分享歌曲" title="分享歌曲" disabled={busy} onClick={() => setPicker('domain-share')}><Icon n="note" s={18} /></button>
-          <input aria-label="域消息" placeholder="输入消息" maxLength={1000} value={draft} onChange={event => setDraft(event.target.value)} />
-          <button className="ib" aria-label="发送消息" disabled={busy || !draft.trim()}><Icon n="send" s={17} /></button>
-        </form></div>
+        <div className="chat-composer">
+          {awayFromLatest && <button type="button" className="domain-latest btn sm" onClick={() => {
+            if (list.current) list.current.scrollTop = list.current.scrollHeight;
+          }}><Icon n="down" s={14} />回到最新消息</button>}
+          <form onSubmit={send}>
+            <button type="button" className="ib" aria-label="分享歌曲" title="分享歌曲" disabled={busy} onClick={() => setPicker('domain-share')}><Icon n="note" s={18} /></button>
+            <input aria-label="域消息" placeholder="输入消息" maxLength={1000} value={draft} onChange={event => setDraft(event.target.value)} />
+            <button className="ib" aria-label="发送消息" disabled={busy || !draft.trim()}><Icon n="send" s={17} /></button>
+          </form>
+        </div>
       </section>
       {panel === 'playlist' && !picker && <Sheet title="域歌单" onClose={() => setPanel(null)}>
         <div className="domain-sheet-actions">
-          <button type="button" className="btn sm" onClick={() => setPicker('domain-add')}><Icon n="plus" s={17} />添加歌曲</button>
+          <button type="button" data-sheet-initial-focus className="btn sm" onClick={() => setPicker('domain-add')}><Icon n="plus" s={17} />添加歌曲</button>
           {canControl && <button type="button" className="btn ghost sm" disabled={busy || !domain.songs.length} onClick={() => void doAction(async () => {
             await socialAction({ action:'roomQueue', roomId:here!.id, command:{ type:'replace', songIds:domain.songs.map(({song}) => song.id), index:0 } });
             setPanel(null);
           })}>播放域歌单</button>}
         </div>
+        {(songQuery || domain.songs.length > 6) && <label className="chat-song-search"><Icon n="search" s={16} />
+          <input type="search" aria-label="搜索域歌单" placeholder="搜索歌名或歌手" value={songQuery} onChange={event => setSongQuery(event.target.value)} />
+        </label>}
+        {!!domain.songs.length && !playlist.length && <p className="sub domain-empty">没有找到歌曲</p>}
         {!domain.songs.length && <p className="sub domain-empty">域歌单还没有歌曲</p>}
-        <ul className="domain-song-list">{domain.songs.map(({ song, addedBy }) => <li key={song.id}>
+        <ul className="domain-song-list domain-scroll">{playlist.map(({ song, addedBy }) => <li key={song.id}>
           <Cover src={song.cover} seed={song.id} />
           <span className="domain-row-info"><b className="t1">{song.name}</b><small className="sub t1">{song.artists.map(artist => artist.name).join(' / ')} · {nameOf(addedBy)} 添加</small></span>
-          {canControl && <button type="button" className="ib" aria-label={`播放 ${song.name}`} title="播放" disabled={busy} onClick={() => void doAction(async () => {
-            await socialAction({ action:'roomQueue', roomId:here!.id, command:{type:'playNow', songId:song.id} }); setPanel(null);
-          })}><Icon n="play" s={17} /></button>}
+          <button type="button" className="ib" aria-label={`播放 ${song.name}`} title="播放" disabled={busy || !canPlay}
+            onClick={() => void playSong(song.id, song)}><Icon n="play" s={17} /></button>
+          <button type="button" className="ib" aria-label={`分享到域群聊 ${song.name}`} title="分享到域群聊" disabled={busy} onClick={() => void doAction(async () => {
+            followBottom.current = true;
+            await write({ action: 'share', songId: song.id });
+            setPanel(null);
+          })}><Icon n="send" s={17} /></button>
           {(owner || addedBy === app.me?.id) && <button type="button" className="ib" disabled={busy} aria-label={`从域歌单移除 ${song.name}`} title="从域歌单移除"
             onClick={() => void doAction(() => write({ action:'remove', songId:song.id }))}><Icon n="x" s={16} /></button>}
         </li>)}</ul>
       </Sheet>}
       {panel === 'members' && <Sheet title="域成员" onClose={() => setPanel(null)}>
-        <ul className="listening-members">{domain.memberIds.map(userId => <li key={userId}>
-          <Avatar name={nameOf(userId)} src={state?.people.find(person => person.id === userId)?.avatar} />
-          <span className="t1">{nameOf(userId)}</span>{userId === domain.ownerId && <small className="sub">域主</small>}
-        </li>)}</ul>
-        {owner ? <form className="listening-invite" onSubmit={event => {
-          event.preventDefault(); if (peer) void doAction(async () => { await write({ action:'invite', peerId:Number(peer) }); setPeer(''); app.toast('域邀请已发送'); });
-        }}>
-          <select aria-label="选择好友" value={peer} onChange={event => setPeer(event.target.value)}><option value="">{friends.length ? '选择好友' : '暂无可邀请好友'}</option>
-            {friends.map(friend => <option key={friend.id} value={friend.id}>{friend.name}</option>)}
-          </select>
-          <button className="btn sm" disabled={busy || !peer}>邀请好友</button>
+        {owner && <div className="domain-sheet-actions"><button type="button" className="btn sm" onClick={() => {
+          setFriendQuery(''); setPanel('invite');
+        }}><Icon n="plus" s={16} />邀请好友</button>
           {!!domain.pendingIds.length && <small className="sub">{domain.pendingIds.length} 个待接受</small>}
-        </form> : <button type="button" className="link" disabled={busy} onClick={() => void doAction(async () => {
+        </div>}
+        <ul className="domain-people domain-scroll">{domain.memberIds.map(userId => {
+          const person = state?.people.find(person => person.id === userId);
+          return <li key={userId}><Link className="share-recipient" href={`/people/${userId}`}>
+            <Avatar name={nameOf(userId)} src={userId === app.me?.id ? app.me.avatar : person?.avatar} />
+            <b className="t1">{nameOf(userId)}</b>
+            {person?.online && <small className="social-online">在线</small>}
+            {userId === domain.ownerId && <small className="sub">域主</small>}
+            <Icon n="forward" s={16} />
+          </Link></li>;
+        })}</ul>
+        {!owner && <button type="button" className="link" disabled={busy} onClick={() => void doAction(async () => {
           await write({ action:'leave' }); dispatchEvent(new Event('nt:social-refresh')); router.replace(domainListHref);
         })}>退出域</button>}
       </Sheet>}
-      {picker && <ChatSongPicker current={app.current} busy={busy} purpose={picker} onShare={chooseSong} onClose={() => setPicker(null)} />}
+      {panel === 'invite' && owner && <Sheet title="邀请好友" onClose={() => setPanel('members')}>
+        <label className="chat-song-search"><Icon n="search" s={16} />
+          <input type="search" aria-label="搜索好友" placeholder="搜索昵称或用户名" value={friendQuery} onChange={event => setFriendQuery(event.target.value)} />
+        </label>
+        <ul className="domain-people domain-scroll">{visibleFriends.map(friend => {
+          const pending = domain.pendingIds.includes(friend.id);
+          return <li key={friend.id} className="domain-invite-row">
+            <Avatar name={friend.name} src={friend.avatar} />
+            <span className="domain-row-info"><b className="t1">{friend.name}</b>
+              <small className="sub t1">@{friend.username}{friend.online !== null && <span className={friend.online ? 'social-online' : ''}> · {friend.online ? '在线' : '离线'}</span>}</small>
+            </span>
+            <button type="button" className="btn ghost sm" disabled={pending || busy} aria-label={`${pending ? '已邀请' : '邀请'} ${friend.name}`}
+              onClick={() => void doAction(async () => {
+                await write({ action: 'invite', peerId: friend.id }); app.toast('已邀请 ' + friend.name);
+              })}>{pending ? '已邀请' : '邀请'}</button>
+          </li>;
+        })}</ul>
+        {!visibleFriends.length && <p className="sub domain-empty">{query ? '没有找到好友' : '暂无可邀请好友'}</p>}
+      </Sheet>}
+      {picker && <ChatSongPicker savedIds={savedIds} current={app.current} busy={busy} purpose={picker} onShare={chooseSong} onClose={() => setPicker(null)} />}
     </>}
   </article>;
 }

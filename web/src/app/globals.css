@@ -57,6 +57,15 @@ h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
 #app{display:grid;grid-template-columns:var(--side) 1fr;height:100%}
 aside{padding:30px 16px 24px;display:flex;flex-direction:column;gap:2px;overflow-y:auto}
 #app>aside{background:var(--sidebar-bg);border-inline-end:1px solid var(--sidebar-line)}
+.sidebar-playlists{min-height:44px;min-width:0;flex:1;overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:transparent transparent}
+.sidebar-playlists:is(:hover,:focus-within){scrollbar-color:var(--muted) transparent}
+@supports selector(::-webkit-scrollbar){
+  .sidebar-playlists,.sidebar-playlists:is(:hover,:focus-within){scrollbar-width:auto;scrollbar-color:auto}
+  .sidebar-playlists::-webkit-scrollbar{width:4px}
+  .sidebar-playlists::-webkit-scrollbar-track,.sidebar-playlists::-webkit-scrollbar-thumb{background:transparent}
+  .sidebar-playlists:is(:hover,:focus-within)::-webkit-scrollbar-thumb{background:var(--muted);border-radius:4px}
+  .sidebar-playlists::-webkit-scrollbar-button{display:none}
+}
 #app>aside :is(.nav,.pl,.me):is(:hover,.on){background:var(--sidebar-highlight)}
 .brand{font-size:19px;font-weight:800;letter-spacing:-.03em;padding:0 12px 26px;display:flex;align-items:center;gap:9px}
 .logo{width:26px;height:26px;background:url('/icon.png') center/contain no-repeat;flex:none}

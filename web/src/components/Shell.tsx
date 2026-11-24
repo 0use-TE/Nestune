@@ -152,16 +152,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
           ))}
           <div className="lab">我的歌单<button aria-label="新建歌单" onClick={() => setNewPl({})}><Icon n="plus" s={16} /></button></div>
-          <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library?collection=likes" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
-            <span className="favorites-cover" aria-hidden="true"><Icon n="heart" s={16} /></span>
-            <span className="t1">我喜欢的音乐</span>
-          </Link></CanvasSource>
-          {app.playlists.map(p => (
-            <CanvasSource key={p.id} source={{ kind: 'playlist', playlistId: String(p.id), name: p.name, cover: p.cover }}><Link href={`/my/${p.id}`} className={`pl ${path === `/my/${p.id}` ? 'on' : ''}`} onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: String(p.id) })); } }}>
-              <Cover src={p.cover} seed={`pl${p.id}`} /><span className="t1">{p.name}</span>
+          <nav className="sidebar-playlists" aria-label="我的歌单">
+            <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library?collection=likes" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
+              <span className="favorites-cover" aria-hidden="true"><Icon n="heart" s={16} /></span>
+              <span className="t1">我喜欢的音乐</span>
             </Link></CanvasSource>
-          ))}
-          <div className="sp" />
+            {app.playlists.map(p => (
+              <CanvasSource key={p.id} source={{ kind: 'playlist', playlistId: String(p.id), name: p.name, cover: p.cover }}><Link href={`/my/${p.id}`} className={`pl ${path === `/my/${p.id}` ? 'on' : ''}`} onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: String(p.id) })); } }}>
+                <Cover src={p.cover} seed={`pl${p.id}`} /><span className="t1">{p.name}</span>
+              </Link></CanvasSource>
+            ))}
+          </nav>
           <Link href="/settings" className={`me ${path === '/settings' ? 'on' : ''}`}>
             <Avatar src={app.me.avatar} name={app.me.displayName} />
             <span style={{ minWidth: 0 }}><b className="t1" style={{ display: 'block' }}>{app.me.displayName}</b><span className="muted sm">个人资料与设置</span></span>

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useId, useRef, useState } from 'react';
 import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
-import type { ListeningRoom, Person } from '@/lib/social-types';
+import { inviteFriends, type ListeningRoom, type Person } from '@/lib/social-types';
 import { Avatar } from './Cover';
 import { Icon } from './Icon';
 
@@ -20,7 +20,7 @@ export function PlayerTogether({ inviting, onClose, active }: {
   const pending = state?.rooms.find(item => !item.active && item.guestId === me.id) ?? state?.rooms.find(item => !item.active);
   const activePeer = active?.peer;
   const pendingPeer = pending && state?.people.find(person => person.id === (pending.hostId === me.id ? pending.guestId : pending.hostId));
-  const friends = state?.people.filter(person => person.friendship === 'friend') ?? [];
+  const friends = inviteFriends(state?.people);
   const selected = friends.find(person => String(person.id) === peerId);
   const playing = room?.playback?.playing ?? app.playing;
 
@@ -102,7 +102,7 @@ function FriendPicker({ friends, selected, onSelect }: { friends: Person[]; sele
           {friends.map(friend => (
             <button type="button" key={friend.id} className={friend.id === selected?.id ? 'on' : ''} aria-pressed={friend.id === selected?.id}
               onClick={() => { onSelect(friend); dismiss(); }}>
-              <Avatar src={friend.avatar} name={friend.name} /><span className="t1">{friend.name}</span>
+              <Avatar src={friend.avatar} name={friend.name} /><span className="t1">{friend.name}</span>{friend.online && <small className="social-online">在线</small>}
               {friend.id === selected?.id && <Icon n="check" s={14} />}
             </button>
           ))}
