@@ -1,22 +1,37 @@
 # Nestune
 
-一个属于你的音乐空间。在线听歌、管理歌单和自己的音乐，也可以邀请朋友一起听、边听边聊。
+一个可以和朋友一起听歌、也可以一起画画的音乐空间。
 
-[开始体验](https://nestune.0use.net:8443/) · [项目介绍](https://0use.net/Nestune/) · [V1.2.1 更新与构建说明](docs/releases/v1.2.1.md)
+[在线体验](https://nestune.0use.net:8443/) · [下载客户端](https://nestune.0use.net:8443/downloads) · [项目介绍](https://0use.net/Nestune/)
 
 测试账号：`test` · 密码：`W1111111`
 
-| Folder | What |
-|---|---|
-| `web/` | **Current app.** Next.js: player UI + backend API + admin panel. See `web/README.md`. |
-| `audio-worker/` | NCM decrypt / MP3 transcode container. Deployed on the NAS (see below). |
-| `prototype/` | Static HTML mock-ups used to agree on the visual style. |
-| `clients/` | Tauri desktop clients for Windows, Linux and macOS, plus packaging scripts. See `clients/README.md`. Android includes the native media service and keyboard/back integration. |
-| `docs/` | Static project website. GitHub Actions deploys it to GitHub Pages when this folder changes on `main`. |
+## 共享画布
 
-## V1.2.1
+这是 2026 年 11 月 24 日的线上画布。墙上的涂鸦、便签、图片和唱片都由大家放上去。长按一张唱片拖到底部，就能把墙上的歌放进播放队列。
 
-![Nestune 桌面首页](docs/assets/showcase-home.webp)
+[![Nestune 共享画布实拍，彩色涂鸦围着中央的一簇唱片、照片和便签](docs/assets/showcase-canvas.webp)](https://nestune.0use.net:8443/square)
+
+## 听歌与收藏
+
+| 首页 · 从推荐开始听 | 音乐库 · 找回收藏的专辑 |
+| --- | --- |
+| ![桌面首页，显示推荐歌曲和最近播放](docs/assets/showcase-home.webp) | ![音乐库按封面展示收藏的专辑](docs/assets/showcase-library.webp) |
+
+播放歌曲时可以展开沉浸播放器，查看接下来要听的歌。手机上也可以切换到唱片视图。
+
+![桌面播放器展示专辑封面，右侧展开播放队列](docs/assets/showcase-player.webp)
+
+## 和朋友一起听
+
+在「一起听 → 域」里邀请好友。在线好友优先显示，大家可以在群聊里点歌、把歌加入域歌单，再加入同步播放。退出同步后，聊天记录和歌单仍然保留。
+
+| 手机播放器 | 域群聊 | 好友聊天 |
+| --- | --- | --- |
+| ![手机播放器的唱片视图与播放控制](docs/assets/showcase-mobile.webp) | ![手机端的域群聊，展示一起听入口、分享的歌曲和加歌按钮](docs/assets/showcase-domain-mobile.webp) | ![手机端好友聊天和底部迷你播放器](docs/assets/showcase-chat-mobile.webp) |
+
+<details>
+<summary>1.2.1 历史功能与安装包</summary>
 
 - 搜索与播放歌曲、专辑和歌单，沉浸播放器与歌词、可管理的播放队列。
 - 分别收藏歌曲、专辑和歌单，创建、分享自己的歌单，上传自己的音乐。
@@ -39,9 +54,19 @@
 | Linux x86-64 · 1.2.1 | [AppImage](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-Linux-x64.AppImage) · [DEB](https://nestune.0use.net:8443/downloads/files/Nestune-1.2.1-Linux-amd64.deb) |
 | Android 7+ · 1.2.1 | [通用 APK](https://nestune.0use.net:8443/api/client-updates/android/7) |
 
-客户端连接在线服务；网页功能更新无需重新打包，系统悬浮歌词需安装新版 Windows 或 Android 客户端。安装、系统依赖及签名说明见 [clients/README.md](clients/README.md)。[当前安装包校验](docs/releases/v1.2.1.md) · [下载与历史版本](https://nestune.0use.net:8443/downloads) · [更新记录](CHANGELOG.md)
+客户端连接在线服务；网页功能更新无需重新打包，系统悬浮歌词需安装新版 Windows 或 Android 客户端。安装、系统依赖及签名说明见 [clients/README.md](clients/README.md)。[1.2.1 安装包校验](docs/releases/v1.2.1.md) · [下载与历史版本](https://nestune.0use.net:8443/downloads) · [更新记录](CHANGELOG.md)
 
-展示截图来自当前产品，个人收藏及聊天使用演示内容。
+</details>
+
+## 仓库目录
+
+| Folder | What |
+|---|---|
+| `web/` | **Current app.** Next.js: player UI + backend API + admin panel. See `web/README.md`. |
+| `audio-worker/` | NCM decrypt / MP3 transcode container. Deployed on the NAS (see below). |
+| `prototype/` | Static HTML mock-ups used to agree on the visual style. |
+| `clients/` | Tauri desktop clients for Windows, Linux and macOS, plus packaging scripts. See `clients/README.md`. Android includes the native media service and keyboard/back integration. |
+| `docs/` | Static project website. GitHub Actions deploys it to GitHub Pages when this folder changes on `main`. |
 
 ## Run locally
 
@@ -63,3 +88,5 @@ docker compose ps
 docker compose logs --tail 30
 docker compose up -d --no-build --pull never
 ```
+
+不小心做成绘画软件了（误）
