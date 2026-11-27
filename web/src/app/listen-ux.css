@@ -63,6 +63,12 @@ button.domain-row:hover,a.domain-row:hover{background:var(--soft)}
 .domain-create .btn{justify-self:end}
 @media(max-width:640px){.domain-legacy{grid-template-columns:1fr}.domain-legacy .listening-room-chat{height:185px}.domain-page .domain-chat{padding:0 9px 7px}.domain-heading h2{font-size:19px}.domain-player{gap:7px}.domain-row{gap:8px}.domain-row-icon{width:34px;height:34px}}
 .usage-guide-layer{position:fixed;inset:0;z-index:115;pointer-events:none}
+.usage-guide{animation:guide-enter .36s cubic-bezier(.22,.65,.22,1)}
+.usage-guide-ring{animation:guide-ring-in .3s ease-out}
+.guide-step{animation:guide-enter .3s ease-out}
+@keyframes guide-enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes guide-ring-in{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){:root:not([data-full-motion]) :is(.usage-guide,.usage-guide-ring,.guide-step){animation:none}}
 .usage-guide-ring{position:fixed;border:2px solid #9caab5;border-radius:13px;box-shadow:0 0 0 4px #7b9eb21a;pointer-events:none}
 .usage-guide{position:fixed;pointer-events:auto;width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;padding:15px 17px;background:var(--surface);color:var(--text);border:1px solid var(--line);border-radius:17px;box-shadow:var(--shadow)}
 .usage-guide header,.usage-guide footer{display:flex;align-items:center;justify-content:space-between;gap:12px}.usage-guide header .ib{width:25px;height:25px}.usage-guide h3{font-size:15px;margin:6px 0 8px}.usage-guide p{font-size:13px;line-height:1.8;color:var(--sub)}.usage-guide footer{margin-top:16px}.usage-guide .btn{min-height:33px}

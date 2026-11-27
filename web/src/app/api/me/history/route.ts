@@ -1,4 +1,4 @@
-import { all, now, one, run } from '@/server/db';
+import { all, db, now, one, run } from '@/server/db';
 import { body, intParam } from '@/server/http';
 import { userRoute } from '@/server/guard';
 import { catalogId, catalogSong } from '@/server/catalog';
@@ -27,6 +27,12 @@ export const POST = userRoute(async (req, _ctx, u) => {
 });
 
 export const DELETE = userRoute((_req, _ctx, u) => {
-  run('DELETE FROM history WHERE user_id=?', u.id);
+  const conn = db();
+  conn.exec('BEGIN IMMEDIATE');
+  try {
+    run('DELETE FROM history WHERE user_id=?', u.id);
+    run('DELETE FROM heard_songs WHERE user_id=?', u.id);
+    conn.exec('COMMIT');
+  } catch (error) { conn.exec('ROLLBACK'); throw error; }
   return { ok: true };
 });

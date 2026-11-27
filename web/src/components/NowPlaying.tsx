@@ -1,4 +1,6 @@
 'use client';
+import { prefersQuietTransitions } from '@/lib/interface-motion';
+import { PlayerPull } from './PlayerPull';
 import { sourceIds } from '@/lib/music-ids';
 import { Loading } from './Loading';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -90,11 +92,8 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
       setKeepPlayerContents(true);
       return;
     }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setKeepPlayerContents(false);
-      return;
-    }
-    const timeout = window.setTimeout(() => setKeepPlayerContents(false), 300);
+    const duration = prefersQuietTransitions() ? 100 : 300;
+    const timeout = window.setTimeout(() => setKeepPlayerContents(false), duration);
     return () => window.clearTimeout(timeout);
   }, [app.nowOpen]);
 
@@ -180,7 +179,7 @@ export function NowPlaying({ lyricsPinned, onToggleLyrics, queueOpen, onToggleQu
           if (event.detail && Date.now() - lastSwipe.current < 400) { event.preventDefault(); event.stopPropagation(); }
         }}>
         {showPlayerContents && s.cover && <div className="np-mobile-backdrop" aria-hidden="true" style={{ backgroundImage: `url(${JSON.stringify(s.cover)})` }} />}
-        <button className="ib close" aria-label="收起" onClick={() => app.setNowOpen(false)}><Icon n="down" s={24} /></button>
+        <PlayerPull open toggle={() => app.setNowOpen(false)} />
         {hasChat && <div className="np-page-tabs" role="tablist" aria-label="播放与聊天" onKeyDown={event => {
           if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
           event.preventDefault();

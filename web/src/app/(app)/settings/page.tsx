@@ -1,7 +1,8 @@
 'use client';
+import { prefersQuietTransitions, useMotionPreference, setMotionPreference } from '@/lib/interface-motion';
 import Link from 'next/link';
 import { Loading } from '@/components/Loading';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, del, get, patch, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { useSocial } from '@/lib/social';
@@ -23,7 +24,18 @@ export default function SettingsPage() {
   const me = app.me!;
   const file = useRef<HTMLInputElement>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
+  const interfaceMotion = useMotionPreference();
   const [section, setSection] = useState<(typeof SECTIONS)[number]>('资料');
+  const sectionContent = useRef<HTMLDivElement>(null);
+  const previousSection = useRef(section);
+  useLayoutEffect(() => {
+    if (previousSection.current === section) return;
+    previousSection.current = section;
+    const motion = sectionContent.current?.animate?.([{ opacity: .25 }, { opacity: 1 }], {
+      duration: prefersQuietTransitions() ? 100 : 160,
+    });
+    return () => motion?.cancel();
+  }, [section]);
   const [plays, setPlays] = useState<number | null>(null);
   const [admin, setAdmin] = useState(false);
   const [name, setName] = useState(me.displayName);
@@ -80,6 +92,7 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      <div ref={sectionContent}>
       {section === '我的上传' && <ManageUploads />}
       {section === '关于' && <AboutNestune />}
 
@@ -123,6 +136,11 @@ export default function SettingsPage() {
               <button key={value} type="button" className={`chip ${app.sourcePreference === value ? 'on' : ''}`} aria-pressed={app.sourcePreference === value} onClick={() => app.setSourcePreference(value)}>{label}</button>)}</div>
           </div>
           <div className="set"><div><b>播放音量</b><p className="sub sm">只调节 Nestune 的声音</p></div><VolumeControl inline /></div>
+          <div className="set source-preference"><div><b>界面动效</b><p className="sub sm">控制星图、页面切换和播放器展开的动效</p></div>
+            <div className="row" role="group" aria-label="界面动效">{([['system', '跟随系统'], ['full', '完整动效']] as const).map(([value, label]) =>
+              <button type="button" key={value} className={`chip ${interfaceMotion === value ? 'on' : ''}`} aria-pressed={interfaceMotion === value}
+                onClick={() => setMotionPreference(value)}>{label}</button>)}</div>
+          </div>
           <div className="set">
             <b>外观</b>
             <div className="row" role="group" aria-label="外观">{([['auto', '自动'], ['light', '浅色'], ['dark', '深色']] as const).map(([k, l]) => <button key={k} className={`chip ${app.theme === k ? 'on' : ''}`} aria-pressed={app.theme === k} onClick={() => app.setTheme(k)}>{l}</button>)}</div>
@@ -168,6 +186,7 @@ export default function SettingsPage() {
           <button className="btn ghost sm settings-logout" onClick={app.logout}><Icon n="out" s={15} />退出登录</button>
         </section>
       )}
+      </div>
     </div>
   );
 }

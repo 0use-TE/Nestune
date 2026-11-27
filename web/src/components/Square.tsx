@@ -16,7 +16,9 @@ import type { CollectionFavorite } from '@/lib/collection-types';
 import { personalPlaylistPath } from '@/lib/playlist-queue';
 import type { Artist, Song } from '@/lib/types';
 import { RecordPlayerAudio, RECORD_INSERT_MS } from '@/lib/record-player-audio';
-import { Cover } from './Cover';
+import { registerOverlay } from '@/lib/overlays';
+import { usePanelPresence } from './usePanelPresence';
+import { MusicArtwork } from './MusicArtwork';
 import { Icon } from './Icon';
 import { Loading } from './Loading';
 import { Sheet } from './Sheet';
@@ -83,6 +85,10 @@ export function Square() {
     catch { setShowGuide(true); playGuideSeen.current = false; }
   }, [guideKey, playGuideKey]);
   const [picker, setPicker] = useState(false);
+  const pickerVisible = usePanelPresence(picker);
+  useEffect(() => {
+    if (picker) return registerOverlay(() => setPicker(false));
+  }, [picker]);
   const [tools, setTools] = useState(false);
   const [note, setNote] = useState<{ text: string; color: string; captureMoment: boolean } | null>(null);
   const [graffiti, setGraffiti] = useState<GraffitiArea | null>(null);
@@ -525,7 +531,7 @@ export function Square() {
     {(ghost && isCanvasMusic(ghost.item) || insertion || nativeSource) && <div className={`nc-receiver ${receivingCollection ? 'nc-receiver-collection' : ''} ${overPlayer || insertion ? 'nc-receiver-ready' : ''} ${insertion ? 'nc-receiver-loading' : ''}`} aria-label={insertion ? '唱片正在装入播放器' : receivingCollection ? '松开以接到播放列表末尾' : '松开唱片以加入播放列表'}><span className="nc-platter" /><span className="nc-slot" /><i className="nc-machine-light" /><Icon n={receivingCollection ? 'list' : 'play'} s={22} /></div>}
     {ghost && <div className={`nc-ghost nc-kind-${ghost.item.kind} ${auditioning === ghost.item.id ? 'nc-auditioning' : ''} ${overPlayer ? 'nc-ghost-ready' : ''}`} style={{ '--drag-x': `${ghost.x}px`, '--drag-y': `${ghost.y}px`, width: ghost.size } as React.CSSProperties} aria-hidden="true"><ItemArtwork item={ghost.item} spinning={auditioning === ghost.item.id} /></div>}
     {insertion && <div className="nc-insertion" aria-hidden="true" style={{ '--intake-x': `${insertion.x}px`, '--slot-y': `${insertion.slotY}px`, '--disc-size': `${insertion.size}px`, '--approach-x': `${insertion.fromX - insertion.x}px`, '--approach-y': `${insertion.fromY - (insertion.slotY - insertion.size / 2)}px`, '--intake-duration': `${RECORD_INSERT_MS}ms` } as React.CSSProperties}><div className="nc-intake-clip"><div className="nc-feeding-disc"><ItemArtwork item={insertion.item} /></div></div><div className="nc-intake-lip" /></div>}
-    {picker && createPortal(<div className={`nc-picker-mask ${ghost ? 'nc-picker-dragging' : ''}`} onPointerDown={event => { if (event.target === event.currentTarget) setPicker(false); }}>
+    {pickerVisible && createPortal(<div inert={!picker} aria-hidden={!picker} data-closing={!picker || undefined} className={`nc-picker-mask ${ghost ? 'nc-picker-dragging' : ''}`} onPointerDown={event => { if (event.target === event.currentTarget) setPicker(false); }}>
       <section className="nc-picker panel" role="dialog" aria-modal="true" aria-label="添加音乐">
         <header>
           <nav className="chips" aria-label="音乐类型">
@@ -605,23 +611,5 @@ const ItemArtwork = memo(function ItemArtwork({ item, spinning = false }: { item
   }
   if (item.kind === 'image') return <div className="nc-photo"><CanvasImage src={`/api/canvas/images/${item.imageFile}`} alt="画布图片" /></div>;
   if (item.kind === 'emoji') return <div className="nc-emoji-art">{item.emoji}</div>;
-  const count = item.tracks?.length ? `${item.tracks.length} 首` : '';
-  if (item.kind === 'album') return <div className="nc-music-art nc-album-art">
-    <div className="nc-album-disc"><Vinyl song={item.song} spinning={spinning} /></div>
-    <div className="nc-album-jacket"><Cover src={item.song.cover} seed={item.song.id || item.name} /><i className="nc-album-spine" /><i className="nc-album-sheen" />{count && <span className="nc-album-count">{count}</span>}</div>
-  </div>;
-  if (item.kind === 'playlist' || item.kind === 'queue') {
-    const second = item.tracks?.[1] ?? item.song;
-    return <div className="nc-music-art nc-folder-art">
-      <div className="nc-folder-back" />
-      <div className="nc-folder-paper"><Cover src={second.cover} seed={second.id || item.name} /></div>
-      <div className="nc-folder-disc"><Vinyl song={item.song} spinning={spinning} /></div>
-      <div className="nc-folder-front"><i /><b>{item.name}</b>{count && <small>{count}</small>}</div>
-    </div>;
-  }
-  return <div className="nc-music-art"><Vinyl song={item.song} spinning={spinning} /></div>;
+  return <MusicArtwork item={item} spinning={spinning} />;
 });
-
-function Vinyl({ song, spinning = false }: { song: Song; spinning?: boolean }) {
-  return <div className={`nc-disc ${spinning ? 'nc-spinning' : ''}`}><Cover src={song.cover} seed={song.id || song.name} /><i className="nc-spindle" /></div>;
-}

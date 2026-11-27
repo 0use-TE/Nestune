@@ -317,6 +317,16 @@ function open() {
   catch (error) { db.close(); throw error; }
   db.exec('BEGIN IMMEDIATE');
   try {
+    if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='heard_songs'").get()) {
+      db.exec(`CREATE TABLE heard_songs (
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        song_id TEXT NOT NULL, PRIMARY KEY(user_id, song_id)
+      ) WITHOUT ROWID;
+      INSERT OR IGNORE INTO heard_songs SELECT user_id, song_id FROM history;
+      CREATE TRIGGER history_mark_heard AFTER INSERT ON history BEGIN
+        INSERT OR IGNORE INTO heard_songs(user_id,song_id) VALUES(NEW.user_id,NEW.song_id);
+      END;`);
+    }
     const wallColumns = db.prepare('PRAGMA table_info(canvas_wall_tiles)').all();
     if (wallColumns.some(column => column.name === 'png')) {
       db.exec(`ALTER TABLE canvas_wall_tiles RENAME COLUMN png TO image;

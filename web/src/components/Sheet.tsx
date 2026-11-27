@@ -1,13 +1,21 @@
 'use client';
+import { prefersQuietTransitions } from '@/lib/interface-motion';
 import { createPortal } from 'react-dom';
-import { useEffect, useId, useRef, useState } from 'react';
-import { registerOverlay } from '@/lib/overlays';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { isTopOverlay, registerOverlay } from '@/lib/overlays';
 import { Icon } from './Icon';
 
 export function Sheet({ title, onClose, children, className = '' }: { title: string; onClose: () => void; children: React.ReactNode; className?: string }) {
   const id = useId();
   const panel = useRef<HTMLElement>(null);
   const close = useRef(onClose); close.current = onClose;
+  const [closing, setClosing] = useState(false);
+  const timer = useRef<number | null>(null);
+  const dismiss = useCallback(() => {
+    if (timer.current !== null) return;
+    setClosing(true);
+    timer.current = window.setTimeout(() => close.current(), prefersQuietTransitions() ? 100 : 300);
+  }, []);
   const [viewport, setViewport] = useState<{ top: number; height: number } | null>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -17,9 +25,10 @@ export function Sheet({ title, onClose, children, className = '' }: { title: str
     window.visualViewport?.addEventListener('scroll', sync);
     window.addEventListener('resize', sync);
     const frame = requestAnimationFrame(() => (panel.current?.querySelector<HTMLElement>('[data-sheet-initial-focus]') || panel.current?.querySelector<HTMLElement>('input,textarea') || panel.current?.querySelector<HTMLElement>('button'))?.focus({ preventScroll: true }));
-    const remove = registerOverlay(() => close.current());
+    const remove = registerOverlay(dismiss);
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close.current(); }
+      if (!isTopOverlay(dismiss)) return;
+      if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); dismiss(); }
       if (event.key === 'Tab') {
         const elements = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]') || []);
         const first = elements[0], last = elements.at(-1);
@@ -30,6 +39,7 @@ export function Sheet({ title, onClose, children, className = '' }: { title: str
     document.addEventListener('keydown', key, true);
     return () => {
       remove(); cancelAnimationFrame(frame);
+      if (timer.current !== null) clearTimeout(timer.current);
       window.visualViewport?.removeEventListener('resize', sync);
       window.visualViewport?.removeEventListener('scroll', sync);
       window.removeEventListener('resize', sync);
@@ -37,9 +47,9 @@ export function Sheet({ title, onClose, children, className = '' }: { title: str
       if (previous?.isConnected) previous.focus({ preventScroll: true });
     };
   }, []);
-  return createPortal(<div className="sheet-layer" style={viewport ? { top: viewport.top, height: viewport.height } : undefined} onPointerDown={event => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={panel} className={`sheet ${className}`} role="dialog" aria-modal="true" aria-labelledby={id}>
-      <header className="sheet-heading"><h2 id={id}>{title}</h2><button type="button" className="ib" aria-label={`关闭${title}`} onClick={onClose}><Icon n="x" s={20} /></button></header>
+  return createPortal(<div className="sheet-layer" data-closing={closing || undefined} style={viewport ? { top: viewport.top, height: viewport.height } : undefined} onPointerDown={event => { if (event.target === event.currentTarget) dismiss(); }}>
+    <section inert={closing} ref={panel} className={`sheet ${className}`} role="dialog" aria-modal="true" aria-labelledby={id}>
+      <header className="sheet-heading"><h2 id={id}>{title}</h2><button type="button" className="ib" aria-label={`关闭${title}`} onClick={dismiss}><Icon n="x" s={20} /></button></header>
       {children}
     </section>
   </div>, document.body);

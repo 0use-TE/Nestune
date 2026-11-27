@@ -1,4 +1,5 @@
 'use client';
+import { PlayerPull } from './PlayerPull';
 import { sourceIds } from '@/lib/music-ids';
 import { Loading } from './Loading';
 import { useState } from 'react';
@@ -22,6 +23,7 @@ export function PlayerBar({ lyricsPinned, lyricsLabel = '歌词', lyricsBusy = f
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
   return (
     <div id="bar">
+      <PlayerPull open={false} toggle={onDetails} />
       <CanvasSource className="bar-canvas-source" source={{ kind: 'song', songId: s.id, name: s.name, cover: s.cover, previewSong: s }}>
       <button className="info" data-pressed={infoPressed || undefined} onClick={onDetails}
         onPointerDown={event => { if (event.isPrimary && event.button === 0) setInfoPressed(true); }}

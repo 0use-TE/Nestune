@@ -11,6 +11,8 @@ import { HomeSearch } from '@/components/HomeSearch';
 import { Icon } from '@/components/Icon';
 import { SongList } from '@/components/SongList';
 import { StartupLoading } from '@/components/StartupLoading';
+import { HomeAtlasDrawer } from '@/components/HomeAtlasDrawer';
+import PersonalTasteAtlas from '@/components/PersonalTasteAtlas';
 
 type Home = { playlists: { id: string; name: string; cover: string | null; playCount?: number }[]; newSongs: Song[]; charts: { id: string; name: string; cover: string | null; updateFrequency?: string }[] };
 
@@ -33,6 +35,8 @@ export default function HomePage() {
         <h1>今天想听点什么</h1>
         <HomeSearch />
       </div>
+
+      <HomeAtlasDrawer><PersonalTasteAtlas /></HomeAtlasDrawer>
 
       {feature && (
         <Hero cover={feature.cover} seed={feature.id} tag={app.current ? (app.playing ? '正在播放' : '继续播放') : recent[0] ? '继续听' : '为你推荐'}

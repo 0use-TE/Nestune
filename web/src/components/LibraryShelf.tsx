@@ -52,10 +52,6 @@ export function LibraryShelf({ selection, favorites }: { selection: string; favo
     return () => { active = false; window.removeEventListener('nt:collection-change', load); };
   }, [retry, app.me?.id]);
 
-  useEffect(() => {
-    if (selection) document.getElementById('main')?.scrollTo({ top: 0 });
-  }, [selection]);
-
   if (showingLikes || kind) return <div className="library-detail">
     <Link className="btn ghost sm library-back" href="/library">返回音乐库</Link>
     {showingLikes ? <LikedSongs songs={favorites} /> : <SavedCollection key={selection} kind={kind as CollectionKind} id={id} />}

@@ -1,0 +1,89 @@
+.frame {
+  position: relative; width: 100%; height: var(--graph-height, clamp(440px, 64svh, 780px));
+  container-type: size; isolation: isolate; overflow: hidden; user-select: none; touch-action: none; cursor: grab;
+  background: var(--bg);
+}
+.frame:active { cursor: grabbing; }
+.world { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+.world[data-fly=true] { transition: transform .5s cubic-bezier(.2,.75,.2,1); }
+.cluster { position: absolute; inset: 0; pointer-events: none; will-change: transform; }
+.cluster .node { pointer-events: auto; }
+/* The frame clips the scene. A scaled or panned world can end inside that frame. */
+.chart { overflow: visible; display: block; width: 100%; height: 100%; position: absolute; inset: 0; pointer-events: none; }
+.chart line { transition: opacity .18s, stroke-width .18s; }
+.pointerStar {
+  position: absolute; z-index: 5; pointer-events: none; width: 6px; height: 6px; margin: -3px; border-radius: 50%;
+  background: #f3f7ff; box-shadow: 0 0 0 5px #9fc6ff40, 0 0 13px #9fc6ff;
+}
+.node {
+  position: absolute; transform: translate(-50%,-50%); padding: 0; border: 0; background: none;
+  display: grid; place-items: center; touch-action: none; outline-offset: 5px; border-radius: 50%; color: var(--text);
+  cursor: pointer; z-index: 1; transition: opacity .2s;
+}
+.node::before { content: ''; position: absolute; inset: -5px; border-radius: inherit; }
+.node[data-muted] { opacity: .28; }
+.node[aria-pressed=true], .node:focus-visible, .node[data-dwell] { z-index: 4; }
+.node[data-pointed] { z-index: 5; }
+.object { display: grid; place-items: center; width: 100%; height: 100%; transition: transform .22s; pointer-events: none; }
+.node[data-dwell] .object, .node:focus-visible .object { transform: scale(1.14); }
+.node[aria-pressed=true] .object { transform: scale(1.09); }
+.object :global(.nc-disc) { box-shadow: 0 0 0 1px #a7bcdb77, 0 4px 9px #0009; }
+.node[data-kind=mix] { border-radius: 6px; color: var(--text); }
+.node[data-kind=mix]::before {
+  inset: -12px; border: 1px dashed #dcb56666; border-radius: 50%; background: transparent;
+}
+.node[data-kind=mix] .object { transform: rotate(-5deg); }
+.node[data-kind=mix][data-dwell] .object { transform: translateY(-3px) rotate(-2deg) scale(1.08); }
+.object :global(.nc-folder-front) { align-items: start; gap: 1px; }
+.object :global(.nc-folder-front>b) { font-size: clamp(8px,.9vw,12px); }
+.object :global(.nc-folder-front>small) { font-size: 8px; }
+.hub {
+  display: grid; width: 100%; height: 100%; place-items: center; color: #698ccc; border: 1px solid #8baee3;
+  background: var(--surface);
+  border-radius: 50%; box-shadow: 0 0 0 4px #97bbff13, 0 0 17px #79acff42;
+}
+.hub[data-type=tag] { color: #b48934; background: var(--surface); border-color: #dcbd75; box-shadow: 0 0 0 4px #e3c17c14, 0 0 17px #eaba6045; }
+.hub svg { width: 48%; height: 48%; }
+.caption {
+  position: absolute; top: var(--caption-y, calc(100% + 5px)); left: calc(50% + var(--caption-x, 0px)); transform: translateX(-50%); font-weight: 500;
+  font-size: 11px; line-height: 1.25; white-space: nowrap; color: var(--sub); text-shadow: 0 0 3px var(--bg);
+}
+.node[data-kind=center] .caption { font-weight: 650; font-size: 14px; color: var(--text); }
+.signal { animation: signal 1.3s linear infinite; }
+.hubFlow { animation: hubFlow 3s linear infinite; }
+@keyframes signal { to { stroke-dashoffset: -22; } }
+@keyframes hubFlow { to { stroke-dashoffset: -100; } }
+:global([inert][aria-hidden=true]) :is(.hubFlow,.signal) { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  :global(:root:not([data-full-motion])) .hubFlow { display: none; }
+  :global(:root:not([data-full-motion])) .signal { animation: none; }
+  :global(:root:not([data-full-motion])) :is(.world[data-fly=true], .object, .node, .chart line) { transition: none; }
+}
+@media (max-width: 600px) {
+  .caption { font-size: calc(10px * var(--label-scale, 1)); }
+  .node[data-kind=center] .caption { font-size: calc(12px * var(--label-scale, 1)); }
+  .node[data-kind=mix]::before { inset: -8px; }
+}
+
+.node[data-kind=song], .node[data-kind=album] { border-radius: 8px; }
+.workTitle { color: var(--text); font-size: 12px; white-space: nowrap; line-height: 1.4; text-shadow: 0 0 3px var(--bg); }
+.workTitle[data-dot] { font-size: 22px; color: var(--sub); }
+.node[data-dwell] .workTitle, .node[aria-pressed=true] .workTitle { color: var(--accent); font-weight: 700; }
+.previewCard, .collectionCard {
+  --card-w: min(244px, calc(100% - 16px));
+  position: absolute; z-index: 6; width: var(--card-w); max-height: min(47cqh, 340px);
+  animation: appear .16s ease-out;
+}
+.previewCard { left: clamp(8px, calc(var(--anchor-x) + 14px), calc(100% - var(--card-w) - 8px)); top: clamp(8px, calc(var(--anchor-y) + 14px), 51%); }
+.frame[data-flip-x=true] .previewCard { left: clamp(8px, calc(var(--anchor-x) - var(--card-w) - 14px), calc(100% - var(--card-w) - 8px)); }
+.frame[data-flip-y=true] .previewCard { top: auto; bottom: clamp(8px, calc(100% - var(--anchor-y) + 14px), 51%); }
+.previewCard[data-pinned=false] { pointer-events: none; }
+.collectionCard { right: 12px; top: 12px; max-height: calc(100cqh - 72px); }
+.previewCard > section, .collectionCard > section { max-height: inherit; overflow: auto; }
+@keyframes appear { from { opacity: .18; } }
+@media (max-width: 600px) {
+  .collectionCard { inset: auto 10px 54px; width: auto; max-height: 42cqh; }
+  .workTitle { font-size: calc(12px * var(--label-scale)); }
+}
+
+.plane { position: absolute; inset: 0; }

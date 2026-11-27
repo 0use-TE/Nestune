@@ -112,6 +112,7 @@ function SearchView({ initialQuery, type }: { initialQuery: string; type: Search
         {TYPES.map(([k, label]) => <button key={k} className={`chip ${type === k ? 'on' : ''}`} onClick={() => search(q, k)}>{label}</button>)}
       </div>
 
+      <div data-transition-content>
       {!searched && (
         <>
           {recent.length > 0 && (
@@ -153,6 +154,7 @@ function SearchView({ initialQuery, type }: { initialQuery: string; type: Search
       {hasMore && (
         <div className="center" style={{ padding: '30px 0' }}><button className="btn ghost" disabled={busy} onClick={() => run(lastRun.current, type, nextOffset)}>{busy ? <Loading inline label="加载中" /> : '加载更多'}</button></div>
       )}
+      </div>
     </>
   );
 }

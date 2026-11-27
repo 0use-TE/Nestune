@@ -136,6 +136,45 @@ export function songSummary(s: any, fallbackCover?: string | null, priv?: any) {
 }
 export type Song = ReturnType<typeof songSummary>;
 
+/** Only the provider's music-genre field is evidence for a genre, not its marketing tags. */
+export async function songGenres(id: string): Promise<{ id: string; label: string }[]> {
+  const response = await call('song_wiki_summary', { id, crypto: 'weapi' }, {}, 1500);
+  const result = new Map<string, string>();
+  for (const block of response.data?.blocks ?? []) {
+    if (block.code !== 'SONG_PLAY_ABOUT_SONG_BASIC') continue;
+    for (const creative of block.creatives ?? []) {
+      if (creative.creativeType !== 'songTag') continue;
+      for (const item of creative.resources ?? []) {
+        if (item.resourceType !== 'melody_style' || item.valid === false) continue;
+        const title = item.uiElement?.mainTitle;
+        const url = URL.canParse(title?.action?.clickAction?.targetUrl) ? new URL(title.action.clickAction.targetUrl) : null;
+        const tagId = url?.searchParams.get('tagId');
+        if (tagId && /^\d{1,12}$/.test(tagId) && typeof title.title === 'string') {
+          const label = title.title.replace(/^[\p{Script=Han}、/]+[-－]/u, '').trim();
+          if (label && label.length <= 40) result.set(tagId, label);
+        }
+      }
+    }
+  }
+  return [...result].map(([id, label]) => ({ id, label }));
+}
+
+export async function tasteCenterSongs(kind: 'artist' | 'tag', id: string): Promise<Song[]> {
+  const endpoint = kind === 'tag' ? 'style_song' : 'artist_songs';
+  const params = kind === 'tag' ? { tagId: id, size: 60 } : { id, limit: 60, order: 'hot' };
+  const response = await call(endpoint, { ...params, crypto: 'weapi' }, session().cookie || {}, 1500);
+  return (response.data?.songs ?? response.songs ?? [])
+    .filter((track: any) => track?.id && track?.name && Number(track.st ?? 0) >= 0)
+    .map((track: any) => songSummary(track, null, track.privilege));
+}
+
+export async function discoverySongs(): Promise<Song[]> {
+  const response = await call('top_song', { type: 0 }, {}, 1500);
+  return (response.data ?? []).slice(0, 100)
+    .filter((track: any) => track?.id && track?.name && Number(track.st ?? 0) >= 0)
+    .map((track: any) => songSummary({ ...track, al: track.album, ar: track.artists, dt: track.duration }, null, track.privilege));
+}
+
 /* ---------- lyrics ---------- */
 export { parseLrc };
 export function mergeLyrics(lyric: string, translation: string, romanization: string, timed: LyricLine[] = []) {

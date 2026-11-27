@@ -35,7 +35,7 @@ export function PlaybackQueue({ currentRow }: { currentRow?: RefObject<HTMLDivEl
   );
 }
 
-export function QueuePopover({ inPlayer, onClose }: { inPlayer: boolean; onClose: () => void }) {
+export function QueuePopover({ inPlayer, onClose, open }: { open: boolean; inPlayer: boolean; onClose: () => void }) {
   const app = useApp();
   const { queue } = app;
   const currentRow = useRef<HTMLDivElement>(null);
@@ -55,6 +55,7 @@ export function QueuePopover({ inPlayer, onClose }: { inPlayer: boolean; onClose
   }
   const panel = useRef<HTMLElement>(null);
   useEffect(() => {
+    if (!open) return;
     const outside = (event: PointerEvent) => {
       const target = event.target;
       if (target instanceof Element && !panel.current?.contains(target) && !target.closest('.queue-toggle,.usage-guide')) onClose();
@@ -65,10 +66,10 @@ export function QueuePopover({ inPlayer, onClose }: { inPlayer: boolean; onClose
     document.addEventListener('pointerdown', outside);
     document.addEventListener('keydown', escape);
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
-  }, [onClose]);
+  }, [onClose, open]);
 
   return (
-    <section className={`queue-popover ${inPlayer ? 'in-player' : ''}`} ref={panel} id="player-queue" aria-label="播放列表">
+    <section data-closing={!open || undefined} inert={!open} aria-hidden={!open} className={`queue-popover ${inPlayer ? 'in-player' : ''}`} ref={panel} id="player-queue" aria-label="播放列表">
       <header><CanvasSource source={{ kind: 'queue', name: app.sharedQueue ? '共同播放列表' : '播放列表', cover: queue[0]?.cover, previewSong: queue[0], songIds: queue.map(s => s.id) }}><h2 title="拖到画布分享整个播放列表">{app.sharedQueue ? '共同播放列表' : '播放列表'} <small>{queue.length} 首</small></h2></CanvasSource>
         <div className="queue-header-actions">
           <GuideHelp topic="queue" />

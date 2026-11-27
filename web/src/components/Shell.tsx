@@ -1,9 +1,12 @@
 'use client';
+import { useApplyMotionPreference } from '@/lib/interface-motion';
+import { RouteMotion } from './RouteMotion';
+import { usePanelPresence } from './usePanelPresence';
 import { sourceIds } from '@/lib/music-ids';
 import { Loading } from './Loading';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { get, post } from '@/lib/api';
 import { useApp } from '@/lib/app';
 import { isDeviceSong } from '@/lib/device-music';
@@ -31,6 +34,7 @@ const NAV = [['/', '首页', 'home'], ['/search', '搜索', 'search'], ['/librar
 const DETAIL_PATH = /^\/(album|artist|playlist|shared|my|people)\/[^/]+$/;
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  useApplyMotionPreference();
   const app = useApp();
   const desktopLyrics = useDesktopLyrics();
   const unread = useOptionalSocial()?.state?.inbox?.reduce((total, thread) => total + thread.unread, 0) ?? 0;
@@ -42,6 +46,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [domainSong, setDomainSong] = useState<Song | null>(null);
   const [lyricsPinned, setLyricsPinned] = useState(false);
   const [queueOpen, setQueueOpen] = useState(false);
+  const queueVisible = usePanelPresence(queueOpen);
   const canvasQueueRequested = useRef(false);
   const closeQueue = useCallback(() => { canvasQueueRequested.current = false; setQueueOpen(false); }, []);
   const toggleQueue = () => setQueueOpen(open => !open);
@@ -73,7 +78,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       if (app.saveDialog) { app.closeSave(); return true; }
       if (newPl) { setNewPl(null); return true; }
       if (app.nowOpen) { app.setNowOpen(false); return true; }
-      return false;
+      return dismissTopOverlay('page');
     };
     return () => { delete target.__nestuneBack; };
   }, [app, queueOpen, newPl, closeQueue]);
@@ -101,7 +106,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       history.replaceState({ ...history.state, ntAppBack: fromApp }, '', location.href);
     }
     if (!history.state?.ntPlayer) app.setNowOpen(false);
-    main.current?.scrollTo({ top: 0 });
   }, [path, app.setNowOpen]);
   useEffect(() => { if (!app.me) setLyricsPinned(false); }, [app.me]);
   useEffect(() => {
@@ -132,6 +136,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   if (!app.ready) return <StartupLoading fullscreen />;
   if (!app.me) return <><Login /><Toasts /></>;
   const on = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+  const navIndex = NAV.findIndex(([href]) => on(href));
   const detail = DETAIL_PATH.exec(path);
   const backFromDetail = () => {
     if (history.state?.ntAppBack) router.back();
@@ -148,9 +153,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <div id="app">
         <aside>
           <div className="brand"><span className="brand-wordmark">Nestune</span></div>
-          {NAV.map(([href, label, icon]) => (
-            <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
-          ))}
+          <nav className="primary-nav" aria-label="主导航">
+            {navIndex >= 0 && <span aria-hidden="true" className="primary-nav-highlight"
+              style={{ transform: `translateY(calc(${navIndex} * (100% + 2px)))` }} />}
+            {NAV.map(([href, label, icon]) => (
+              <Link key={href} href={href} className={`nav ${on(href) ? 'on' : ''}`} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={19} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
+            ))}
+          </nav>
           <div className="lab">我的歌单<button aria-label="新建歌单" onClick={() => setNewPl({})}><Icon n="plus" s={16} /></button></div>
           <nav className="sidebar-playlists" aria-label="我的歌单">
             <CanvasSource source={{ kind: 'playlist', playlistId: 'favorites', name: '我喜欢的音乐', cover: null }}><Link href="/library?collection=likes" className="pl" onClick={event => { if (path === '/square') { event.preventDefault(); window.dispatchEvent(new CustomEvent('nt:canvas-library', { detail: 'favorites' })); } }}>
@@ -175,6 +184,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {children}
         </div></main>
       </div>
+      <Suspense fallback={null}><RouteMotion main={main} /></Suspense>
       <nav id="tabbar">
         {[...NAV, ['/my', '我的', 'user'] as const].map(([href, label, icon]) => (
           <Link key={href} href={href} className={on(href) ? 'on' : ''} aria-label={href === '/social' && unread ? `一起听，${unread} 条未读` : undefined}><Icon n={icon} s={21} />{label}{href === '/social' && unread > 0 && <UnreadCount count={unread} />}</Link>
@@ -185,7 +195,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         lyricsBusy={desktopLyrics.busy} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && !app.nowOpen}
         onToggleQueue={toggleQueue} onDetails={() => { closeQueue(); app.setNowOpen(true); }} />
       <NowPlaying lyricsPinned={lyricsPinned} onToggleLyrics={toggleLyrics} queueOpen={queueOpen && app.nowOpen} onToggleQueue={toggleQueue} />
-      {queueOpen && app.current && <QueuePopover inPlayer={app.nowOpen} onClose={closeQueue} />}
+      {queueVisible && app.current && <QueuePopover open={queueOpen} inPlayer={app.nowOpen} onClose={closeQueue} />}
       <SongMenu onNewPlaylist={s => setNewPl({ song: s })} onDomainSong={setDomainSong} />
       {app.saveDialog && <SaveDialog song={app.saveDialog} />}
       {newPl && <NewPlaylist song={newPl.song} onClose={() => setNewPl(null)} />}

@@ -9,6 +9,7 @@ import type { Song } from '@/lib/types';
 import { Empty, Loading, SongList } from '@/components/SongList';
 import { LibraryShelf } from '@/components/LibraryShelf';
 import { Icon } from '@/components/Icon';
+import { MotionTabs } from '@/components/MotionTabs';
 
 const TABS = [['favorites', '收藏'], ['history', '历史'], ['local', '本地'], ['uploads', '上传歌曲']] as const;
 
@@ -28,7 +29,6 @@ function Library() {
   useEffect(() => {
     let live = true;
     setResult(null);
-    document.getElementById('main')?.scrollTo({ top: 0 });
     if (tab === 'local' || tab === 'uploads') return;
     const url = tab === 'favorites' ? '/api/me/favorites' : '/api/me/history?limit=100';
     get<{ songs: Song[] }>(url).then(r => {
@@ -53,17 +53,19 @@ function Library() {
       <div className="library-heading">
         <h1>音乐库</h1>
         <div className="library-tab-row">
-          <nav className="tabs" aria-label="音乐库">{TABS.map(([key, label]) => (
+          <MotionTabs label="音乐库" selected={tab}>{TABS.map(([key, label]) => (
             <Link key={key} href={key === 'favorites' ? '/library' : `/library?tab=${key}`} replace scroll={false}
               className={`tab ${tab === key ? 'on' : ''}`} aria-current={tab === key ? 'page' : undefined}>{label}</Link>
-          ))}</nav>
+          ))}</MotionTabs>
           {tab === 'local' && app.deviceMusic.status === 'ready' && <DeviceRefreshButton refresh={app.deviceMusic.refresh} />}
         </div>
       </div>
+      <div data-transition-content>
       {tab === 'history' && shown && shown.length > 0 && <div style={{ textAlign: 'right', marginBottom: 6 }}><button className="link" onClick={clearHistory}>清空历史</button></div>}
       {tab === 'favorites' ? <LibraryShelf selection={collection} favorites={shown} /> : tab === 'local' ? <DeviceLibrary /> : tab === 'uploads' ? <UploadLibrary /> : shown === null ? <Loading /> : shown.length === 0
         ? <Empty text="还没有播放记录。" />
         : <SongList songs={shown} />}
+      </div>
     </>
   );
 }

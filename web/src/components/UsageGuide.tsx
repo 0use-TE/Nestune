@@ -80,7 +80,7 @@ export function UsageGuide({ userId, queueOpen, hasSong, blocked = false }: { us
     {layout?.rect && <div className="usage-guide-ring" style={layout.rect} aria-hidden="true" />}
     <section ref={panel} className="usage-guide" role="region" aria-label={`${GUIDE_LABELS[active]}使用介绍`} style={layout ? { left: layout.left, top: layout.top } : { visibility: 'hidden' }}>
       <header><span className="sub sm">{GUIDE_LABELS[active]} · {step + 1} / {steps.length}</span><button type="button" className="ib" aria-label="关闭使用介绍" onClick={close}><Icon n="x" s={16} /></button></header>
-      <div aria-live="polite"><h3>{current.title}</h3><p>{current.text}</p></div>
+      <div aria-live="polite"><div key={current.title} className="guide-step"><h3>{current.title}</h3><p>{current.text}</p></div></div>
       <footer><button type="button" className="link sm" onClick={close}>跳过介绍</button><div className="row">{step > 0 && <button type="button" className="link sm" onClick={() => setStep(value => value - 1)}>上一步</button>}<button type="button" className="btn sm" onClick={() => step + 1 === steps.length ? close() : setStep(value => value + 1)}>{step + 1 === steps.length ? '知道了' : '下一步'}</button></div></footer>
     </section>
   </div>, document.body);
