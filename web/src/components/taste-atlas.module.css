@@ -54,8 +54,30 @@
 }
 
 .drawer { --atlas-progress: 0; --atlas-panel-height: clamp(330px, 76dvh, 880px); margin-bottom: 12px; overflow-anchor: none; }
-.handle { display: grid; place-items: center; width: 70px; height: 26px; margin: 0 auto; border: 0; border-radius: 14px; cursor: ns-resize; touch-action: none; }
+.handle { position: relative; display: grid; place-items: center; width: 70px; height: 26px; margin: 0 auto; border: 0; border-radius: 14px; cursor: ns-resize; touch-action: none; }
 .handle i { width: 32px; height: 4px; background: var(--muted); border-radius: 4px; opacity: .65; }
+.bookmarkSlot {
+  position: absolute; top: calc(50% + 2px); width: 18px; height: 23px; overflow: hidden;
+  pointer-events: none; opacity: calc(1 - var(--atlas-progress) * 24);
+}
+.bookmark {
+  display: grid; place-items: center; width: 100%; height: 100%; pointer-events: auto;
+  background: linear-gradient(100deg, #7298de, #9ab8ed);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 80%, 0 100%);
+  transform: translateY(-100%); animation: bookmarkPeek 28s ease-in-out 3s infinite;
+}
+.bookmark::after {
+  content: ''; width: 9px; height: 9px; margin-bottom: 3px; background: #ffe3a1;
+  clip-path: polygon(50% 0, 61% 37%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0 50%, 39% 37%);
+}
+.handle[aria-expanded=true] .bookmarkSlot { display: none; }
+@keyframes bookmarkPeek {
+  0%, 13%, 100% { transform: translateY(-100%); }
+  2%, 9% { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(:root:not([data-full-motion])) .bookmark { animation: none; transform: translateY(-20%); }
+}
 .reveal { height: calc(var(--atlas-panel-height) * var(--atlas-progress)); overflow: clip; }
 .panel {
   height: var(--atlas-panel-height);

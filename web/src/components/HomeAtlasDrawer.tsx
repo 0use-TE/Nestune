@@ -149,7 +149,10 @@ export function HomeAtlasDrawer({ children }: { children: ReactNode }) {
       onClick={e => {
         if (e.detail && suppressClick.current) { suppressClick.current = false; return; }
         settle(!destination.current);
-      }}><i aria-hidden="true" /></button>
+      }}>
+      <i aria-hidden="true" />
+      <span className={styles.bookmarkSlot} aria-hidden="true"><span className={styles.bookmark} /></span>
+    </button>
     <div id={panelId} className={styles.reveal} inert={!open} aria-hidden={!open}>
       <div ref={panel} className={styles.panel}>{children}</div>
     </div>

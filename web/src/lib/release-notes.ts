@@ -8,6 +8,15 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.36',
+    date: '2026 年 11 月 28 日',
+    title: '音乐星图的书签',
+    summary: '首页搜索框下方偶尔会探出一枚蓝色星星书签，拉一下就能打开你的音乐星图。',
+    sections: [
+      { title: '拉开星图', paragraphs: ['向下拖动书签或直接轻点把手，都能展开星图。使用减少动态效果时，书签会静静留在把手下方。'] },
+    ],
+  },
+  {
     version: '1.2.35',
     date: '2026 年 11 月 28 日',
     title: '默认开启完整动效',
