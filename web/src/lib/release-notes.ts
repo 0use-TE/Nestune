@@ -8,6 +8,15 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.33',
+    date: '2026 年 11 月 27 日',
+    title: '修复缩小画布时涂鸦显示不全',
+    summary: '缩小查看整面墙时，部分涂鸦曾因区块请求触发限流而显示不全。',
+    sections: [
+      { title: '画布区块加载', paragraphs: ['涂鸦区块有独立的加载额度，已缓存的区块可以复用。遇到限流时会等待服务恢复，然后自动补载可见区块。'] },
+    ],
+  },
+  {
     version: '1.2.32',
     date: '2026 年 11 月 24 日',
     title: '域邀请、聊天与歌单更新',

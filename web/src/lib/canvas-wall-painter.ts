@@ -4,10 +4,11 @@ import { CANVAS_WALLPAPERS, type CanvasWallpaper } from './canvas-settings';
 export type WallMark = { key: string; src: string; left: number; top: number; width: number; height: number };
 type Area = { x: number; y: number; width: number; height: number };
 type Asset = {
-  url: string; image?: HTMLImageElement; imageUrl?: string; pending?: HTMLImageElement;
+  key: string; url: string; image?: HTMLImageElement; imageUrl?: string; pending?: AbortController;
   failures: number; retryAfter: number; timer?: number;
 };
 const MAX_LOADS = 6;
+const LOAD_TIMEOUT = 15_000;
 const MAX_CACHED_PIXELS = 12_000_000;
 
 export class CanvasWallPainter {
@@ -24,6 +25,8 @@ export class CanvasWallPainter {
   private marks: readonly WallMark[] = [];
   private assets = new Map<string, Asset>();
   private inFlight = 0;
+  private rateLimitUntil = 0;
+  private rateLimitTimer?: number;
   private frame = 0;
   private practicing = false;
   private hasError = false;
@@ -87,6 +90,7 @@ export class CanvasWallPainter {
     window.removeEventListener('online', this.retry);
     cancelAnimationFrame(this.frame);
     if (this.texture) this.texture.onload = null;
+    clearTimeout(this.rateLimitTimer);
     for (const asset of this.assets.values()) this.drop(asset);
     this.assets.clear();
   }
@@ -122,46 +126,66 @@ export class CanvasWallPainter {
 
   private drop(asset: Asset) {
     clearTimeout(asset.timer);
-    if (!asset.pending) return;
-    asset.pending.onload = asset.pending.onerror = null;
-    asset.pending.removeAttribute('src');
-    this.inFlight--;
+    asset.pending?.abort();
   }
 
   private asset(mark: WallMark) {
     const current = this.assets.get(mark.key);
     if (current?.url === mark.src) return current;
-    const next = { url: mark.src, image: current?.image, imageUrl: current?.imageUrl, failures: 0, retryAfter: 0 };
+    const next = { key: mark.key, url: mark.src, image: current?.image, imageUrl: current?.imageUrl, failures: 0, retryAfter: 0 };
     if (current) this.drop(current);
     this.assets.set(mark.key, next);
     return next;
   }
 
-  private load(asset: Asset, now: number) {
-    if (asset.pending || asset.failures >= 3 || asset.retryAfter > now || !navigator.onLine || this.inFlight >= MAX_LOADS) return;
-    const image = new Image();
-    image.decoding = 'async';
-    asset.pending = image;
+  private waitForBudget(response: Response) {
+    const header = response.headers.get('Retry-After');
+    const seconds = header && /^\d+$/.test(header) ? Number(header) : 60;
+    this.rateLimitUntil = Math.max(this.rateLimitUntil, performance.now() + Math.max(1, seconds) * 1000);
+    clearTimeout(this.rateLimitTimer);
+    this.rateLimitTimer = window.setTimeout(() => this.schedule(), this.rateLimitUntil - performance.now() + 20);
+  }
+
+  private async load(asset: Asset, now: number) {
+    if (asset.pending || asset.failures >= 3 || asset.retryAfter > now || this.rateLimitUntil > now ||
+        !navigator.onLine || this.inFlight >= MAX_LOADS) return;
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), LOAD_TIMEOUT);
+    asset.pending = controller;
     this.inFlight++;
-    const finish = () => {
-      asset.pending = undefined;
-      this.inFlight--;
-      this.schedule();
-    };
-    image.onload = () => {
-      asset.image = image;
-      asset.imageUrl = asset.url;
-      asset.failures = 0;
-      finish();
-    };
-    image.onerror = () => {
+    let objectUrl: string | undefined;
+    try {
+      const response = await fetch(asset.url, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      if (response.status === 429) {
+        this.waitForBudget(response);
+        return;
+      }
+      if (!response.ok) throw new Error('Wall image HTTP ' + response.status);
+      const blob = await response.blob();
+      clearTimeout(timeout);
+      objectUrl = URL.createObjectURL(blob);
+      const image = new Image();
+      image.src = objectUrl;
+      await image.decode();
+      if (!controller.signal.aborted) {
+        asset.image = image;
+        asset.imageUrl = asset.url;
+        asset.failures = 0;
+      }
+    } catch {
+      if (this.disposed || this.assets.get(asset.key) !== asset) return;
       asset.failures++;
       const delay = 1000 * asset.failures + Math.random() * 300;
       asset.retryAfter = performance.now() + delay;
       if (asset.failures < 3) asset.timer = window.setTimeout(() => this.schedule(), delay + 5);
-      finish();
-    };
-    image.src = asset.failures ? asset.url + (asset.url.includes('?') ? '&' : '?') + 'retry=' + Date.now() : asset.url;
+    } finally {
+      clearTimeout(timeout);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      asset.pending = undefined;
+      this.inFlight--;
+      this.schedule();
+    }
   }
 
   private evict(nearby: Set<string>) {
@@ -223,7 +247,7 @@ export class CanvasWallPainter {
       const asset = this.asset(mark);
       if (asset.imageUrl !== asset.url) {
         (visible ? loadNow : prefetch).push(asset);
-        failed ||= visible && !asset.image && asset.failures > 0;
+        failed ||= visible && !asset.image && (asset.failures > 0 || this.rateLimitUntil > now);
       }
       if (visible && asset.image) {
         const drawX = px(mark.left), drawY = py(mark.top);
@@ -231,9 +255,9 @@ export class CanvasWallPainter {
       }
     }
     ctx.restore();
-    for (const asset of loadNow) this.load(asset, now);
-    for (const asset of prefetch) this.load(asset, now);
     this.evict(nearby);
+    for (const asset of loadNow) void this.load(asset, now);
+    for (const asset of prefetch) void this.load(asset, now);
     if (failed !== this.hasError) {
       this.hasError = failed;
       this.onErrorChange(failed);

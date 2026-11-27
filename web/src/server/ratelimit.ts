@@ -5,16 +5,19 @@ const g = globalThis as unknown as { __nt_rl?: Map<string, Bucket>; __nt_act?: M
 const buckets = (g.__nt_rl ??= new Map());
 const active = (g.__nt_act ??= new Map());
 
-/** Fixed-window limiter. Throws 429 when the budget is spent. */
-export function hit(key: string, limit: number, windowMs = 60_000, message = '请求过于频繁，请稍后重试') {
+/** Fixed-window limiter. Cost and limit use the same units. */
+export function hit(key: string, limit: number, windowMs = 60_000, message = '请求过于频繁，请稍后重试', cost = 1) {
   const now = Date.now();
-  const b = buckets.get(key);
-  if (!b || b.reset <= now) {
+  let bucket = buckets.get(key);
+  if (!bucket || bucket.reset <= now) {
     if (buckets.size > 5000) for (const [k, v] of buckets) if (v.reset <= now) buckets.delete(k);
-    buckets.set(key, { count: 1, reset: now + windowMs });
-    return;
+    bucket = { count: 0, reset: now + windowMs };
+    buckets.set(key, bucket);
   }
-  if (++b.count > limit) throw fail(429, message);
+  if (bucket.count + cost > limit) {
+    throw fail(429, message, 'rate_limited', { 'Retry-After': String(Math.ceil((bucket.reset - now) / 1000)) });
+  }
+  bucket.count += cost;
 }
 export const clear = (key: string) => buckets.delete(key);
 

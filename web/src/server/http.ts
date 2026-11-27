@@ -3,9 +3,9 @@ import { extraOrigins } from './config';
 import { randomUUID } from 'node:crypto';
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string, public code?: string) { super(message); }
+  constructor(public status: number, message: string, public code?: string, public headers?: Record<string, string>) { super(message); }
 }
-export const fail = (status: number, message: string, code?: string) => new HttpError(status, message, code);
+export const fail = (status: number, message: string, code?: string, headers?: Record<string, string>) => new HttpError(status, message, code, headers);
 
 export const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
@@ -45,7 +45,7 @@ export function route(handler: Handler) {
     } catch (e) {
       if (e instanceof HttpError) {
         if (e.status >= 500) report(e, e.status, e.code || `http_${e.status}`);
-        return identify(json({ error: e.message, code: e.code, requestId }, e.status));
+        return identify(json({ error: e.message, code: e.code, requestId }, e.status, e.headers));
       }
       report(e, 500, 'internal_error');
       return identify(json({ error: '服务内部错误', code: 'internal_error', requestId }, 500));

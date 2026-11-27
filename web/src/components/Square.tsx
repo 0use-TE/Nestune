@@ -503,7 +503,10 @@ export function Square() {
     {!graffiti && <div className="nc-camera panel" role="group" aria-label="画布视角"><button className="ib" aria-label="缩小画布" onClick={() => camera.zoom(1 / 1.25)}>−</button><span>{Math.round(camera.camera.zoom * 100)}%</span><button className="ib" aria-label="放大画布" onClick={() => camera.zoom(1.25)}>+</button><button className="ib" aria-label="查看全部物件" title="查看全部物件" onClick={() => camera.fit([
       ...state.records, ...(state.wall ?? []).map(tile => ({ x: (tile.x + .5) * WALL_TILE_SIZE, y: (tile.y + .5) * WALL_TILE_SIZE })),
     ])}><Icon n="refresh" s={17} /></button>{wallFailed && <button className="ib" aria-label="重试加载墙面涂鸦"
-      title="重试加载墙面涂鸦" onClick={() => wallPainter.current?.retry()}><Icon n="refresh" s={17} /></button>}</div>}
+      title="重试加载墙面涂鸦" onClick={() => {
+        wallPainter.current?.retry();
+        void refresh().catch(error => live.current.toast(error.message));
+      }}><Icon n="refresh" s={17} /></button>}</div>}
     {preview.active && <button className="nc-audition-status panel" onClick={preview.stop} aria-label="停止试听">{preview.active.loading ? <Loading inline /> : <Icon n="pause" s={15} />}<span>{preview.active.label}</span><Icon n="x" s={14} /></button>}
     <button className="nc-add ib" aria-label="画布工具" title="画布工具" aria-expanded={tools} onClick={() => { setTools(value => !value); setEmojiPicker(false); }}><Icon n={tools ? 'x' : 'plus'} s={22} /></button>
     {tools && <div className="nc-tools panel" role="menu" aria-label="画布小工具">

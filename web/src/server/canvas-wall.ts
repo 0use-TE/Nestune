@@ -207,5 +207,5 @@ export function wallTileImage(x: number, y: number, version: string | null, matc
     ETag: `"${version}"`,
   };
   if (match === headers.ETag) return new Response(null, { status: 304, headers });
-  return new Response(new Uint8Array(tile.image), { headers });
+  return new Response(new Uint8Array(tile.image), { headers: { ...headers, 'Content-Length': String(tile.image.byteLength) } });
 }
