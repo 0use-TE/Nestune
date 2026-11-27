@@ -8,8 +8,8 @@ const query = '(prefers-reduced-motion: reduce)';
 let sessionPreference: MotionPreference | undefined;
 
 function preference(): MotionPreference {
-  try { return sessionPreference ?? (localStorage.getItem(key) === 'full' ? 'full' : 'system'); }
-  catch { return sessionPreference ?? 'system'; }
+  try { return sessionPreference ?? (localStorage.getItem(key) === 'system' ? 'system' : 'full'); }
+  catch { return sessionPreference ?? 'full'; }
 }
 
 export function prefersQuietTransitions() {
@@ -38,17 +38,16 @@ export function setMotionPreference(value: MotionPreference) {
 }
 
 export function useMotionPreference() {
-  return useSyncExternalStore(subscribe, preference, () => 'system' as const);
+  return useSyncExternalStore(subscribe, preference, () => 'full' as const);
 }
 
 export function useQuietTransitions() {
-  return useSyncExternalStore(subscribe, prefersQuietTransitions, () => true);
+  return useSyncExternalStore(subscribe, prefersQuietTransitions, () => false);
 }
 
-// CSS media queries already handle the system default, including before hydration.
 export function useApplyMotionPreference() {
   const selected = useMotionPreference();
   useLayoutEffect(() => {
-    document.documentElement.toggleAttribute('data-full-motion', selected === 'full');
+    document.documentElement.toggleAttribute('data-full-motion', preference() === 'full');
   }, [selected]);
 }

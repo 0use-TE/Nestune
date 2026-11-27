@@ -15,14 +15,15 @@ async function check(browser, { full, touch }) {
     const login = await context.request.post(base + '/api/auth/login', { data: { username, password } });
     assert.equal(login.status(), 200, 'Set NESTUNE_QA_USER and NESTUNE_QA_PASSWORD to a local test account');
     const { user } = await login.json();
-    await context.addInitScript(({ full, userId }) => {
-      if (full) localStorage.setItem('nt-interface-motion', 'full');
+    const {version} = await (await context.request.get(base + '/api/version')).json();
+    await context.addInitScript(({ full, userId, version }) => {
+      if (!full) localStorage.setItem('nt-interface-motion', 'system');
       localStorage.setItem('nt-install-intro-v1', 'seen');
-      localStorage.setItem('nt-announcement-1.2.32-' + userId, 'seen');
-      for (const topic of ['player','queue','social','songs','library','search']) {
+      localStorage.setItem('nt-announcement-' + version + '-' + userId, 'seen');
+      for (const topic of ['atlas','player','queue','social','songs','library','search']) {
         localStorage.setItem('nt-guide:v1:' + userId + ':' + topic, 'done');
       }
-    }, { full, userId: user.id });
+    }, { full, userId: user.id, version });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));

@@ -8,6 +8,15 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.35',
+    date: '2026 年 11 月 28 日',
+    title: '默认开启完整动效',
+    summary: '星群漂移、连线流动和页面过渡现在默认开启。已手动选择「跟随系统」的设备会沿用原偏好。',
+    sections: [
+      { title: '调整动效', paragraphs: ['打开「设置 → 偏好 → 界面动效」即可切换。想让 Nestune 随设备的减少动态效果设置调整时，选择「跟随系统」。'] },
+    ],
+  },
+  {
     version: '1.2.34',
     date: '2026 年 11 月 27 日',
     title: '首页新增音乐星图',
