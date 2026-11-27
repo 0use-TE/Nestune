@@ -144,7 +144,7 @@ export function HomeAtlasDrawer({ children }: { children: ReactNode }) {
   return <div ref={root} className={styles.drawer} onKeyDown={e => {
     if (e.key === 'Escape' && open) { settle(false); handle.current?.focus(); }
   }}>
-    <button ref={handle} className={styles.handle} type="button" aria-expanded={open} aria-controls={panelId}
+    <button ref={handle} className={styles.handle} data-atlas-handle type="button" aria-expanded={open} aria-controls={panelId}
       aria-label={open ? '收起音乐星图' : '下拉探索音乐星图'}
       onClick={e => {
         if (e.detail && suppressClick.current) { suppressClick.current = false; return; }

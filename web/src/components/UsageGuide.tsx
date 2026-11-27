@@ -28,7 +28,7 @@ export function UsageGuide({ userId, queueOpen, hasSong, blocked = false }: { us
     setActive(null);
   };
   useEffect(() => {
-    const topic = pageGuide(path, queueOpen, hasSong);
+    const topic = path === '/' && !queueOpen && !completed('atlas') ? 'atlas' : pageGuide(path, queueOpen, hasSong);
     let cancelled = false, timer: ReturnType<typeof setTimeout>;
     const attempt = () => {
       if (cancelled || !topic || completed(topic) || activeRef.current) return;
@@ -76,12 +76,18 @@ export function UsageGuide({ userId, queueOpen, hasSong, blocked = false }: { us
   }, [active, step, dragging, obscured, blocked]);
   if (!active || dragging || obscured || blocked) return null;
   const steps = GUIDE_STEPS[active], current = steps[step];
+  const offerOpen = active === 'atlas' && step === 0 && path === '/';
+  function advance() {
+    if (offerOpen) document.querySelector<HTMLButtonElement>('[data-atlas-handle][aria-expanded="false"]')?.click();
+    if (step + 1 === steps.length) close();
+    else setStep(value => value + 1);
+  }
   return createPortal(<div className="usage-guide-layer">
     {layout?.rect && <div className="usage-guide-ring" style={layout.rect} aria-hidden="true" />}
     <section ref={panel} className="usage-guide" role="region" aria-label={`${GUIDE_LABELS[active]}使用介绍`} style={layout ? { left: layout.left, top: layout.top } : { visibility: 'hidden' }}>
       <header><span className="sub sm">{GUIDE_LABELS[active]} · {step + 1} / {steps.length}</span><button type="button" className="ib" aria-label="关闭使用介绍" onClick={close}><Icon n="x" s={16} /></button></header>
       <div aria-live="polite"><div key={current.title} className="guide-step"><h3>{current.title}</h3><p>{current.text}</p></div></div>
-      <footer><button type="button" className="link sm" onClick={close}>跳过介绍</button><div className="row">{step > 0 && <button type="button" className="link sm" onClick={() => setStep(value => value - 1)}>上一步</button>}<button type="button" className="btn sm" onClick={() => step + 1 === steps.length ? close() : setStep(value => value + 1)}>{step + 1 === steps.length ? '知道了' : '下一步'}</button></div></footer>
+      <footer><button type="button" className="link sm" onClick={close}>跳过介绍</button><div className="row">{step > 0 && <button type="button" className="link sm" onClick={() => setStep(value => value - 1)}>上一步</button>}<button type="button" className="btn sm" onClick={advance}>{step + 1 === steps.length ? '知道了' : offerOpen ? '打开星图' : '下一步'}</button></div></footer>
     </section>
   </div>, document.body);
 }

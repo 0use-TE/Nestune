@@ -1,10 +1,14 @@
-export const GUIDE_TOPICS = ['player', 'queue', 'social', 'songs', 'library', 'search'] as const;
+export const GUIDE_TOPICS = ['atlas', 'player', 'queue', 'social', 'songs', 'library', 'search'] as const;
 export type GuideTopic = typeof GUIDE_TOPICS[number];
 export type GuideStep = { target: string; title: string; text: string };
-export const GUIDE_LABELS: Record<GuideTopic, string> = { player: '播放栏', queue: '播放列表', social: '一起听', songs: '歌曲列表', library: '音乐库与歌单', search: '搜索' };
+export const GUIDE_LABELS: Record<GuideTopic, string> = { atlas: '音乐星图', player: '播放栏', queue: '播放列表', social: '一起听', songs: '歌曲列表', library: '音乐库与歌单', search: '搜索' };
 export const GUIDE_STEPS: Record<GuideTopic, GuideStep[]> = {
+  atlas: [
+    { target: '[data-atlas-handle]', title: '从首页拉出你的音乐星图', text: '在首页顶部向下拉，或点搜索框下方的短横线，就能展开星图。再点一次可以收起。' },
+    { target: '[data-atlas-handle]', title: '沿着喜欢的歌手和曲风找歌', text: '点歌名看推荐理由，拖动空白处平移，用滚轮或双指缩放。点中央的「为你推荐」可以播放整份歌单，优先听到你在 Nestune 还没播过的歌。' },
+  ],
   player: [
-    { target: '#bar .info', title: '从封面打开播放器', text: '点击封面或歌名，查看完整播放器和歌词。长按歌曲还可以拖到画布；在一起听页面也可以拖给好友。' },
+    { target: '#bar .info', title: '展开播放器', text: '点击封面或歌名，或向上拖动播放栏的短横线，查看完整播放器和歌词。从播放器顶部向下拖动把手可以收起。长按歌曲还可以拖到画布或一起听。' },
     { target: '#bar .ctl', title: '控制播放', text: '这里可以播放、暂停和切歌。播放模式按钮可以切换顺序、随机或循环；进度条可以跳到想听的位置。' },
     { target: '#bar .right', title: '歌词、音量和播放列表', text: '点击歌词图标开关歌词，点击列表图标管理接下来播放的歌。小屏幕上，更多控制可在完整播放器里找到。' },
   ],
