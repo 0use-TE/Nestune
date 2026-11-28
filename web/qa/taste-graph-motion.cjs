@@ -167,8 +167,9 @@ async function check(browser, { full, touch }) {
       };
       await swipe(point.x,point.y+210,-120);
       await open.waitFor();
-      await page.locator('main').evaluate(el=>el.scrollTo(0,0));
       await page.waitForTimeout(800);
+      await page.locator('main').evaluate(el=>el.scrollTo({top:0,behavior:'instant'}));
+      await page.waitForFunction(()=>document.querySelector('main').scrollTop<=1);
       const heading=await page.locator('h1').first().boundingBox();
       await swipe(heading.x+10,heading.y+10,135);
     } else {
