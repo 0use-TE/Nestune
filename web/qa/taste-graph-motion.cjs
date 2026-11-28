@@ -148,7 +148,9 @@ async function check(browser, { full, touch }) {
     if (!touch) { await page.mouse.move(point.x,point.y); await checkRays(point.x,point.y); }
     const navigation = page.locator(touch ? '#tabbar' : '.primary-nav');
     await navigation.getByRole('link',{name:'音乐库',exact:true}).click();
+    await page.waitForURL('**/library');
     await navigation.getByRole('link',{name:'首页',exact:true}).click();
+    await page.waitForURL(base + '/');
     await open.click();
     await graph.locator('[data-kind=center]').first().waitFor();
     await page.waitForTimeout(850);

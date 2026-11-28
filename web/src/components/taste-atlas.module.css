@@ -53,7 +53,9 @@
   .preview .atlas { margin-top: 12px; }
 }
 
-.drawer { --atlas-progress: 0; --atlas-panel-height: clamp(330px, 76dvh, 880px); margin-bottom: 12px; overflow-anchor: none; }
+/* Collapsing the panel must not undo the browser's native page scroll. */
+main:has(.drawer) { overflow-anchor: none; }
+.drawer { --atlas-progress: 0; --atlas-panel-height: clamp(330px, 76dvh, 880px); margin-bottom: 12px; }
 .handle { position: relative; display: grid; place-items: center; width: 70px; height: 26px; margin: 0 auto; border: 0; border-radius: 14px; cursor: ns-resize; touch-action: none; }
 .handle i { width: 32px; height: 4px; background: var(--muted); border-radius: 4px; opacity: .65; }
 .bookmarkSlot {
