@@ -1,6 +1,6 @@
 .frame {
   position: relative; width: 100%; height: var(--graph-height, clamp(440px, 64svh, 780px));
-  container-type: size; isolation: isolate; overflow: hidden; user-select: none; touch-action: none; cursor: grab;
+  container-type: size; isolation: isolate; overflow: hidden; user-select: none; touch-action: pan-y; cursor: grab;
   background: var(--bg);
 }
 .frame:active { cursor: grabbing; }
@@ -17,7 +17,7 @@
 }
 .node {
   position: absolute; transform: translate(-50%,-50%); padding: 0; border: 0; background: none;
-  display: grid; place-items: center; touch-action: none; outline-offset: 5px; border-radius: 50%; color: var(--text);
+  display: grid; place-items: center; touch-action: pan-y; outline-offset: 5px; border-radius: 50%; color: var(--text);
   cursor: pointer; z-index: 1; transition: opacity .2s;
 }
 .node::before { content: ''; position: absolute; inset: -5px; border-radius: inherit; }

@@ -48,17 +48,31 @@ export function HomeAtlasDrawer({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const surface = root.current?.closest('main');
+    if (!open || !surface) return;
+    let top = surface.scrollTop;
+    function scroll() {
+      const current = surface!.scrollTop;
+      top = Math.min(top, current);
+      if (current - top > 8 && destination.current) settle(false);
+    }
+    surface.addEventListener('scroll', scroll, { passive: true });
+    return () => surface.removeEventListener('scroll', scroll);
+  }, [open, settle]);
+
+  useEffect(() => {
+    const surface = root.current?.closest('main');
     if (!surface) return;
     let start: { x: number; y: number; from: number; height: number; wasOpen: boolean } | null = null;
     let dragged = false;
     let distance = 0;
     let wheelEnd: ReturnType<typeof setTimeout> | undefined;
     let wheeling = false;
-    function begin(target: EventTarget | null, x: number, y: number) {
+    function begin(target: EventTarget | null, x: number, y: number, touch = false) {
       if (!(target instanceof Element)) return;
       const onHandle = !!handle.current?.contains(target);
       if (!onHandle && (destination.current || surface!.scrollTop > 1 ||
-        target.closest('a,button,input,textarea,select,[role=button],[data-canvas-source],.tr'))) return;
+        target.closest(touch ? 'input,textarea,select,[contenteditable=true],[data-controls]' :
+          'a,button,input,textarea,select,[role=button],[data-canvas-source],.tr'))) return;
       start = { x, y, from: progress.current, height: panel.current?.offsetHeight || 600, wasOpen: destination.current };
       dragged = false;
       distance = 0;
@@ -95,7 +109,7 @@ export function HomeAtlasDrawer({ children }: { children: ReactNode }) {
     const mouseUp = (e: PointerEvent) => { if (e.pointerType === 'mouse') finish(); };
     const cancel = () => finish(true);
     const touchStart = (e: TouchEvent) => {
-      if (e.touches.length === 1) begin(e.target, e.touches[0].clientX, e.touches[0].clientY);
+      if (e.touches.length === 1) begin(e.target, e.touches[0].clientX, e.touches[0].clientY, true);
       else finish(true);
     };
     const touchMove = (e: TouchEvent) => {
@@ -104,8 +118,7 @@ export function HomeAtlasDrawer({ children }: { children: ReactNode }) {
     const touchEnd = () => finish();
     function wheel(e: WheelEvent) {
       if (e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || start) return;
-      const closing = destination.current;
-      if (closing ? !handle.current?.contains(e.target as Node) || e.deltaY <= 0 : surface!.scrollTop > 1 || e.deltaY >= 0) return;
+      if (destination.current || surface!.scrollTop > 1 || e.deltaY >= 0) return;
       e.preventDefault();
       if (!wheeling) { distance = 0; wheeling = true; }
       cancelAnimationFrame(frame.current);
@@ -115,7 +128,7 @@ export function HomeAtlasDrawer({ children }: { children: ReactNode }) {
       clearTimeout(wheelEnd);
       wheelEnd = setTimeout(() => {
         wheeling = false;
-        settle(Math.abs(distance) >= PULL_THRESHOLD ? !closing : closing);
+        settle(distance >= 12);
       }, 90);
     }
     surface.addEventListener('pointerdown', mouseDown);

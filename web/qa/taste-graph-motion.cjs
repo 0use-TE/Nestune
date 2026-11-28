@@ -99,7 +99,8 @@ async function check(browser, { full, touch }) {
       // Shrinking around the centre leaves visible frame space beyond the SVG's own viewport.
       const middle = { x: box.x + box.width/2, y: box.y + box.height/2 };
       await page.mouse.move(middle.x,middle.y);
-      await page.mouse.wheel(0,500);
+      for (let i=0; i<3; i++) await graph.press('-');
+      await page.waitForTimeout(550);
       const edge = { x: Math.round(box.x + box.width - 20), y: Math.round(middle.y) };
       await page.mouse.move(edge.x,edge.y);
       await checkRays(edge.x,edge.y);
@@ -119,9 +120,9 @@ async function check(browser, { full, touch }) {
       });
       assert.deepEqual(ink,{outsideWorld:true,drawn:true});
       await page.mouse.move(middle.x,middle.y);
-      await page.mouse.wheel(0,-500);
+      await graph.press('Home');
+      await page.waitForTimeout(550);
       await page.mouse.move(point.x+48,point.y+24);
-      await page.mouse.wheel(0,-80);
       await page.waitForTimeout(140);
       await checkRays(point.x+48,point.y+24);
       // A Playwright locator waits for a stationary target before it moves the mouse.
@@ -152,6 +153,32 @@ async function check(browser, { full, touch }) {
     await graph.locator('[data-kind=center]').first().waitFor();
     await page.waitForTimeout(850);
     if (!touch) { await page.mouse.move(point.x+40,point.y); await checkRays(point.x+40,point.y); }
+    const camera = graph.locator('[data-fly]');
+    const zoom = () => camera.evaluate(el => new DOMMatrixReadOnly(getComputedStyle(el).transform).a);
+    const initialZoom = await zoom();
+    if (touch) {
+      const cdp = await context.newCDPSession(page);
+      const swipe = async (x,y,dy) => {
+        await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+        for (let i=1;i<=6;i++) await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y+dy*i/6}]});
+        await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+      };
+      await swipe(point.x,point.y+210,-120);
+      await open.waitFor();
+      await page.locator('main').evaluate(el=>el.scrollTo(0,0));
+      await page.waitForTimeout(800);
+      const heading=await page.locator('h1').first().boundingBox();
+      await swipe(heading.x+10,heading.y+10,135);
+    } else {
+      await page.mouse.wheel(0,144);
+      await open.waitFor();
+      assert.ok(await page.locator('main').evaluate(el=>el.scrollTop)>0,'wheel scrolls home');
+      await page.mouse.wheel(0,-1200);
+      await page.waitForFunction(()=>document.querySelector('main').scrollTop<=1);
+      await page.mouse.wheel(0,-48);
+    }
+    await page.getByRole('button',{name:'收起音乐星图'}).waitFor();
+    assert.equal(await zoom(),initialZoom,'vertical scrolling preserves graph zoom');
     assert.deepEqual(errors,[]);
     console.log({full,touch,relativeDriftPx:+spread.toFixed(1)});
   } finally { await context.close(); }

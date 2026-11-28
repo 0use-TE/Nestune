@@ -4,8 +4,8 @@ export type GuideStep = { target: string; title: string; text: string };
 export const GUIDE_LABELS: Record<GuideTopic, string> = { atlas: '音乐星图', player: '播放栏', queue: '播放列表', social: '一起听', songs: '歌曲列表', library: '音乐库与歌单', search: '搜索' };
 export const GUIDE_STEPS: Record<GuideTopic, GuideStep[]> = {
   atlas: [
-    { target: '[data-atlas-handle]', title: '从首页拉出你的音乐星图', text: '在首页顶部向下拉，或点搜索框下方的短横线，就能展开星图。再点一次可以收起。' },
-    { target: '[data-atlas-handle]', title: '沿着喜欢的歌手和曲风找歌', text: '点歌名看推荐理由，拖动空白处平移，用滚轮或双指缩放。点中央的「为你推荐」可以播放整份歌单，优先听到你在 Nestune 还没播过的歌。' },
+    { target: '[data-atlas-handle]', title: '从首页拉出你的音乐星图', text: '在首页顶部向上滚动鼠标滚轮，手机上用手指向下拉，即可展开。往下浏览，星图就会收起。也可以点短横线开合。' },
+    { target: '[data-atlas-handle]', title: '沿着喜欢的歌手和曲风找歌', text: '点歌名看推荐理由，点中央的「为你推荐」可以播放整份歌单。手机上单指上下滑动翻页，双指捏合可以缩放星图。' },
   ],
   player: [
     { target: '#bar .info', title: '展开播放器', text: '点击封面或歌名，或向上拖动播放栏的短横线，查看完整播放器和歌词。从播放器顶部向下拖动把手可以收起。长按歌曲还可以拖到画布或一起听。' },

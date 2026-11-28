@@ -208,6 +208,7 @@ export default function TasteGraph({ map, mix, albums, selection, onSelect, onCl
     updateField();
   }
   const moved = useRef(false);
+  const touchGesture = useRef<'pending' | 'graph' | 'page'>('pending');
   const [bounds, setBounds] = useState(INITIAL_SIZE);
   const [hover, setHover] = useState<TasteSelection | null>(null);
   const [allLabels, setAllLabels] = useState(true);
@@ -409,20 +410,11 @@ export default function TasteGraph({ map, mix, albums, selection, onSelect, onCl
 
   useEffect(() => {
     const el = container.current!;
-    function wheel(event: WheelEvent) {
-      if ((event.target as Element).closest('[data-controls]')) return;
-      event.preventDefault();
-      cancelDwell();
-      interruptFlight();
-      const rect = el.getBoundingClientRect();
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? rect.height : 1;
-      const view = camera.current;
-      move(zoomAt(view, { x: event.clientX - rect.left, y: event.clientY - rect.top },
-        view.zoom * Math.exp(-event.deltaY * unit * .002), LIMITS));
-      follow(event.clientX, event.clientY);
+    function claimGraphGesture(event: TouchEvent) {
+      if (contacts.current.size && touchGesture.current === 'graph' && event.cancelable) event.preventDefault();
     }
-    el.addEventListener('wheel', wheel, { passive: false });
-    return () => el.removeEventListener('wheel', wheel);
+    el.addEventListener('touchmove', claimGraphGesture, { passive: false });
+    return () => el.removeEventListener('touchmove', claimGraphGesture);
   }, []);
 
   function pointOf(e: PointerEvent) {
@@ -443,9 +435,10 @@ export default function TasteGraph({ map, mix, albums, selection, onSelect, onCl
       id: button.dataset.node!, point: { x: (hit.x + hit.width / 2 - layer.x) / scale, y: (hit.y + hit.height / 2 - layer.y) / scale },
       start: { x: e.clientX, y: e.clientY } } : null;
     const point = pointOf(e);
-    if (!contacts.current.size) { moved.current = false; start.current = point; }
+    if (!contacts.current.size) { moved.current = false; start.current = point; touchGesture.current = 'pending'; }
     contacts.current.set(e.pointerId, point);
     if (contacts.current.size === 2) {
+      touchGesture.current = 'graph';
       nodeDrag.current = null;
       clearCursor();
       moved.current = true;
@@ -463,6 +456,13 @@ export default function TasteGraph({ map, mix, albums, selection, onSelect, onCl
     if (!moved.current && start.current && distance(next, start.current) < CANVAS_DRAG_THRESHOLD) return;
     moved.current = true;
     if (nodeDrag.current && performance.now() < nodeDrag.current.readyAt) nodeDrag.current = null;
+    if (e.pointerType === 'touch') {
+      if (touchGesture.current === 'pending' && start.current) {
+        const vertical = Math.abs(next.y - start.current.y) >= Math.abs(next.x - start.current.x);
+        touchGesture.current = vertical && !nodeDrag.current ? 'page' : 'graph';
+      }
+      if (touchGesture.current === 'page') return;
+    }
     e.currentTarget.setPointerCapture(e.pointerId);
     setHover(null);
     pointers.set(e.pointerId, next);

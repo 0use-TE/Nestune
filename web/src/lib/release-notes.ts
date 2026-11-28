@@ -8,6 +8,13 @@ export type ReleaseNote = {
 };
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: '1.2.37',
+    date: '2026 年 11 月 28 日',
+    title: '顺着首页滚动开合星图',
+    summary: '在首页顶部向上滚动滚轮或用手指下拉即可展开星图，往下浏览会自动收起。',
+    sections: [{ title: '在图面上也能翻页', paragraphs: ['鼠标滚轮和手机单指上下滑动都用来翻页。点书签仍可开合星图，点歌名可查看详情，手机上用双指捏合可缩放。'] }],
+  },
+  {
     version: '1.2.36',
     date: '2026 年 11 月 28 日',
     title: '音乐星图的书签',
